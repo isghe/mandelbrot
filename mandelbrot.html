@@ -77,7 +77,7 @@ iterSlider.oninput = () => {
 };
 zoomSlider.oninput = () => {
   scale = Number(zoomSlider.value);
-  zoomLabel.textContent = scale.toFixed(2);
+  zoomLabel.textContent = scale; //  scale.toFixed(2);
 };
 paletteSel.onchange = () => paletteType = Number(paletteSel.value);
 juliaChk.onchange   = () => juliaMode = juliaChk.checked ? 1 : 0;
@@ -291,7 +291,48 @@ canvas.addEventListener("wheel", e => {
     centerY = pivotY - (0.5 - pivotScreenY) * scale;
 
     zoomSlider.value = scale;
-    zoomLabel.textContent = scale.toFixed(2);
+    zoomLabel.textContent = scale;
+});
+
+let isDragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let startCenterX = 0;
+let startCenterY = 0;
+
+canvas.addEventListener("mousedown", e => {
+    isDragging = true;
+
+    const rect = canvas.getBoundingClientRect();
+    dragStartX = (e.clientX - rect.left) / canvas.width;
+    dragStartY = (e.clientY - rect.top)  / canvas.height;
+
+    startCenterX = centerX;
+    startCenterY = centerY;
+});
+
+canvas.addEventListener("mousemove", e => {
+    if (!isDragging) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / canvas.width;
+    const my = (e.clientY - rect.top)  / canvas.height;
+
+    const dx = mx - dragStartX;
+    const dy = my - dragStartY;
+
+    const aspect = canvas.width / canvas.height;
+
+    // Pan consistent with the shader
+    centerX = startCenterX - dx * scale * aspect;
+    centerY = startCenterY + dy * scale;
+});
+
+canvas.addEventListener("mouseup", () => {
+    isDragging = false;
+});
+canvas.addEventListener("mouseleave", () => {
+    isDragging = false;
 });
 
 // RENDER
