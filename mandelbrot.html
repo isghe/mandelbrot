@@ -2,26 +2,15 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Mandelbrot / Julia WebGPU + Apple II Palette</title>
+<title>WebGPU Fractal (f64 precision in JS)</title>
 <style>
-  body {
-    margin:0; padding:0;
-    background:#000;
-    overflow:hidden;
-    font-family: sans-serif;
-    color:white;
-  }
+  body { margin:0; overflow:hidden; background:#000; }
   #ui {
-    position:fixed;
-    top:10px; left:10px;
-    background:rgba(0,0,0,0.6);
-    padding:10px;
-    border-radius:8px;
-    backdrop-filter: blur(4px);
-    z-index:10;
+    position:fixed; top:10px; left:10px;
+    background:#0008; padding:10px; border-radius:8px;
+    color:white; font-family:sans-serif;
   }
-  label { display:block; margin-top:8px; }
-  canvas { width:100vw; height:100vh; display:block; }
+  label { display:block; margin-top:6px; }
 </style>
 </head>
 <body>
@@ -41,31 +30,24 @@
     <option value="1">Fire</option>
     <option value="2">Ocean</option>
     <option value="3">Rainbow</option>
-    <option value="4">Apple II (retro)</option>
+    <option value="4">Apple II</option>
   </select>
 
-  <label>
-    <input type="checkbox" id="juliaMode">
-    Julia mode (click to choose c)
-  </label>
-
-  <button id="resetBtn" style="margin-top:10px;">Reset</button>
+  <label><input type="checkbox" id="juliaMode"> Julia mode</label>
 </div>
 
 <script type="module">
-
 const canvas = document.getElementById("gfx");
 canvas.width = innerWidth;
 canvas.height = innerHeight;
 
 const adapter = await navigator.gpu.requestAdapter();
-const device = await adapter.requestDevice();
+const device  = await adapter.requestDevice();
 const context = canvas.getContext("webgpu");
-
-const format = navigator.gpu.getPreferredCanvasFormat();
+const format  = navigator.gpu.getPreferredCanvasFormat();
 context.configure({ device, format });
 
-// State
+// State (JS = f64)
 let centerX = -0.5;
 let centerY = 0.0;
 let scale   = 3.0;
@@ -75,6 +57,12 @@ let juliaCx = -0.8;
 let juliaCy = 0.156;
 let paletteType = 0;
 
+// pivot for centered zoom
+let pivotX = -0.5;
+let pivotY = 0.0;
+let pivotScreenX = 0.5;
+let pivotScreenY = 0.5;
+
 // UI
 const iterSlider = document.getElementById("iterSlider");
 const iterLabel  = document.getElementById("iterLabel");
@@ -82,7 +70,6 @@ const zoomSlider = document.getElementById("zoomSlider");
 const zoomLabel  = document.getElementById("zoomLabel");
 const paletteSel = document.getElementById("paletteType");
 const juliaChk   = document.getElementById("juliaMode");
-const resetBtn   = document.getElementById("resetBtn");
 
 iterSlider.oninput = () => {
   maxIter = Number(iterSlider.value);
@@ -93,51 +80,19 @@ zoomSlider.oninput = () => {
   zoomLabel.textContent = scale.toFixed(2);
 };
 paletteSel.onchange = () => paletteType = Number(paletteSel.value);
-juliaChk.onchange = () => juliaMode = juliaChk.checked ? 1 : 0;
+juliaChk.onchange   = () => juliaMode = juliaChk.checked ? 1 : 0;
 
-resetBtn.onclick = () => {
-  centerX = -0.5;
-  centerY = 0.0;
-  scale   = 3.0;
-  maxIter = 300;
-  juliaMode = 0;
-  juliaCx = -0.8;
-  juliaCy = 0.156;
-  iterSlider.value = 300;
-  zoomSlider.value = 3.0;
-  iterLabel.textContent = 300;
-  zoomLabel.textContent = "3.0";
-  paletteSel.value = 0;
-  juliaChk.checked = false;
-};
-
-// -------------------------
-// 256-COLOR PALETTE (LUT)
-// -------------------------
+// 256-entry palette
 function makePalette(type) {
   const arr = new Uint8Array(256 * 4);
 
-  // Apple II palette (16 colors)
   const APPLE2 = [
-    [0,0,0],
-    [255,255,255],
-    [255,0,0],
-    [0,255,0],
-    [0,0,255],
-    [255,255,0],
-    [255,0,255],
-    [0,255,255],
-    [128,128,128],
-    [255,128,0],
-    [128,0,255],
-    [0,128,255],
-    [128,255,0],
-    [255,0,128],
-    [0,255,128],
-    [128,0,0]
+    [0,0,0],[255,255,255],[255,0,0],[0,255,0],
+    [0,0,255],[255,255,0],[255,0,255],[0,255,255],
+    [128,128,128],[255,128,0],[128,0,255],[0,128,255],
+    [128,255,0],[255,0,128],[0,255,128],[128,0,0]
   ];
 
-  // Viridis (fallback)
   const VIRIDIS = [
     [68,1,84],[71,44,122],[59,81,139],[44,113,142],
     [33,144,141],[39,173,129],[92,200,99],[170,220,50],
@@ -145,31 +100,15 @@ function makePalette(type) {
   ];
 
   let P;
-
   if (type === 4) P = APPLE2;
   else if (type === 0) P = VIRIDIS;
-  else if (type === 1) {
-    // Fire
-    P = [];
-    for (let i=0;i<16;i++){
-      const t=i/15;
-      P.push([255*t,80*t,0]);
-    }
-  }
-  else if (type === 2) {
-    // Ocean
-    P = [];
-    for (let i=0;i<16;i++){
-      const t=i/15;
-      P.push([0,100*t,255*t]);
-    }
-  }
   else {
-    // Rainbow
     P = [];
     for (let i=0;i<16;i++){
       const t=i/15;
-      P.push([
+      if (type===1) P.push([255*t,80*t,0]);          // Fire
+      else if (type===2) P.push([0,100*t,255*t]);   // Ocean
+      else P.push([                                   // Rainbow
         (Math.sin(6.28318*t)+1)/2*255,
         (Math.sin(6.28318*(t+0.33))+1)/2*255,
         (Math.sin(6.28318*(t+0.66))+1)/2*255
@@ -177,106 +116,96 @@ function makePalette(type) {
     }
   }
 
-  // Safe interpolation → 256 colors
-  for (let i = 0; i < 256; i++) {
-    const t = i / 255;
-    const p = t * (P.length - 1);
+  for (let i=0;i<256;i++){
+    const t=i/255;
+    const p=t*(P.length-1);
+    const idx=Math.floor(p);
+    const f=p-idx;
+    const idx2=Math.min(idx+1,P.length-1);
 
-    const idx = Math.floor(p);
-    const f = p - idx;
+    const r=P[idx][0]*(1-f)+P[idx2][0]*f;
+    const g=P[idx][1]*(1-f)+P[idx2][1]*f;
+    const b=P[idx][2]*(1-f)+P[idx2][2]*f;
 
-    // Clamp idx+1 to avoid undefined
-    const idx2 = Math.min(idx + 1, P.length - 1);
-
-    const r = P[idx][0] * (1 - f) + P[idx2][0] * f;
-    const g = P[idx][1] * (1 - f) + P[idx2][1] * f;
-    const b = P[idx][2] * (1 - f) + P[idx2][2] * f;
-
-    arr[i*4 + 0] = r;
-    arr[i*4 + 1] = g;
-    arr[i*4 + 2] = b;
-    arr[i*4 + 3] = 255;
+    arr[i*4+0]=r;
+    arr[i*4+1]=g;
+    arr[i*4+2]=b;
+    arr[i*4+3]=255;
   }
-
   return arr;
 }
 
 let palette256 = makePalette(0);
 
 const paletteTex = device.createTexture({
-  size: [256, 1],
-  format: "rgba8unorm",
-  usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+  size:[256,1],
+  format:"rgba8unorm",
+  usage:GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
 });
-
 device.queue.writeTexture(
-  { texture: paletteTex },
+  {texture:paletteTex},
   palette256,
-  { bytesPerRow: 256 * 4 },
-  { width: 256, height: 1 }
+  {bytesPerRow:256*4},
+  {width:256,height:1}
 );
-
 const paletteSampler = device.createSampler({
-  magFilter: "linear",
-  minFilter: "linear"
+  magFilter:"linear", minFilter:"linear"
 });
 
-// -------------------------
-// WGSL SHADER
-// -------------------------
+// WGSL (all f32)
 const shaderCode = `
 struct Params {
     scale    : f32,
     centerX  : f32,
     centerY  : f32,
+    juliaCx  : f32,
+    juliaCy  : f32,
     maxIter  : f32,
     width    : f32,
     height   : f32,
     juliaMode: f32,
-    juliaCx  : f32,
-    juliaCy  : f32,
 };
-@group(0) @binding(0) var<uniform> params : Params;
 
+@group(0) @binding(0) var<uniform> params : Params;
 @group(0) @binding(1) var paletteSampler : sampler;
 @group(0) @binding(2) var paletteTex : texture_2d<f32>;
 
 struct VSOut {
     @builtin(position) pos : vec4<f32>,
-    @location(0) fragPos   : vec2<f32>,
+    @location(0) fragPos : vec2<f32>,
 };
 
 @vertex
-fn vs_main(@builtin(vertex_index) vid : u32) -> VSOut {
-    var positions = array<vec2<f32>, 3>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>( 3.0, -1.0),
-        vec2<f32>(-1.0,  3.0)
+fn vs_main(@builtin(vertex_index) vid:u32) -> VSOut {
+    var pos = array<vec2<f32>,3>(
+        vec2<f32>(-1.0,-1.0),
+        vec2<f32>( 3.0,-1.0),
+        vec2<f32>(-1.0, 3.0)
     );
-    var out : VSOut;
-    out.pos = vec4<f32>(positions[vid], 0.0, 1.0);
-    out.fragPos = positions[vid];
+    var out:VSOut;
+    out.pos = vec4<f32>(pos[vid],0.0,1.0);
+    out.fragPos = pos[vid];
     return out;
 }
 
-fn palette256(t : f32) -> vec3<f32> {
-    let uv = vec2<f32>(t, 0.5);
-    let col = textureSample(paletteTex, paletteSampler, uv);
+fn palette256(t:f32)->vec3<f32>{
+    let uv=vec2<f32>(t,0.5);
+    let col=textureSample(paletteTex,paletteSampler,uv);
     return col.rgb;
 }
 
 @fragment
-fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
-    let uv = (in.fragPos * 0.5 + vec2<f32>(0.5, 0.5));
+fn fs_main(in:VSOut)->@location(0) vec4<f32>{
+    let uv = in.fragPos*0.5 + vec2<f32>(0.5,0.5);
     let aspect = params.width / params.height;
 
     let x0 = (uv.x - 0.5) * params.scale * aspect + params.centerX;
     let y0 = (uv.y - 0.5) * params.scale + params.centerY;
 
-    var x : f32;
-    var y : f32;
-    var cx : f32;
-    var cy : f32;
+    var x:f32;
+    var y:f32;
+    var cx:f32;
+    var cy:f32;
 
     if (params.juliaMode == 0.0) {
         x = 0.0;
@@ -290,101 +219,46 @@ fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
         cy = params.juliaCy;
     }
 
-    var iter = 0;
+    var iter:i32 = 0;
     loop {
-        if (x*x + y*y > 4.0 || iter >= i32(params.maxIter)) {
-            break;
-        }
+        if (x*x + y*y > 4.0 || iter >= i32(params.maxIter)) { break; }
         let xt = x*x - y*y + cx;
-        y = 2.0 * x * y + cy;
+        y = 2.0*x*y + cy;
         x = xt;
         iter = iter + 1;
     }
 
     let t = f32(iter) / params.maxIter;
     let col = palette256(t);
-    return vec4<f32>(col, 1.0);
+    return vec4<f32>(col,1.0);
 }
 `;
 
-const module = device.createShaderModule({ code: shaderCode });
+const module = device.createShaderModule({code:shaderCode});
 
 const pipeline = device.createRenderPipeline({
-  layout: "auto",
-  vertex: { module, entryPoint: "vs_main" },
-  fragment: { module, entryPoint: "fs_main", targets: [{ format }] },
-  primitive: { topology: "triangle-list" }
+  layout:"auto",
+  vertex:{module,entryPoint:"vs_main"},
+  fragment:{module,entryPoint:"fs_main",targets:[{format}]},
+  primitive:{topology:"triangle-list"}
 });
 
-const vertexBuffer = device.createBuffer({
-  size: 3 * 2 * 4,
-  usage: GPUBufferUsage.VERTEX
-});
-
+// Uniform buffer (all f32, but JS values are f64)
 const uniformBuffer = device.createBuffer({
   size: 9 * 4,
   usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 });
 
 const bindGroup = device.createBindGroup({
-  layout: pipeline.getBindGroupLayout(0),
-  entries: [
-    { binding: 0, resource: { buffer: uniformBuffer } },
-    { binding: 1, resource: paletteSampler },
-    { binding: 2, resource: paletteTex.createView() }
+  layout:pipeline.getBindGroupLayout(0),
+  entries:[
+    {binding:0,resource:{buffer:uniformBuffer}},
+    {binding:1,resource:paletteSampler},
+    {binding:2,resource:paletteTex.createView()}
   ]
 });
 
-// -------------------------
-// RENDER LOOP
-// -------------------------
-function render() {
-  const w = canvas.width;
-  const h = canvas.height;
-
-  const data = new Float32Array([
-    scale,
-    centerX,
-    centerY,
-    maxIter,
-    w,
-    h,
-    juliaMode,
-    juliaCx,
-    juliaCy
-  ]);
-  device.queue.writeBuffer(uniformBuffer, 0, data);
-
-  const encoder = device.createCommandEncoder();
-  const pass = encoder.beginRenderPass({
-    colorAttachments: [{
-      view: context.getCurrentTexture().createView(),
-      loadOp: "clear",
-      storeOp: "store",
-      clearValue: { r:0, g:0, b:0, a:1 }
-    }]
-  });
-
-  pass.setPipeline(pipeline);
-  pass.setVertexBuffer(0, vertexBuffer);
-  pass.setBindGroup(0, bindGroup);
-  pass.draw(3);
-  pass.end();
-
-  device.queue.submit([encoder.finish()]);
-  requestAnimationFrame(render);
-}
-requestAnimationFrame(render);
-
-// -------------------------
-// INTERACTION
-// -------------------------
-
-let pivotX = -0.5;
-let pivotY = 0.0;
-let pivotScreenX = 0.5;
-let pivotScreenY = 0.5;
-
+// CLICK → pivot (Y corrected: NDC vs canvas)
 canvas.addEventListener("click", e => {
     const rect = canvas.getBoundingClientRect();
     const mx = (e.clientX - rect.left) / canvas.width;
@@ -395,9 +269,9 @@ canvas.addEventListener("click", e => {
     pivotScreenX = mx;
     pivotScreenY = my;
 
-    // X: as before
+    // X: same as shader
     pivotX = (mx - 0.5) * scale * aspect + centerX;
-    // Y: NDC increases upward, mouse increases downward → use 0.5 - my
+    // Y: NDC increases upward, mouse increases downward → 0.5 - my
     pivotY = (0.5 - my) * scale + centerY;
 
     if (juliaMode === 1) {
@@ -406,65 +280,64 @@ canvas.addEventListener("click", e => {
     }
 });
 
-
+// WHEEL → zoom centered on the pivot
 canvas.addEventListener("wheel", e => {
     const aspect = canvas.width / canvas.height;
     const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
 
     scale *= zoomFactor;
 
-    // X: as before
     centerX = pivotX - (pivotScreenX - 0.5) * scale * aspect;
-    // Y: use 0.5 - pivotScreenY to stay consistent with the shader
     centerY = pivotY - (0.5 - pivotScreenY) * scale;
 
     zoomSlider.value = scale;
     zoomLabel.textContent = scale.toFixed(2);
 });
 
+// RENDER
+function render(){
+  const data = new Float32Array([
+    scale,
+    centerX,
+    centerY,
+    juliaCx,
+    juliaCy,
+    maxIter,
+    canvas.width,
+    canvas.height,
+    juliaMode
+  ]);
 
-let dragging = false;
-let lastX = 0, lastY = 0;
+  device.queue.writeBuffer(uniformBuffer,0,data);
 
-canvas.addEventListener("mousedown", e => {
-  dragging = true;
-  lastX = e.clientX;
-  lastY = e.clientY;
-});
-canvas.addEventListener("mouseup", () => dragging = false);
-canvas.addEventListener("mouseleave", () => dragging = false);
-canvas.addEventListener("mousemove", e => {
-  if (!dragging) return;
-  const dx = (e.clientX - lastX) / canvas.width;
-  const dy = (e.clientY - lastY) / canvas.height;
-  centerX -= dx * scale;
-  centerY += dy * scale;
-  lastX = e.clientX;
-  lastY = e.clientY;
-});
+  const encoder=device.createCommandEncoder();
+  const pass=encoder.beginRenderPass({
+    colorAttachments:[{
+      view:context.getCurrentTexture().createView(),
+      loadOp:"clear",
+      storeOp:"store",
+      clearValue:{r:0,g:0,b:0,a:1}
+    }]
+  });
 
-// Click → select c for Julia
-canvas.addEventListener("click", e => {
-  if (juliaMode === 0) return;
+  pass.setPipeline(pipeline);
+  pass.setBindGroup(0,bindGroup);
+  pass.draw(3);
+  pass.end();
 
-  const rect = canvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / canvas.width;
-  const y = (e.clientY - rect.top)  / canvas.height;
+  device.queue.submit([encoder.finish()]);
+  requestAnimationFrame(render);
+}
+render();
 
-  const aspect = canvas.width / canvas.height;
-  juliaCx = (x - 0.5) * scale * aspect + centerX;
-  juliaCy = (y - 0.5) * scale + centerY;
-});
-
-// 256-color palette change
+// Palette change
 paletteSel.onchange = () => {
-  paletteType = Number(paletteSel.value);
-  palette256 = makePalette(paletteType);
+  palette256 = makePalette(Number(paletteSel.value));
   device.queue.writeTexture(
-    { texture: paletteTex },
+    {texture:paletteTex},
     palette256,
-    { bytesPerRow: 256 * 4 },
-    { width: 256, height: 1 }
+    {bytesPerRow:256*4},
+    {width:256,height:1}
   );
 };
 </script>
