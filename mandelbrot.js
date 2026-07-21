@@ -31,6 +31,12 @@ let dragStartY = 0;
 let startCenterX = 0;
 let startCenterY = 0;
 
+// selection area (Ctrl + drag)
+const selectionBox = document.getElementById("selectionBox");
+let isSelecting = false;
+let selectStartX = 0;
+let selectStartY = 0;
+
 // UI
 const iterSlider = document.getElementById("iterSlider");
 const iterLabel  = document.getElementById("iterLabel");
@@ -156,6 +162,8 @@ const bindGroup = device.createBindGroup({
 
 // CLICK → pivot (Y corrected: NDC vs canvas)
 canvas.addEventListener("click", e => {
+    if (e.ctrlKey) return; // Ctrl+click is reserved for area selection
+
     const rect = canvas.getBoundingClientRect();
     const mx = (e.clientX - rect.left) / canvas.width;
     const my = (e.clientY - rect.top)  / canvas.height;
@@ -176,6 +184,17 @@ canvas.addEventListener("click", e => {
 
 // PAN: mousedown / mousemove / mouseup
 canvas.addEventListener("mousedown", e => {
+    if (e.ctrlKey) {
+        isSelecting = true;
+        selectStartX = e.clientX;
+        selectStartY = e.clientY;
+        selectionBox.style.left = selectStartX + "px";
+        selectionBox.style.top = selectStartY + "px";
+        selectionBox.style.width = "0px";
+        selectionBox.style.height = "0px";
+        selectionBox.style.display = "block";
+        return;
+    }
     isDragging = true;
     const rect = canvas.getBoundingClientRect();
     dragStartX = (e.clientX - rect.left) / canvas.width;
@@ -185,6 +204,15 @@ canvas.addEventListener("mousedown", e => {
 });
 
 canvas.addEventListener("mousemove", e => {
+    if (isSelecting) {
+        const x = Math.min(e.clientX, selectStartX);
+        const y = Math.min(e.clientY, selectStartY);
+        selectionBox.style.left = x + "px";
+        selectionBox.style.top = y + "px";
+        selectionBox.style.width = Math.abs(e.clientX - selectStartX) + "px";
+        selectionBox.style.height = Math.abs(e.clientY - selectStartY) + "px";
+        return;
+    }
     if (!isDragging) return;
     const rect = canvas.getBoundingClientRect();
     const mx = (e.clientX - rect.left) / canvas.width;
@@ -198,8 +226,52 @@ canvas.addEventListener("mousemove", e => {
     centerY = startCenterY + dy * scale;
 });
 
-canvas.addEventListener("mouseup", () => { isDragging = false; });
-canvas.addEventListener("mouseleave", () => { isDragging = false; });
+canvas.addEventListener("mouseup", e => {
+    if (isSelecting) {
+        isSelecting = false;
+        selectionBox.style.display = "none";
+
+        const rect = canvas.getBoundingClientRect();
+        const x1 = Math.min(e.clientX, selectStartX) - rect.left;
+        const y1 = Math.min(e.clientY, selectStartY) - rect.top;
+        const x2 = Math.max(e.clientX, selectStartX) - rect.left;
+        const y2 = Math.max(e.clientY, selectStartY) - rect.top;
+
+        // ignore selections that are too small (e.g. Ctrl+click without dragging)
+        if (x2 - x1 < 3 || y2 - y1 < 3) return;
+
+        const aspect = canvas.width / canvas.height;
+
+        const fx1 = ((x1 / canvas.width)  - 0.5) * scale * aspect + centerX;
+        const fx2 = ((x2 / canvas.width)  - 0.5) * scale * aspect + centerX;
+        const fy1 = (0.5 - (y1 / canvas.height)) * scale + centerY;
+        const fy2 = (0.5 - (y2 / canvas.height)) * scale + centerY;
+
+        centerX = (fx1 + fx2) / 2;
+        centerY = (fy1 + fy2) / 2;
+
+        const selWidth  = Math.abs(fx2 - fx1);
+        const selHeight = Math.abs(fy1 - fy2);
+        scale = Math.max(selHeight, selWidth / aspect);
+
+        pivotX = centerX;
+        pivotY = centerY;
+        pivotScreenX = 0.5;
+        pivotScreenY = 0.5;
+
+        zoomSlider.value = scale;
+        zoomLabel.textContent = scale;
+        return;
+    }
+    isDragging = false;
+});
+canvas.addEventListener("mouseleave", () => {
+    isDragging = false;
+    if (isSelecting) {
+        isSelecting = false;
+        selectionBox.style.display = "none";
+    }
+});
 
 // WHEEL → zoom centered on the pivot
 canvas.addEventListener("wheel", e => {
