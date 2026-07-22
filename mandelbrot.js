@@ -26,6 +26,7 @@ let pivotScreenY = 0.5;
 
 // pan
 let isDragging = false;
+let hasDragged = false;
 let dragStartX = 0;
 let dragStartY = 0;
 let startCenterX = 0;
@@ -160,28 +161,6 @@ const bindGroup = device.createBindGroup({
   ]
 });
 
-// CLICK → pivot (Y corrected: NDC vs canvas)
-canvas.addEventListener("click", e => {
-    if (e.ctrlKey) return; // Ctrl+click is reserved for area selection
-
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / canvas.width;
-    const my = (e.clientY - rect.top)  / canvas.height;
-
-    const aspect = canvas.width / canvas.height;
-
-    pivotScreenX = mx;
-    pivotScreenY = my;
-
-    pivotX = (mx - 0.5) * scale * aspect + centerX;
-    pivotY = (0.5 - my) * scale + centerY;
-
-    if (juliaMode === 1) {
-        juliaCx = pivotX;
-        juliaCy = pivotY;
-    }
-});
-
 // PAN: mousedown / mousemove / mouseup
 canvas.addEventListener("mousedown", e => {
     if (e.ctrlKey) {
@@ -196,6 +175,7 @@ canvas.addEventListener("mousedown", e => {
         return;
     }
     isDragging = true;
+    hasDragged = false;
     const rect = canvas.getBoundingClientRect();
     dragStartX = (e.clientX - rect.left) / canvas.width;
     dragStartY = (e.clientY - rect.top)  / canvas.height;
@@ -214,6 +194,7 @@ canvas.addEventListener("mousemove", e => {
         return;
     }
     if (!isDragging) return;
+    hasDragged = true;
     const rect = canvas.getBoundingClientRect();
     const mx = (e.clientX - rect.left) / canvas.width;
     const my = (e.clientY - rect.top)  / canvas.height;
@@ -263,7 +244,28 @@ canvas.addEventListener("mouseup", e => {
         zoomLabel.textContent = scale;
         return;
     }
+
     isDragging = false;
+
+    // Genuine CLICK (no dragging) → pivot (Y corrected: NDC vs canvas)
+    if (!hasDragged) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) / canvas.width;
+        const my = (e.clientY - rect.top)  / canvas.height;
+
+        const aspect = canvas.width / canvas.height;
+
+        pivotScreenX = mx;
+        pivotScreenY = my;
+
+        pivotX = (mx - 0.5) * scale * aspect + centerX;
+        pivotY = (0.5 - my) * scale + centerY;
+
+        if (juliaMode === 1) {
+            juliaCx = pivotX;
+            juliaCy = pivotY;
+        }
+    }
 });
 canvas.addEventListener("mouseleave", () => {
     isDragging = false;
