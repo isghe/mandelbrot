@@ -16,7 +16,12 @@ let maxIter = 300;
 let juliaMode = 0;
 let juliaCx = -0.8;
 let juliaCy = 0.156;
-let paletteType = 0;
+let paletteType = 4;
+
+// progressive mode (reveals the fractal iteration by iteration)
+let progressiveMode = 0;
+let progressiveIter = 1;
+function resetProgressive() { progressiveIter = 1; }
 
 // pivot for centered zoom
 let pivotX = -0.5;
@@ -45,17 +50,23 @@ const zoomSlider = document.getElementById("zoomSlider");
 const zoomLabel  = document.getElementById("zoomLabel");
 const paletteSel = document.getElementById("paletteType");
 const juliaChk   = document.getElementById("juliaMode");
+const progressiveChk = document.getElementById("progressiveMode");
 
 iterSlider.oninput = () => {
   maxIter = Number(iterSlider.value);
   iterLabel.textContent = maxIter;
+  resetProgressive();
 };
 zoomSlider.oninput = () => {
   scale = Number(zoomSlider.value);
   zoomLabel.textContent = scale;
 };
 paletteSel.onchange = () => paletteType = Number(paletteSel.value);
-juliaChk.onchange   = () => juliaMode = juliaChk.checked ? 1 : 0;
+juliaChk.onchange   = () => { juliaMode = juliaChk.checked ? 1 : 0; resetProgressive(); };
+progressiveChk.onchange = () => {
+  progressiveMode = progressiveChk.checked ? 1 : 0;
+  resetProgressive();
+};
 
 // 256-entry palette
 function makePalette(type) {
@@ -110,7 +121,7 @@ function makePalette(type) {
   return arr;
 }
 
-let palette256 = makePalette(0);
+let palette256 = makePalette(paletteType);
 
 const paletteTex = device.createTexture({
   size:[256,1],
@@ -242,6 +253,7 @@ canvas.addEventListener("mouseup", e => {
 
         zoomSlider.value = scale;
         zoomLabel.textContent = scale;
+        resetProgressive();
         return;
     }
 
@@ -264,6 +276,7 @@ canvas.addEventListener("mouseup", e => {
         if (juliaMode === 1) {
             juliaCx = pivotX;
             juliaCy = pivotY;
+            resetProgressive();
         }
     }
 });
@@ -287,6 +300,7 @@ canvas.addEventListener("wheel", e => {
 
     zoomSlider.value = scale;
     zoomLabel.textContent = scale;
+    resetProgressive();
 });
 
 // RENDER
@@ -296,13 +310,19 @@ function render(){
   const [jx_hi, jx_lo] = split64(juliaCx);
   const [jy_hi, jy_lo] = split64(juliaCy);
 
+  let displayIter = maxIter;
+  if (progressiveMode && !isDragging) {
+    displayIter = Math.min(progressiveIter, maxIter);
+    if (progressiveIter < maxIter) progressiveIter++;
+  }
+
   const data = new Float32Array([
     scale,
     cx_hi, cx_lo,
     cy_hi, cy_lo,
     jx_hi, jx_lo,
     jy_hi, jy_lo,
-    maxIter,
+    displayIter,
     canvas.width,
     canvas.height,
     juliaMode
