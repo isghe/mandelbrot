@@ -344,6 +344,13 @@ class MandelbrotApp {
 
   // RENDER
   render = () => {
+    // While drawing a selection rectangle the fractal view doesn't change
+    // (only the CSS overlay does) — skip the expensive GPU re-render.
+    if (this.isSelecting) {
+      requestAnimationFrame(this.render);
+      return;
+    }
+
     const [cx_hi, cx_lo] = MandelbrotApp.split64(this.centerX);
     const [cy_hi, cy_lo] = MandelbrotApp.split64(this.centerY);
     const [jx_hi, jx_lo] = MandelbrotApp.split64(this.juliaCx);
