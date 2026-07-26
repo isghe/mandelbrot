@@ -132,6 +132,9 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
         let x2 = ds_mul(x, x);
         let y2 = ds_mul(y, y);
 
+        // Escape test only needs the hi component: it's a coarse boundary
+        // check, and full double-single precision here wouldn't change the
+        // outcome for any pixel that matters.
         if (x2.x + y2.x > 4.0 || iter >= i32(params.maxIter)) { break; }
 
         let xt = ds_add(ds_sub(x2, y2), cx);
