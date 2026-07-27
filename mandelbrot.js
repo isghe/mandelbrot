@@ -224,7 +224,7 @@ class MandelbrotApp {
     return arr;
   }
 
-  // Double-double split (f64 -> hi+lo f32)
+  // Double-single split (f64 -> hi+lo f32)
   static split64(x) {
     const hi = Math.fround(x);
     const lo = x - hi;
