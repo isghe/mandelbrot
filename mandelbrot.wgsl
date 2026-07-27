@@ -1,3 +1,6 @@
+// WGSL rounds a uniform-address-space struct's size up to a 16-byte
+// multiple, so the host buffer must be 64 B even though these 13 fields
+// only span 52 B; the JS-side array appends 3 unused padding floats.
 struct Params {
     scale        : f32,
     centerX_hi   : f32,

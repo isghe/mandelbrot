@@ -114,9 +114,10 @@ class MandelbrotApp {
       primitive:{topology:"triangle-list"}
     });
 
-    // Uniform buffer (13 f32)
+    // Uniform buffer: 13 logical f32 fields + 3 padding floats, since WGSL
+    // rounds a uniform struct's size up to a 16-byte multiple (64 B here).
     this.uniformBuffer = this.device.createBuffer({
-      size: 13 * 4,
+      size: 16 * 4,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -389,7 +390,8 @@ class MandelbrotApp {
       displayIter,
       this.canvas.width,
       this.canvas.height,
-      this.juliaMode
+      this.juliaMode,
+      0, 0, 0 // padding to 64 B (16 floats), see uniformBuffer comment in init()
     ]);
 
     this.device.queue.writeBuffer(this.uniformBuffer,0,data);
