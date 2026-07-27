@@ -35,6 +35,9 @@ class MandelbrotApp {
   selectStartX = 0;
   selectStartY = 0;
 
+  // render scheduling
+  rafPending = false;
+
   constructor(canvas) {
     this.canvas = canvas;
     this.canvas.width = innerWidth;
@@ -77,6 +80,22 @@ class MandelbrotApp {
   onResize = () => {
     this.canvas.width = innerWidth;
     this.canvas.height = innerHeight;
+    this.scheduleRender();
+  };
+
+  // Renders on the next animation frame at most once per call burst
+  // (rafPending guard); progressive mode re-arms itself each frame
+  // until the ramp completes or panning starts.
+  scheduleRender = () => {
+    if (this.rafPending) return;
+    this.rafPending = true;
+    requestAnimationFrame(() => {
+      this.rafPending = false;
+      this.renderOnce();
+      if (this.progressiveMode && this.progressiveIter < this.maxIter && !this.isDragging) {
+        this.scheduleRender();
+      }
+    });
   };
 
   showError(msg) {
@@ -145,7 +164,7 @@ class MandelbrotApp {
       ]
     });
 
-    this.render();
+    this.scheduleRender();
   }
 
   resetProgressive() {
@@ -216,10 +235,12 @@ class MandelbrotApp {
     this.maxIter = Number(this.iterSlider.value);
     this.iterLabel.textContent = this.maxIter;
     this.resetProgressive();
+    this.scheduleRender();
   };
 
   onZoomInput = () => {
     this.setScale(Number(this.zoomSlider.value));
+    this.scheduleRender();
   };
 
   onPaletteChange = () => {
@@ -231,16 +252,19 @@ class MandelbrotApp {
       {bytesPerRow:256*4},
       {width:256,height:1}
     );
+    this.scheduleRender();
   };
 
   onJuliaChange = () => {
     this.juliaMode = this.juliaChk.checked ? 1 : 0;
     this.resetProgressive();
+    this.scheduleRender();
   };
 
   onProgressiveChange = () => {
     this.progressiveMode = this.progressiveChk.checked ? 1 : 0;
     this.resetProgressive();
+    this.scheduleRender();
   };
 
   // PAN: mousedown / mousemove / mouseup
@@ -287,6 +311,7 @@ class MandelbrotApp {
 
     this.centerX = this.startCenterX - dx * this.scale * aspect;
     this.centerY = this.startCenterY + dy * this.scale;
+    this.scheduleRender();
   };
 
   onMouseUp = (e) => {
@@ -323,6 +348,7 @@ class MandelbrotApp {
       this.pivotScreenY = 0.5;
 
       this.resetProgressive();
+      this.scheduleRender();
       return;
     }
 
@@ -347,6 +373,7 @@ class MandelbrotApp {
         this.juliaCy = this.pivotY;
         this.resetProgressive();
       }
+      this.scheduleRender();
     }
   };
 
@@ -369,17 +396,11 @@ class MandelbrotApp {
     this.centerY = this.pivotY - (0.5 - this.pivotScreenY) * this.scale;
 
     this.resetProgressive();
+    this.scheduleRender();
   };
 
   // RENDER
-  render = () => {
-    // While drawing a selection rectangle the fractal view doesn't change
-    // (only the CSS overlay does) — skip the expensive GPU re-render.
-    if (this.isSelecting) {
-      requestAnimationFrame(this.render);
-      return;
-    }
-
+  renderOnce = () => {
     const [cx_hi, cx_lo] = MandelbrotApp.split64(this.centerX);
     const [cy_hi, cy_lo] = MandelbrotApp.split64(this.centerY);
     const [jx_hi, jx_lo] = MandelbrotApp.split64(this.juliaCx);
@@ -422,7 +443,6 @@ class MandelbrotApp {
     pass.end();
 
     this.device.queue.submit([encoder.finish()]);
-    requestAnimationFrame(this.render);
   };
 }
 
