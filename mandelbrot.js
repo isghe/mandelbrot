@@ -38,6 +38,7 @@ class MandelbrotApp {
     this.canvas.height = innerHeight;
 
     this.selectionBox = document.getElementById("selectionBox");
+    this.errorBox = document.getElementById("gpuError");
 
     // UI
     this.iterSlider = document.getElementById("iterSlider");
@@ -63,8 +64,21 @@ class MandelbrotApp {
     this.palette256 = this.makePalette(this.paletteType);
   }
 
+  showError(msg) {
+    this.errorBox.textContent = msg;
+    this.errorBox.style.display = "block";
+  }
+
   async init() {
+    if (!navigator.gpu) {
+      this.showError("WebGPU is not supported in this browser.");
+      return;
+    }
     const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      this.showError("No WebGPU adapter available.");
+      return;
+    }
     this.device  = await adapter.requestDevice();
     this.context = this.canvas.getContext("webgpu");
     this.format  = navigator.gpu.getPreferredCanvasFormat();
@@ -85,8 +99,12 @@ class MandelbrotApp {
       magFilter:"linear", minFilter:"linear"
     });
 
-    // WGSL (f32 + double-double center/julia)
-    const shaderCode = await fetch("mandelbrot.wgsl").then(r => r.text());
+    // WGSL (f32 + double-single center/julia)
+    const shaderResponse = await fetch("mandelbrot.wgsl");
+    if (!shaderResponse.ok) {
+      throw new Error(`WGSL fetch failed: ${shaderResponse.status}`);
+    }
+    const shaderCode = await shaderResponse.text();
     const module = this.device.createShaderModule({code:shaderCode});
 
     this.pipeline = this.device.createRenderPipeline({
@@ -397,4 +415,8 @@ class MandelbrotApp {
 }
 
 const app = new MandelbrotApp(document.getElementById("gfx"));
-await app.init();
+try {
+  await app.init();
+} catch (e) {
+  app.showError(`Failed to initialize WebGPU: ${e.message}`);
+}

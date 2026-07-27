@@ -13,3 +13,11 @@ label { display:block; margin-top:6px; }
   background:rgba(0,255,0,0.15);
   pointer-events:none;
 }
+
+#gpuError {
+  display:none;
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  max-width:480px; padding:16px 20px;
+  background:#200; border:1px solid #900; border-radius:8px;
+  color:#f88; font-family:sans-serif; text-align:center;
+}
