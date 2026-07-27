@@ -1,4 +1,7 @@
 class MandelbrotApp {
+  static MIN_SCALE = 1e-7;
+  static MAX_SCALE = 4.0;
+
   // State (JS = f64)
   centerX = -0.5;
   centerY = 0.0;
@@ -60,9 +63,21 @@ class MandelbrotApp {
     this.canvas.addEventListener("mouseup", this.onMouseUp);
     this.canvas.addEventListener("mouseleave", this.onMouseLeave);
     this.canvas.addEventListener("wheel", this.onWheel);
+    window.addEventListener("resize", this.onResize);
 
     this.palette256 = this.makePalette(this.paletteType);
   }
+
+  setScale(next) {
+    this.scale = Math.min(MandelbrotApp.MAX_SCALE, Math.max(MandelbrotApp.MIN_SCALE, next));
+    this.zoomSlider.value = this.scale;
+    this.zoomLabel.textContent = this.scale;
+  }
+
+  onResize = () => {
+    this.canvas.width = innerWidth;
+    this.canvas.height = innerHeight;
+  };
 
   showError(msg) {
     this.errorBox.textContent = msg;
@@ -204,8 +219,7 @@ class MandelbrotApp {
   };
 
   onZoomInput = () => {
-    this.scale = Number(this.zoomSlider.value);
-    this.zoomLabel.textContent = this.scale;
+    this.setScale(Number(this.zoomSlider.value));
   };
 
   onPaletteChange = () => {
@@ -301,15 +315,13 @@ class MandelbrotApp {
 
       const selWidth  = Math.abs(fx2 - fx1);
       const selHeight = Math.abs(fy1 - fy2);
-      this.scale = Math.max(selHeight, selWidth / aspect);
+      this.setScale(Math.max(selHeight, selWidth / aspect));
 
       this.pivotX = this.centerX;
       this.pivotY = this.centerY;
       this.pivotScreenX = 0.5;
       this.pivotScreenY = 0.5;
 
-      this.zoomSlider.value = this.scale;
-      this.zoomLabel.textContent = this.scale;
       this.resetProgressive();
       return;
     }
@@ -351,13 +363,11 @@ class MandelbrotApp {
     const aspect = this.canvas.width / this.canvas.height;
     const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
 
-    this.scale *= zoomFactor;
+    this.setScale(this.scale * zoomFactor);
 
     this.centerX = this.pivotX - (this.pivotScreenX - 0.5) * this.scale * aspect;
     this.centerY = this.pivotY - (0.5 - this.pivotScreenY) * this.scale;
 
-    this.zoomSlider.value = this.scale;
-    this.zoomLabel.textContent = this.scale;
     this.resetProgressive();
   };
 
