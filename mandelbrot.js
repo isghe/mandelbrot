@@ -1,5 +1,5 @@
 class MandelbrotApp {
-  static MIN_SCALE = 1e-7;
+  static MIN_SCALE = 1e-14;
   static MAX_SCALE = 4.0;
 
   // State (JS = f64)
