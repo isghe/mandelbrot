@@ -238,6 +238,18 @@ class MandelbrotApp {
     return arr;
   }
 
+  applyPalette(type) {
+    this.paletteType = type;
+    this.palette256 = this.makePalette(type);
+    if (!this.device) return;
+    this.device.queue.writeTexture(
+      {texture:this.paletteTex},
+      this.palette256,
+      {bytesPerRow:256*4},
+      {width:256,height:1}
+    );
+  }
+
   // Double-single split (f64 -> hi+lo f32)
   static split64(x) {
     const hi = Math.fround(x);
@@ -258,14 +270,7 @@ class MandelbrotApp {
   };
 
   onPaletteChange = () => {
-    this.paletteType = Number(this.paletteSel.value);
-    this.palette256 = this.makePalette(this.paletteType);
-    this.device.queue.writeTexture(
-      {texture:this.paletteTex},
-      this.palette256,
-      {bytesPerRow:256*4},
-      {width:256,height:1}
-    );
+    this.applyPalette(Number(this.paletteSel.value));
     this.scheduleRender();
   };
 
@@ -295,22 +300,15 @@ class MandelbrotApp {
     this.juliaMode = s.juliaMode;
     this.juliaCx = s.juliaCx;
     this.juliaCy = s.juliaCy;
-    this.paletteType = s.paletteType;
     this.progressiveMode = s.progressiveMode;
 
     this.iterSlider.value = this.maxIter;
     this.iterLabel.textContent = this.maxIter;
-    this.paletteSel.value = this.paletteType;
     this.juliaChk.checked = !!this.juliaMode;
     this.progressiveChk.checked = !!this.progressiveMode;
 
-    this.palette256 = this.makePalette(this.paletteType);
-    this.device.queue.writeTexture(
-      {texture:this.paletteTex},
-      this.palette256,
-      {bytesPerRow:256*4},
-      {width:256,height:1}
-    );
+    this.applyPalette(s.paletteType);
+    this.paletteSel.value = this.paletteType;
 
     this.resetProgressive();
     this.scheduleRender();
