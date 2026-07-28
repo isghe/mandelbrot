@@ -52,8 +52,7 @@ class MandelbrotApp {
     };
 
     this.canvas = canvas;
-    this.canvas.width = innerWidth;
-    this.canvas.height = innerHeight;
+    this.resizeCanvas();
 
     this.selectionBox = document.getElementById("selectionBox");
     this.errorBox = document.getElementById("gpuError");
@@ -92,9 +91,19 @@ class MandelbrotApp {
     this.zoomLabel.textContent = this.scale;
   }
 
+  resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width * dpr));
+    const height = Math.max(1, Math.round(rect.height * dpr));
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+    }
+  }
+
   onResize = () => {
-    this.canvas.width = innerWidth;
-    this.canvas.height = innerHeight;
+    this.resizeCanvas();
     this.scheduleRender();
   };
 
@@ -331,8 +340,8 @@ class MandelbrotApp {
     this.isDragging = true;
     this.hasDragged = false;
     const rect = this.canvas.getBoundingClientRect();
-    this.dragStartX = (e.clientX - rect.left) / this.canvas.width;
-    this.dragStartY = (e.clientY - rect.top)  / this.canvas.height;
+    this.dragStartX = (e.clientX - rect.left) / rect.width;
+    this.dragStartY = (e.clientY - rect.top)  / rect.height;
     this.startCenterX = this.centerX;
     this.startCenterY = this.centerY;
   };
@@ -350,8 +359,8 @@ class MandelbrotApp {
     if (!this.isDragging) return;
     this.hasDragged = true;
     const rect = this.canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / this.canvas.width;
-    const my = (e.clientY - rect.top)  / this.canvas.height;
+    const mx = (e.clientX - rect.left) / rect.width;
+    const my = (e.clientY - rect.top)  / rect.height;
 
     const dx = mx - this.dragStartX;
     const dy = my - this.dragStartY;
@@ -378,10 +387,10 @@ class MandelbrotApp {
 
       const aspect = this.canvas.width / this.canvas.height;
 
-      const fx1 = ((x1 / this.canvas.width)  - 0.5) * this.scale * aspect + this.centerX;
-      const fx2 = ((x2 / this.canvas.width)  - 0.5) * this.scale * aspect + this.centerX;
-      const fy1 = (0.5 - (y1 / this.canvas.height)) * this.scale + this.centerY;
-      const fy2 = (0.5 - (y2 / this.canvas.height)) * this.scale + this.centerY;
+      const fx1 = ((x1 / rect.width)  - 0.5) * this.scale * aspect + this.centerX;
+      const fx2 = ((x2 / rect.width)  - 0.5) * this.scale * aspect + this.centerX;
+      const fy1 = (0.5 - (y1 / rect.height)) * this.scale + this.centerY;
+      const fy2 = (0.5 - (y2 / rect.height)) * this.scale + this.centerY;
 
       this.centerX = (fx1 + fx2) / 2;
       this.centerY = (fy1 + fy2) / 2;
@@ -405,8 +414,8 @@ class MandelbrotApp {
     // Genuine CLICK (no dragging) → pivot (Y corrected: NDC vs canvas)
     if (!this.hasDragged) {
       const rect = this.canvas.getBoundingClientRect();
-      const mx = (e.clientX - rect.left) / this.canvas.width;
-      const my = (e.clientY - rect.top)  / this.canvas.height;
+      const mx = (e.clientX - rect.left) / rect.width;
+      const my = (e.clientY - rect.top)  / rect.height;
 
       const aspect = this.canvas.width / this.canvas.height;
 
