@@ -29,4 +29,6 @@ Requires a WebGPU-capable browser (recent Chrome or Edge).
   current pivot-selected constant.
 - **Progressive mode** checkbox — reveal the fractal iteration by iteration instead of
   jumping straight to full quality.
+- **Reset to initial condition** button — restore the default view, iterations, palette,
+  Julia mode/constant, and progressive mode.
 - Iteration count, zoom level, and palette are also adjustable via the UI panel.

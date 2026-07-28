@@ -282,6 +282,7 @@ class MandelbrotApp {
   };
 
   onReset = () => {
+    if (!this.device) return;
     const s = this.initialState;
     this.centerX = s.centerX;
     this.centerY = s.centerY;
