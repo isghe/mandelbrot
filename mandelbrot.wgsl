@@ -1,20 +1,21 @@
 // WGSL rounds a uniform-address-space struct's size up to a 16-byte
-// multiple, so the host buffer must be 64 B even though these 13 fields
-// only span 52 B; the JS-side array appends 3 unused padding floats.
+// multiple, so the host buffer must be 64 B even though these 14 fields
+// only span 56 B; the JS-side array appends 2 unused padding floats.
 struct Params {
-    scale        : f32,
-    centerX_hi   : f32,
-    centerX_lo   : f32,
-    centerY_hi   : f32,
-    centerY_lo   : f32,
-    juliaCx_hi   : f32,
-    juliaCx_lo   : f32,
-    juliaCy_hi   : f32,
-    juliaCy_lo   : f32,
-    maxIter      : f32,
-    width        : f32,
-    height       : f32,
-    juliaMode    : f32,
+    scale         : f32,
+    centerX_hi    : f32,
+    centerX_lo    : f32,
+    centerY_hi    : f32,
+    centerY_lo    : f32,
+    juliaCx_hi    : f32,
+    juliaCx_lo    : f32,
+    juliaCy_hi    : f32,
+    juliaCy_lo    : f32,
+    maxIter       : f32,
+    width         : f32,
+    height        : f32,
+    juliaMode     : f32,
+    smoothColoring: f32,
 };
 
 @group(0) @binding(0) var<uniform> params : Params;
@@ -186,10 +187,15 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
 
-    // Continuous (smooth) escape-time coloring, avoids banding and reduces
-    // dependence of color on maxIter.
-    let smoothIter = f32(iter) + 1.0 - log2(0.5 * log2(radius2.x));
-    let t = fract(smoothIter * 0.02);
+    var t : f32;
+    if (params.smoothColoring != 0.0) {
+        // Continuous (smooth) escape-time coloring, avoids banding and
+        // reduces dependence of color on maxIter.
+        let smoothIter = f32(iter) + 1.0 - log2(0.5 * log2(radius2.x));
+        t = fract(smoothIter * 0.02);
+    } else {
+        t = f32(iter) / params.maxIter;
+    }
 
     let col = palette256(t);
     return vec4<f32>(col,1.0);

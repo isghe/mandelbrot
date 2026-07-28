@@ -11,6 +11,7 @@ class MandelbrotApp {
   juliaCx = -0.8;
   juliaCy = 0.156;
   paletteType = 4;
+  smoothColoring = 0;
 
   // progressive mode (reveals the fractal iteration by iteration)
   progressiveMode = 0;
@@ -49,6 +50,7 @@ class MandelbrotApp {
       juliaCy: this.juliaCy,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
+      smoothColoring: this.smoothColoring,
     };
 
     this.canvas = canvas;
@@ -65,6 +67,7 @@ class MandelbrotApp {
     this.paletteSel = document.getElementById("paletteType");
     this.juliaChk   = document.getElementById("juliaMode");
     this.progressiveChk = document.getElementById("progressiveMode");
+    this.smoothColoringChk = document.getElementById("smoothColoring");
     this.resetBtn   = document.getElementById("resetBtn");
 
     this.iterSlider.oninput = this.onIterInput;
@@ -72,6 +75,7 @@ class MandelbrotApp {
     this.paletteSel.onchange = this.onPaletteChange;
     this.juliaChk.onchange   = this.onJuliaChange;
     this.progressiveChk.onchange = this.onProgressiveChange;
+    this.smoothColoringChk.onchange = this.onSmoothColoringChange;
     this.resetBtn.onclick   = this.onReset;
 
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
@@ -192,7 +196,7 @@ class MandelbrotApp {
       primitive:{topology:"triangle-list"}
     });
 
-    // Uniform buffer: 13 logical f32 fields + 3 padding floats, since WGSL
+    // Uniform buffer: 14 logical f32 fields + 2 padding floats, since WGSL
     // rounds a uniform struct's size up to a 16-byte multiple (64 B here).
     this.uniformBuffer = this.device.createBuffer({
       size: 16 * 4,
@@ -316,6 +320,11 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
+  onSmoothColoringChange = () => {
+    this.smoothColoring = this.smoothColoringChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
   onReset = () => {
     if (!this.device) return;
     const s = this.initialState;
@@ -331,11 +340,13 @@ class MandelbrotApp {
     this.juliaCx = s.juliaCx;
     this.juliaCy = s.juliaCy;
     this.progressiveMode = s.progressiveMode;
+    this.smoothColoring = s.smoothColoring;
 
     this.iterSlider.value = this.maxIter;
     this.iterLabel.textContent = this.maxIter;
     this.juliaChk.checked = !!this.juliaMode;
     this.progressiveChk.checked = !!this.progressiveMode;
+    this.smoothColoringChk.checked = !!this.smoothColoring;
 
     this.applyPalette(s.paletteType);
     this.paletteSel.value = this.paletteType;
@@ -506,7 +517,8 @@ class MandelbrotApp {
       this.canvas.width,
       this.canvas.height,
       this.juliaMode,
-      0, 0, 0 // padding to 64 B (16 floats), see uniformBuffer comment in init()
+      this.smoothColoring,
+      0, 0 // padding to 64 B (16 floats), see uniformBuffer comment in init()
     ]);
 
     this.device.queue.writeBuffer(this.uniformBuffer,0,data);
