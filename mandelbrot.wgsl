@@ -41,7 +41,11 @@ fn vs_main(@builtin(vertex_index) vid:u32) -> VSOut {
 
 fn palette256(t:f32)->vec3<f32>{
     let uv=vec2<f32>(t,0.5);
-    let col=textureSample(paletteTex,paletteSampler,uv);
+    // textureSampleLevel (not textureSample) because this function is now
+    // called from behind a per-pixel branch (interior vs. escaped): a plain
+    // textureSample relies on implicit derivatives, which WGSL requires to
+    // come from uniform control flow across the pixel quad.
+    let col=textureSampleLevel(paletteTex,paletteSampler,uv,0.0);
     return col.rgb;
 }
 
