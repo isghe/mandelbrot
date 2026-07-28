@@ -82,6 +82,7 @@ class MandelbrotApp {
     this.canvas.addEventListener("wheel", this.onWheel);
     window.addEventListener("resize", this.onResize);
 
+    this.setScale(this.scale);
     this.palette256 = this.makePalette(this.paletteType);
   }
 
