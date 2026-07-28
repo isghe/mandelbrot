@@ -39,6 +39,18 @@ class MandelbrotApp {
   rafPending = false;
 
   constructor(canvas) {
+    this.initialState = {
+      centerX: this.centerX,
+      centerY: this.centerY,
+      scale: this.scale,
+      maxIter: this.maxIter,
+      juliaMode: this.juliaMode,
+      juliaCx: this.juliaCx,
+      juliaCy: this.juliaCy,
+      paletteType: this.paletteType,
+      progressiveMode: this.progressiveMode,
+    };
+
     this.canvas = canvas;
     this.canvas.width = innerWidth;
     this.canvas.height = innerHeight;
@@ -54,12 +66,14 @@ class MandelbrotApp {
     this.paletteSel = document.getElementById("paletteType");
     this.juliaChk   = document.getElementById("juliaMode");
     this.progressiveChk = document.getElementById("progressiveMode");
+    this.resetBtn   = document.getElementById("resetBtn");
 
     this.iterSlider.oninput = this.onIterInput;
     this.zoomSlider.oninput = this.onZoomInput;
     this.paletteSel.onchange = this.onPaletteChange;
     this.juliaChk.onchange   = this.onJuliaChange;
     this.progressiveChk.onchange = this.onProgressiveChange;
+    this.resetBtn.onclick   = this.onReset;
 
     this.canvas.addEventListener("mousedown", this.onMouseDown);
     this.canvas.addEventListener("mousemove", this.onMouseMove);
@@ -263,6 +277,40 @@ class MandelbrotApp {
 
   onProgressiveChange = () => {
     this.progressiveMode = this.progressiveChk.checked ? 1 : 0;
+    this.resetProgressive();
+    this.scheduleRender();
+  };
+
+  onReset = () => {
+    const s = this.initialState;
+    this.centerX = s.centerX;
+    this.centerY = s.centerY;
+    this.pivotX = s.centerX;
+    this.pivotY = s.centerY;
+    this.pivotScreenX = 0.5;
+    this.pivotScreenY = 0.5;
+    this.setScale(s.scale);
+    this.maxIter = s.maxIter;
+    this.juliaMode = s.juliaMode;
+    this.juliaCx = s.juliaCx;
+    this.juliaCy = s.juliaCy;
+    this.paletteType = s.paletteType;
+    this.progressiveMode = s.progressiveMode;
+
+    this.iterSlider.value = this.maxIter;
+    this.iterLabel.textContent = this.maxIter;
+    this.paletteSel.value = this.paletteType;
+    this.juliaChk.checked = !!this.juliaMode;
+    this.progressiveChk.checked = !!this.progressiveMode;
+
+    this.palette256 = this.makePalette(this.paletteType);
+    this.device.queue.writeTexture(
+      {texture:this.paletteTex},
+      this.palette256,
+      {bytesPerRow:256*4},
+      {width:256,height:1}
+    );
+
     this.resetProgressive();
     this.scheduleRender();
   };

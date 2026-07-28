@@ -5,6 +5,7 @@ body { margin:0; overflow:hidden; background:#000; }
   color:white; font-family:sans-serif;
 }
 label { display:block; margin-top:6px; }
+#resetBtn { display:block; margin-top:10px; }
 
 #selectionBox {
   position:fixed;
