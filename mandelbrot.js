@@ -138,7 +138,18 @@ class MandelbrotApp {
       return;
     }
     this.device  = await adapter.requestDevice();
+
+    this.device.lost.then((info) => {
+      this.showError(`WebGPU device lost: ${info.message || info.reason}`);
+    });
+    this.device.addEventListener("uncapturederror", (event) => {
+      this.showError(`WebGPU error: ${event.error.message}`);
+    });
+
     this.context = this.canvas.getContext("webgpu");
+    if (!this.context) {
+      throw new Error("Unable to create the WebGPU canvas context.");
+    }
     this.format  = navigator.gpu.getPreferredCanvasFormat();
     this.context.configure({ device: this.device, format: this.format });
 
@@ -164,6 +175,14 @@ class MandelbrotApp {
     }
     const shaderCode = await shaderResponse.text();
     const module = this.device.createShaderModule({code:shaderCode});
+
+    const compilationInfo = await module.getCompilationInfo();
+    const shaderErrors = compilationInfo.messages.filter((message) => message.type === "error");
+    if (shaderErrors.length > 0) {
+      throw new Error(
+        shaderErrors.map((error) => `${error.lineNum}:${error.linePos} ${error.message}`).join("\n")
+      );
+    }
 
     this.pipeline = this.device.createRenderPipeline({
       layout:"auto",
