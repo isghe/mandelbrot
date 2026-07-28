@@ -1,16 +1,19 @@
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
   static MAX_SCALE = 4.0;
+  static MIN_ITER = 1;
+  static MAX_ITER = 8192;
 
   // State (JS = f64)
   centerX = -0.5;
   centerY = 0.0;
   scale   = 3.0;
-  maxIter = 300;
+  maxIter = 256;
   juliaMode = 0;
   juliaCx = -0.8;
   juliaCy = 0.156;
   paletteType = 4;
+  smoothColoring = 0;
 
   // progressive mode (reveals the fractal iteration by iteration)
   progressiveMode = 0;
@@ -38,6 +41,9 @@ class MandelbrotApp {
   // render scheduling
   rafPending = false;
 
+  // Set once the WebGPU device is lost; blocks further render attempts.
+  deviceLost = false;
+
   constructor(canvas) {
     this.initialState = {
       centerX: this.centerX,
@@ -49,23 +55,31 @@ class MandelbrotApp {
       juliaCy: this.juliaCy,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
+      smoothColoring: this.smoothColoring,
     };
 
     this.canvas = canvas;
-    this.canvas.width = innerWidth;
-    this.canvas.height = innerHeight;
+    this.resizeCanvas();
 
     this.selectionBox = document.getElementById("selectionBox");
     this.errorBox = document.getElementById("gpuError");
+    this.errorMessage = document.getElementById("gpuErrorMessage");
+    this.reloadBtn = document.getElementById("gpuReloadBtn");
+    this.reloadBtn.onclick = () => location.reload();
 
     // UI
     this.iterSlider = document.getElementById("iterSlider");
     this.iterLabel  = document.getElementById("iterLabel");
+    this.iterSlider.min = Math.log10(MandelbrotApp.MIN_ITER);
+    this.iterSlider.max = Math.log10(MandelbrotApp.MAX_ITER);
     this.zoomSlider = document.getElementById("zoomSlider");
     this.zoomLabel  = document.getElementById("zoomLabel");
+    this.zoomSlider.min = Math.log10(MandelbrotApp.MIN_SCALE);
+    this.zoomSlider.max = Math.log10(MandelbrotApp.MAX_SCALE);
     this.paletteSel = document.getElementById("paletteType");
     this.juliaChk   = document.getElementById("juliaMode");
     this.progressiveChk = document.getElementById("progressiveMode");
+    this.smoothColoringChk = document.getElementById("smoothColoring");
     this.resetBtn   = document.getElementById("resetBtn");
 
     this.iterSlider.oninput = this.onIterInput;
@@ -73,28 +87,47 @@ class MandelbrotApp {
     this.paletteSel.onchange = this.onPaletteChange;
     this.juliaChk.onchange   = this.onJuliaChange;
     this.progressiveChk.onchange = this.onProgressiveChange;
+    this.smoothColoringChk.onchange = this.onSmoothColoringChange;
     this.resetBtn.onclick   = this.onReset;
 
-    this.canvas.addEventListener("mousedown", this.onMouseDown);
-    this.canvas.addEventListener("mousemove", this.onMouseMove);
-    this.canvas.addEventListener("mouseup", this.onMouseUp);
-    this.canvas.addEventListener("mouseleave", this.onMouseLeave);
-    this.canvas.addEventListener("wheel", this.onWheel);
+    this.canvas.addEventListener("pointerdown", this.onPointerDown);
+    this.canvas.addEventListener("pointermove", this.onPointerMove);
+    this.canvas.addEventListener("pointerup", this.onPointerUp);
+    this.canvas.addEventListener("pointercancel", this.onPointerUp);
+    this.canvas.addEventListener("pointerleave", this.onPointerLeave);
+    this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
     window.addEventListener("resize", this.onResize);
 
     this.setScale(this.scale);
+    this.setMaxIter(this.maxIter);
     this.palette256 = this.makePalette(this.paletteType);
   }
 
   setScale(next) {
     this.scale = Math.min(MandelbrotApp.MAX_SCALE, Math.max(MandelbrotApp.MIN_SCALE, next));
-    this.zoomSlider.value = this.scale;
+    this.zoomSlider.value = Math.log10(this.scale);
     this.zoomLabel.textContent = this.scale;
   }
 
+  setMaxIter(next) {
+    this.maxIter = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
+    this.iterSlider.value = Math.log10(this.maxIter);
+    this.iterLabel.textContent = this.maxIter;
+  }
+
+  resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width * dpr));
+    const height = Math.max(1, Math.round(rect.height * dpr));
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+    }
+  }
+
   onResize = () => {
-    this.canvas.width = innerWidth;
-    this.canvas.height = innerHeight;
+    this.resizeCanvas();
     this.scheduleRender();
   };
 
@@ -114,8 +147,18 @@ class MandelbrotApp {
   };
 
   showError(msg) {
-    this.errorBox.textContent = msg;
+    this.errorMessage.textContent = msg;
     this.errorBox.style.display = "block";
+  }
+
+  // Device loss (especially a real DEVICE_REMOVED, not just a transient
+  // hang) isn't reliably recoverable from within the page — sometimes the
+  // browser's own GPU process needs to restart, which page-level JS can't
+  // force. Rather than retry and risk cascading into more errors, show the
+  // problem and a one-click reload instead of requiring a manual refresh.
+  showFatalError(msg) {
+    this.showError(msg);
+    this.reloadBtn.style.display = "inline-block";
   }
 
   async init() {
@@ -123,13 +166,30 @@ class MandelbrotApp {
       this.showError("WebGPU is not supported in this browser.");
       return;
     }
+    await this.initGPU();
+  }
+
+  async initGPU() {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) {
       this.showError("No WebGPU adapter available.");
       return;
     }
     this.device  = await adapter.requestDevice();
+
+    this.device.lost.then((info) => {
+      if (info.reason === "destroyed") return; // we tore it down ourselves
+      this.deviceLost = true;
+      this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
+    });
+    this.device.addEventListener("uncapturederror", (event) => {
+      this.showError(`WebGPU error: ${event.error.message}`);
+    });
+
     this.context = this.canvas.getContext("webgpu");
+    if (!this.context) {
+      throw new Error("Unable to create the WebGPU canvas context.");
+    }
     this.format  = navigator.gpu.getPreferredCanvasFormat();
     this.context.configure({ device: this.device, format: this.format });
 
@@ -156,6 +216,14 @@ class MandelbrotApp {
     const shaderCode = await shaderResponse.text();
     const module = this.device.createShaderModule({code:shaderCode});
 
+    const compilationInfo = await module.getCompilationInfo();
+    const shaderErrors = compilationInfo.messages.filter((message) => message.type === "error");
+    if (shaderErrors.length > 0) {
+      throw new Error(
+        shaderErrors.map((error) => `${error.lineNum}:${error.linePos} ${error.message}`).join("\n")
+      );
+    }
+
     this.pipeline = this.device.createRenderPipeline({
       layout:"auto",
       vertex:{module,entryPoint:"vs_main"},
@@ -163,7 +231,7 @@ class MandelbrotApp {
       primitive:{topology:"triangle-list"}
     });
 
-    // Uniform buffer: 13 logical f32 fields + 3 padding floats, since WGSL
+    // Uniform buffer: 14 logical f32 fields + 2 padding floats, since WGSL
     // rounds a uniform struct's size up to a 16-byte multiple (64 B here).
     this.uniformBuffer = this.device.createBuffer({
       size: 16 * 4,
@@ -259,14 +327,13 @@ class MandelbrotApp {
   }
 
   onIterInput = () => {
-    this.maxIter = Number(this.iterSlider.value);
-    this.iterLabel.textContent = this.maxIter;
+    this.setMaxIter(10 ** Number(this.iterSlider.value));
     this.resetProgressive();
     this.scheduleRender();
   };
 
   onZoomInput = () => {
-    this.setScale(Number(this.zoomSlider.value));
+    this.setScale(10 ** Number(this.zoomSlider.value));
     this.scheduleRender();
   };
 
@@ -287,6 +354,11 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
+  onSmoothColoringChange = () => {
+    this.smoothColoring = this.smoothColoringChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
   onReset = () => {
     if (!this.device) return;
     const s = this.initialState;
@@ -297,16 +369,16 @@ class MandelbrotApp {
     this.pivotScreenX = 0.5;
     this.pivotScreenY = 0.5;
     this.setScale(s.scale);
-    this.maxIter = s.maxIter;
+    this.setMaxIter(s.maxIter);
     this.juliaMode = s.juliaMode;
     this.juliaCx = s.juliaCx;
     this.juliaCy = s.juliaCy;
     this.progressiveMode = s.progressiveMode;
+    this.smoothColoring = s.smoothColoring;
 
-    this.iterSlider.value = this.maxIter;
-    this.iterLabel.textContent = this.maxIter;
     this.juliaChk.checked = !!this.juliaMode;
     this.progressiveChk.checked = !!this.progressiveMode;
+    this.smoothColoringChk.checked = !!this.smoothColoring;
 
     this.applyPalette(s.paletteType);
     this.paletteSel.value = this.paletteType;
@@ -315,8 +387,9 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
-  // PAN: mousedown / mousemove / mouseup
-  onMouseDown = (e) => {
+  // PAN: pointerdown / pointermove / pointerup
+  onPointerDown = (e) => {
+    this.canvas.setPointerCapture(e.pointerId);
     if (e.ctrlKey) {
       this.isSelecting = true;
       this.selectStartX = e.clientX;
@@ -331,13 +404,13 @@ class MandelbrotApp {
     this.isDragging = true;
     this.hasDragged = false;
     const rect = this.canvas.getBoundingClientRect();
-    this.dragStartX = (e.clientX - rect.left) / this.canvas.width;
-    this.dragStartY = (e.clientY - rect.top)  / this.canvas.height;
+    this.dragStartX = (e.clientX - rect.left) / rect.width;
+    this.dragStartY = (e.clientY - rect.top)  / rect.height;
     this.startCenterX = this.centerX;
     this.startCenterY = this.centerY;
   };
 
-  onMouseMove = (e) => {
+  onPointerMove = (e) => {
     if (this.isSelecting) {
       const x = Math.min(e.clientX, this.selectStartX);
       const y = Math.min(e.clientY, this.selectStartY);
@@ -350,8 +423,8 @@ class MandelbrotApp {
     if (!this.isDragging) return;
     this.hasDragged = true;
     const rect = this.canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / this.canvas.width;
-    const my = (e.clientY - rect.top)  / this.canvas.height;
+    const mx = (e.clientX - rect.left) / rect.width;
+    const my = (e.clientY - rect.top)  / rect.height;
 
     const dx = mx - this.dragStartX;
     const dy = my - this.dragStartY;
@@ -362,7 +435,7 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
-  onMouseUp = (e) => {
+  onPointerUp = (e) => {
     if (this.isSelecting) {
       this.isSelecting = false;
       this.selectionBox.style.display = "none";
@@ -378,10 +451,10 @@ class MandelbrotApp {
 
       const aspect = this.canvas.width / this.canvas.height;
 
-      const fx1 = ((x1 / this.canvas.width)  - 0.5) * this.scale * aspect + this.centerX;
-      const fx2 = ((x2 / this.canvas.width)  - 0.5) * this.scale * aspect + this.centerX;
-      const fy1 = (0.5 - (y1 / this.canvas.height)) * this.scale + this.centerY;
-      const fy2 = (0.5 - (y2 / this.canvas.height)) * this.scale + this.centerY;
+      const fx1 = ((x1 / rect.width)  - 0.5) * this.scale * aspect + this.centerX;
+      const fx2 = ((x2 / rect.width)  - 0.5) * this.scale * aspect + this.centerX;
+      const fy1 = (0.5 - (y1 / rect.height)) * this.scale + this.centerY;
+      const fy2 = (0.5 - (y2 / rect.height)) * this.scale + this.centerY;
 
       this.centerX = (fx1 + fx2) / 2;
       this.centerY = (fy1 + fy2) / 2;
@@ -405,8 +478,8 @@ class MandelbrotApp {
     // Genuine CLICK (no dragging) → pivot (Y corrected: NDC vs canvas)
     if (!this.hasDragged) {
       const rect = this.canvas.getBoundingClientRect();
-      const mx = (e.clientX - rect.left) / this.canvas.width;
-      const my = (e.clientY - rect.top)  / this.canvas.height;
+      const mx = (e.clientX - rect.left) / rect.width;
+      const my = (e.clientY - rect.top)  / rect.height;
 
       const aspect = this.canvas.width / this.canvas.height;
 
@@ -425,7 +498,7 @@ class MandelbrotApp {
     }
   };
 
-  onMouseLeave = () => {
+  onPointerLeave = () => {
     this.isDragging = false;
     if (this.isSelecting) {
       this.isSelecting = false;
@@ -435,6 +508,7 @@ class MandelbrotApp {
 
   // WHEEL → zoom centered on the pivot
   onWheel = (e) => {
+    e.preventDefault();
     const aspect = this.canvas.width / this.canvas.height;
     const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
 
@@ -449,6 +523,7 @@ class MandelbrotApp {
 
   // RENDER
   renderOnce = () => {
+    if (this.deviceLost) return;
     const [cx_hi, cx_lo] = MandelbrotApp.split64(this.centerX);
     const [cy_hi, cy_lo] = MandelbrotApp.split64(this.centerY);
     const [jx_hi, jx_lo] = MandelbrotApp.split64(this.juliaCx);
@@ -457,7 +532,9 @@ class MandelbrotApp {
     let displayIter = this.maxIter;
     if (this.progressiveMode && !this.isDragging) {
       displayIter = Math.min(this.progressiveIter, this.maxIter);
-      if (this.progressiveIter < this.maxIter) this.progressiveIter++;
+      if (this.progressiveIter < this.maxIter) {
+        this.progressiveIter = Math.min(this.maxIter, Math.ceil(this.progressiveIter * 1.08 + 1));
+      }
     }
 
     const data = new Float32Array([
@@ -470,7 +547,8 @@ class MandelbrotApp {
       this.canvas.width,
       this.canvas.height,
       this.juliaMode,
-      0, 0, 0 // padding to 64 B (16 floats), see uniformBuffer comment in init()
+      this.smoothColoring,
+      0, 0 // padding to 64 B (16 floats), see uniformBuffer comment in init()
     ]);
 
     this.device.queue.writeBuffer(this.uniformBuffer,0,data);

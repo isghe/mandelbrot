@@ -1,20 +1,21 @@
 // WGSL rounds a uniform-address-space struct's size up to a 16-byte
-// multiple, so the host buffer must be 64 B even though these 13 fields
-// only span 52 B; the JS-side array appends 3 unused padding floats.
+// multiple, so the host buffer must be 64 B even though these 14 fields
+// only span 56 B; the JS-side array appends 2 unused padding floats.
 struct Params {
-    scale        : f32,
-    centerX_hi   : f32,
-    centerX_lo   : f32,
-    centerY_hi   : f32,
-    centerY_lo   : f32,
-    juliaCx_hi   : f32,
-    juliaCx_lo   : f32,
-    juliaCy_hi   : f32,
-    juliaCy_lo   : f32,
-    maxIter      : f32,
-    width        : f32,
-    height       : f32,
-    juliaMode    : f32,
+    scale         : f32,
+    centerX_hi    : f32,
+    centerX_lo    : f32,
+    centerY_hi    : f32,
+    centerY_lo    : f32,
+    juliaCx_hi    : f32,
+    juliaCx_lo    : f32,
+    juliaCy_hi    : f32,
+    juliaCy_lo    : f32,
+    maxIter       : f32,
+    width         : f32,
+    height        : f32,
+    juliaMode     : f32,
+    smoothColoring: f32,
 };
 
 @group(0) @binding(0) var<uniform> params : Params;
@@ -41,7 +42,11 @@ fn vs_main(@builtin(vertex_index) vid:u32) -> VSOut {
 
 fn palette256(t:f32)->vec3<f32>{
     let uv=vec2<f32>(t,0.5);
-    let col=textureSample(paletteTex,paletteSampler,uv);
+    // textureSampleLevel (not textureSample) because this function is now
+    // called from behind a per-pixel branch (interior vs. escaped): a plain
+    // textureSample relies on implicit derivatives, which WGSL requires to
+    // come from uniform control flow across the pixel quad.
+    let col=textureSampleLevel(paletteTex,paletteSampler,uv,0.0);
     return col.rgb;
 }
 
@@ -96,6 +101,23 @@ fn ds_mul(a:vec2<f32>, b:vec2<f32>) -> vec2<f32> {
     return quick_two_sum(p.x, e);
 }
 
+// Analytic test for the main cardioid and period-2 bulb: points inside
+// either region never escape, so the caller can skip the iteration loop
+// entirely. Uses plain f32, so it's only safe to call at shallow zoom
+// (see the params.scale gate at the call site).
+fn is_main_interior(cx: f32, cy: f32) -> bool {
+    let cy2 = cy * cy;
+
+    let bulbX = cx + 1.0;
+    if (bulbX * bulbX + cy2 <= 0.0625) {
+        return true;
+    }
+
+    let cardioidX = cx - 0.25;
+    let q = cardioidX * cardioidX + cy2;
+    return q * (q + cardioidX) <= 0.25 * cy2;
+}
+
 @fragment
 fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     let uv = in.fragPos*0.5 + vec2<f32>(0.5,0.5);
@@ -130,25 +152,50 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     }
 
     var iter:i32 = 0;
+    var escaped = false;
+    var radius2 = vec2<f32>(0.0, 0.0);
 
-    loop {
-        let x2 = ds_mul(x, x);
-        let y2 = ds_mul(y, y);
+    // Analytic shortcut: skip the whole iteration loop for points known to
+    // lie in the main cardioid or period-2 bulb. Only valid against the
+    // Mandelbrot c-plane (not Julia, where c is fixed and z0 varies), and
+    // only at shallow zoom where plain f32 precision is safe.
+    let skipLoop = params.juliaMode == 0.0 && params.scale > 1e-6 && is_main_interior(cx.x, cy.x);
 
-        // Escape test only needs the hi component: it's a coarse boundary
-        // check, and full double-single precision here wouldn't change the
-        // outcome for any pixel that matters.
-        if (x2.x + y2.x > 4.0 || iter >= i32(params.maxIter)) { break; }
+    if (!skipLoop) {
+        loop {
+            let x2 = ds_mul(x, x);
+            let y2 = ds_mul(y, y);
+            radius2 = ds_add(x2, y2);
 
-        let xt = ds_add(ds_sub(x2, y2), cx);
-        let xy = ds_mul(x, y);
-        y = ds_add(vec2<f32>(xy.x * 2.0, xy.y * 2.0), cy);
-        x = xt;
+            if (radius2.x > 4.0 || (radius2.x == 4.0 && radius2.y > 0.0)) {
+                escaped = true;
+                break;
+            }
+            if (iter >= i32(params.maxIter)) { break; }
 
-        iter = iter + 1;
+            let xt = ds_add(ds_sub(x2, y2), cx);
+            let xy = ds_mul(x, y);
+            y = ds_add(vec2<f32>(xy.x * 2.0, xy.y * 2.0), cy);
+            x = xt;
+
+            iter = iter + 1;
+        }
     }
 
-    let t = f32(iter) / params.maxIter;
+    if (!escaped) {
+        // Interior: point did not escape within maxIter, dedicated color.
+        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    }
+
+    var t : f32;
+    if (params.smoothColoring != 0.0) {
+        // Continuous (smooth) escape-time coloring, avoids banding and
+        // reduces dependence of color on maxIter.
+        let smoothIter = f32(iter) + 1.0 - log2(0.5 * log2(radius2.x));
+        t = fract(smoothIter * 0.02);
+    } else {
+        t = f32(iter) / params.maxIter;
+    }
 
     let col = palette256(t);
     return vec4<f32>(col,1.0);
