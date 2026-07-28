@@ -1,6 +1,8 @@
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
   static MAX_SCALE = 4.0;
+  static MIN_ITER = 1;
+  static MAX_ITER = 8192;
 
   // State (JS = f64)
   centerX = -0.5;
@@ -62,8 +64,12 @@ class MandelbrotApp {
     // UI
     this.iterSlider = document.getElementById("iterSlider");
     this.iterLabel  = document.getElementById("iterLabel");
+    this.iterSlider.min = Math.log10(MandelbrotApp.MIN_ITER);
+    this.iterSlider.max = Math.log10(MandelbrotApp.MAX_ITER);
     this.zoomSlider = document.getElementById("zoomSlider");
     this.zoomLabel  = document.getElementById("zoomLabel");
+    this.zoomSlider.min = Math.log10(MandelbrotApp.MIN_SCALE);
+    this.zoomSlider.max = Math.log10(MandelbrotApp.MAX_SCALE);
     this.paletteSel = document.getElementById("paletteType");
     this.juliaChk   = document.getElementById("juliaMode");
     this.progressiveChk = document.getElementById("progressiveMode");
@@ -98,7 +104,7 @@ class MandelbrotApp {
   }
 
   setMaxIter(next) {
-    this.maxIter = Math.round(Math.min(8192, Math.max(1, next)));
+    this.maxIter = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
     this.iterSlider.value = Math.log10(this.maxIter);
     this.iterLabel.textContent = this.maxIter;
   }
