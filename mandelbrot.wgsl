@@ -96,6 +96,23 @@ fn ds_mul(a:vec2<f32>, b:vec2<f32>) -> vec2<f32> {
     return quick_two_sum(p.x, e);
 }
 
+// Analytic test for the main cardioid and period-2 bulb: points inside
+// either region never escape, so the caller can skip the iteration loop
+// entirely. Uses plain f32, so it's only safe to call at shallow zoom
+// (see the params.scale gate at the call site).
+fn is_main_interior(cx: f32, cy: f32) -> bool {
+    let cy2 = cy * cy;
+
+    let bulbX = cx + 1.0;
+    if (bulbX * bulbX + cy2 <= 0.0625) {
+        return true;
+    }
+
+    let cardioidX = cx - 0.25;
+    let q = cardioidX * cardioidX + cy2;
+    return q * (q + cardioidX) <= 0.25 * cy2;
+}
+
 @fragment
 fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     let uv = in.fragPos*0.5 + vec2<f32>(0.5,0.5);
@@ -133,23 +150,31 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     var escaped = false;
     var radius2 = vec2<f32>(0.0, 0.0);
 
-    loop {
-        let x2 = ds_mul(x, x);
-        let y2 = ds_mul(y, y);
-        radius2 = ds_add(x2, y2);
+    // Analytic shortcut: skip the whole iteration loop for points known to
+    // lie in the main cardioid or period-2 bulb. Only valid against the
+    // Mandelbrot c-plane (not Julia, where c is fixed and z0 varies), and
+    // only at shallow zoom where plain f32 precision is safe.
+    let skipLoop = params.juliaMode == 0.0 && params.scale > 1e-6 && is_main_interior(cx.x, cy.x);
 
-        if (radius2.x > 4.0 || (radius2.x == 4.0 && radius2.y > 0.0)) {
-            escaped = true;
-            break;
+    if (!skipLoop) {
+        loop {
+            let x2 = ds_mul(x, x);
+            let y2 = ds_mul(y, y);
+            radius2 = ds_add(x2, y2);
+
+            if (radius2.x > 4.0 || (radius2.x == 4.0 && radius2.y > 0.0)) {
+                escaped = true;
+                break;
+            }
+            if (iter >= i32(params.maxIter)) { break; }
+
+            let xt = ds_add(ds_sub(x2, y2), cx);
+            let xy = ds_mul(x, y);
+            y = ds_add(vec2<f32>(xy.x * 2.0, xy.y * 2.0), cy);
+            x = xt;
+
+            iter = iter + 1;
         }
-        if (iter >= i32(params.maxIter)) { break; }
-
-        let xt = ds_add(ds_sub(x2, y2), cx);
-        let xy = ds_mul(x, y);
-        y = ds_add(vec2<f32>(xy.x * 2.0, xy.y * 2.0), cy);
-        x = xt;
-
-        iter = iter + 1;
     }
 
     if (!escaped) {
