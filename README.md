@@ -31,6 +31,10 @@ Requires a WebGPU-capable browser (recent Chrome or Edge).
   current pivot-selected constant.
 - **Progressive mode** checkbox — reveal the fractal iteration by iteration instead of
   jumping straight to full quality.
+- **Smooth coloring** checkbox (off by default) — continuous escape-time coloring instead
+  of the classic per-iteration banded look.
 - **Reset to initial condition** button — restore the default view, iterations, palette,
-  Julia mode/constant, and progressive mode.
-- Iteration count, zoom level, and palette are also adjustable via the UI panel.
+  Julia mode/constant, progressive mode, and smooth coloring.
+- Iteration count and zoom level are adjustable via log-scale sliders (for precise control
+  at both the low and deep-zoom ends of their range); palette is also adjustable via the
+  UI panel.
