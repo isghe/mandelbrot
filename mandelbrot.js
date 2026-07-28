@@ -503,9 +503,6 @@ class MandelbrotApp {
         this.progressiveIter = Math.min(this.maxIter, Math.ceil(this.progressiveIter * 1.08 + 1));
       }
     }
-    if (this.isDragging) {
-      displayIter = Math.min(displayIter, 100);
-    }
 
     const data = new Float32Array([
       this.scale,
