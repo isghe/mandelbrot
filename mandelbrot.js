@@ -41,6 +41,10 @@ class MandelbrotApp {
   // render scheduling
   rafPending = false;
 
+  // WebGPU device-loss recovery
+  deviceLost = false;
+  recovering = false;
+
   constructor(canvas) {
     this.initialState = {
       centerX: this.centerX,
@@ -145,20 +149,34 @@ class MandelbrotApp {
     this.errorBox.style.display = "block";
   }
 
+  hideError() {
+    this.errorBox.style.display = "none";
+  }
+
   async init() {
     if (!navigator.gpu) {
       this.showError("WebGPU is not supported in this browser.");
       return;
     }
+    await this.initGPU();
+  }
+
+  // Re-runnable: rebuilds every GPU object from scratch, so it doubles as
+  // the device-loss recovery path (see the device.lost handler below).
+  async initGPU() {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) {
       this.showError("No WebGPU adapter available.");
       return;
     }
     this.device  = await adapter.requestDevice();
+    this.deviceLost = false;
 
     this.device.lost.then((info) => {
-      this.showError(`WebGPU device lost: ${info.message || info.reason}`);
+      if (info.reason === "destroyed") return; // we tore it down ourselves
+      this.deviceLost = true;
+      this.showError(`WebGPU device lost (${info.reason}): ${info.message}. Attempting to recover…`);
+      this.recoverDevice();
     });
     this.device.addEventListener("uncapturederror", (event) => {
       this.showError(`WebGPU error: ${event.error.message}`);
@@ -225,8 +243,26 @@ class MandelbrotApp {
       ]
     });
 
+    this.hideError();
     this.scheduleRender();
   }
+
+  // Guards against overlapping recovery attempts; waits briefly since a
+  // driver TDR reset isn't necessarily complete the instant device.lost
+  // resolves. All fractal view-state lives in plain JS and survives a
+  // device loss untouched, so recovery just needs fresh GPU objects.
+  recoverDevice = async () => {
+    if (this.recovering) return;
+    this.recovering = true;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      await this.initGPU();
+    } catch (e) {
+      this.showError(`Failed to recover from WebGPU device loss: ${e.message}. Please reload the page.`);
+    } finally {
+      this.recovering = false;
+    }
+  };
 
   resetProgressive() {
     this.progressiveIter = 1;
@@ -501,6 +537,7 @@ class MandelbrotApp {
 
   // RENDER
   renderOnce = () => {
+    if (this.deviceLost) return;
     const [cx_hi, cx_lo] = MandelbrotApp.split64(this.centerX);
     const [cy_hi, cy_lo] = MandelbrotApp.split64(this.centerY);
     const [jx_hi, jx_lo] = MandelbrotApp.split64(this.juliaCx);
