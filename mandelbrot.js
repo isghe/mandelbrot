@@ -6,7 +6,7 @@ class MandelbrotApp {
   centerX = -0.5;
   centerY = 0.0;
   scale   = 3.0;
-  maxIter = 300;
+  maxIter = 256;
   juliaMode = 0;
   juliaCx = -0.8;
   juliaCy = 0.156;
@@ -87,6 +87,7 @@ class MandelbrotApp {
     window.addEventListener("resize", this.onResize);
 
     this.setScale(this.scale);
+    this.setMaxIter(this.maxIter);
     this.palette256 = this.makePalette(this.paletteType);
   }
 
@@ -94,6 +95,12 @@ class MandelbrotApp {
     this.scale = Math.min(MandelbrotApp.MAX_SCALE, Math.max(MandelbrotApp.MIN_SCALE, next));
     this.zoomSlider.value = Math.log10(this.scale);
     this.zoomLabel.textContent = this.scale;
+  }
+
+  setMaxIter(next) {
+    this.maxIter = Math.round(Math.min(8192, Math.max(1, next)));
+    this.iterSlider.value = Math.log10(this.maxIter);
+    this.iterLabel.textContent = this.maxIter;
   }
 
   resizeCanvas() {
@@ -292,8 +299,7 @@ class MandelbrotApp {
   }
 
   onIterInput = () => {
-    this.maxIter = Number(this.iterSlider.value);
-    this.iterLabel.textContent = this.maxIter;
+    this.setMaxIter(10 ** Number(this.iterSlider.value));
     this.resetProgressive();
     this.scheduleRender();
   };
@@ -335,15 +341,13 @@ class MandelbrotApp {
     this.pivotScreenX = 0.5;
     this.pivotScreenY = 0.5;
     this.setScale(s.scale);
-    this.maxIter = s.maxIter;
+    this.setMaxIter(s.maxIter);
     this.juliaMode = s.juliaMode;
     this.juliaCx = s.juliaCx;
     this.juliaCy = s.juliaCy;
     this.progressiveMode = s.progressiveMode;
     this.smoothColoring = s.smoothColoring;
 
-    this.iterSlider.value = this.maxIter;
-    this.iterLabel.textContent = this.maxIter;
     this.juliaChk.checked = !!this.juliaMode;
     this.progressiveChk.checked = !!this.progressiveMode;
     this.smoothColoringChk.checked = !!this.smoothColoring;
