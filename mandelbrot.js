@@ -74,11 +74,12 @@ class MandelbrotApp {
     this.progressiveChk.onchange = this.onProgressiveChange;
     this.resetBtn.onclick   = this.onReset;
 
-    this.canvas.addEventListener("mousedown", this.onMouseDown);
-    this.canvas.addEventListener("mousemove", this.onMouseMove);
-    this.canvas.addEventListener("mouseup", this.onMouseUp);
-    this.canvas.addEventListener("mouseleave", this.onMouseLeave);
-    this.canvas.addEventListener("wheel", this.onWheel);
+    this.canvas.addEventListener("pointerdown", this.onPointerDown);
+    this.canvas.addEventListener("pointermove", this.onPointerMove);
+    this.canvas.addEventListener("pointerup", this.onPointerUp);
+    this.canvas.addEventListener("pointercancel", this.onPointerUp);
+    this.canvas.addEventListener("pointerleave", this.onPointerLeave);
+    this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
     window.addEventListener("resize", this.onResize);
 
     this.setScale(this.scale);
@@ -87,7 +88,7 @@ class MandelbrotApp {
 
   setScale(next) {
     this.scale = Math.min(MandelbrotApp.MAX_SCALE, Math.max(MandelbrotApp.MIN_SCALE, next));
-    this.zoomSlider.value = this.scale;
+    this.zoomSlider.value = Math.log10(this.scale);
     this.zoomLabel.textContent = this.scale;
   }
 
@@ -294,7 +295,7 @@ class MandelbrotApp {
   };
 
   onZoomInput = () => {
-    this.setScale(Number(this.zoomSlider.value));
+    this.setScale(10 ** Number(this.zoomSlider.value));
     this.scheduleRender();
   };
 
@@ -343,8 +344,9 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
-  // PAN: mousedown / mousemove / mouseup
-  onMouseDown = (e) => {
+  // PAN: pointerdown / pointermove / pointerup
+  onPointerDown = (e) => {
+    this.canvas.setPointerCapture(e.pointerId);
     if (e.ctrlKey) {
       this.isSelecting = true;
       this.selectStartX = e.clientX;
@@ -365,7 +367,7 @@ class MandelbrotApp {
     this.startCenterY = this.centerY;
   };
 
-  onMouseMove = (e) => {
+  onPointerMove = (e) => {
     if (this.isSelecting) {
       const x = Math.min(e.clientX, this.selectStartX);
       const y = Math.min(e.clientY, this.selectStartY);
@@ -390,7 +392,7 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
-  onMouseUp = (e) => {
+  onPointerUp = (e) => {
     if (this.isSelecting) {
       this.isSelecting = false;
       this.selectionBox.style.display = "none";
@@ -453,7 +455,7 @@ class MandelbrotApp {
     }
   };
 
-  onMouseLeave = () => {
+  onPointerLeave = () => {
     this.isDragging = false;
     if (this.isSelecting) {
       this.isSelecting = false;
@@ -463,6 +465,7 @@ class MandelbrotApp {
 
   // WHEEL → zoom centered on the pivot
   onWheel = (e) => {
+    e.preventDefault();
     const aspect = this.canvas.width / this.canvas.height;
     const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
 
