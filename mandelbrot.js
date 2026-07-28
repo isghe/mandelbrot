@@ -41,9 +41,8 @@ class MandelbrotApp {
   // render scheduling
   rafPending = false;
 
-  // WebGPU device-loss recovery
+  // Set once the WebGPU device is lost; blocks further render attempts.
   deviceLost = false;
-  recovering = false;
 
   constructor(canvas) {
     this.initialState = {
@@ -64,6 +63,9 @@ class MandelbrotApp {
 
     this.selectionBox = document.getElementById("selectionBox");
     this.errorBox = document.getElementById("gpuError");
+    this.errorMessage = document.getElementById("gpuErrorMessage");
+    this.reloadBtn = document.getElementById("gpuReloadBtn");
+    this.reloadBtn.onclick = () => location.reload();
 
     // UI
     this.iterSlider = document.getElementById("iterSlider");
@@ -145,12 +147,18 @@ class MandelbrotApp {
   };
 
   showError(msg) {
-    this.errorBox.textContent = msg;
+    this.errorMessage.textContent = msg;
     this.errorBox.style.display = "block";
   }
 
-  hideError() {
-    this.errorBox.style.display = "none";
+  // Device loss (especially a real DEVICE_REMOVED, not just a transient
+  // hang) isn't reliably recoverable from within the page — sometimes the
+  // browser's own GPU process needs to restart, which page-level JS can't
+  // force. Rather than retry and risk cascading into more errors, show the
+  // problem and a one-click reload instead of requiring a manual refresh.
+  showFatalError(msg) {
+    this.showError(msg);
+    this.reloadBtn.style.display = "inline-block";
   }
 
   async init() {
@@ -161,8 +169,6 @@ class MandelbrotApp {
     await this.initGPU();
   }
 
-  // Re-runnable: rebuilds every GPU object from scratch, so it doubles as
-  // the device-loss recovery path (see the device.lost handler below).
   async initGPU() {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) {
@@ -170,13 +176,11 @@ class MandelbrotApp {
       return;
     }
     this.device  = await adapter.requestDevice();
-    this.deviceLost = false;
 
     this.device.lost.then((info) => {
       if (info.reason === "destroyed") return; // we tore it down ourselves
       this.deviceLost = true;
-      this.showError(`WebGPU device lost (${info.reason}): ${info.message}. Attempting to recover…`);
-      this.recoverDevice();
+      this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
     });
     this.device.addEventListener("uncapturederror", (event) => {
       this.showError(`WebGPU error: ${event.error.message}`);
@@ -243,26 +247,8 @@ class MandelbrotApp {
       ]
     });
 
-    this.hideError();
     this.scheduleRender();
   }
-
-  // Guards against overlapping recovery attempts; waits briefly since a
-  // driver TDR reset isn't necessarily complete the instant device.lost
-  // resolves. All fractal view-state lives in plain JS and survives a
-  // device loss untouched, so recovery just needs fresh GPU objects.
-  recoverDevice = async () => {
-    if (this.recovering) return;
-    this.recovering = true;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    try {
-      await this.initGPU();
-    } catch (e) {
-      this.showError(`Failed to recover from WebGPU device loss: ${e.message}. Please reload the page.`);
-    } finally {
-      this.recovering = false;
-    }
-  };
 
   resetProgressive() {
     this.progressiveIter = 1;
