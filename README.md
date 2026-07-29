@@ -61,4 +61,6 @@ objects. The signing key fingerprint is `0F11E7FD 81B2D24A D6C1C75F 8E8FEE26 37C
 Note: `git log --show-signature` may report some commits as unverified depending on your
 local OpenTimestamps tooling/network access (e.g. whether a Bitcoin node is reachable) —
 this reflects local verification tooling quirks, not the underlying commit signatures,
-which can be confirmed independently via `git cat-file -p <commit>`.
+which can be confirmed independently via `git cat-file -p <commit>`. This was caused by a
+bug in `ots-git-gpg-wrapper`'s handling of Bitcoin RPC connection failures, fixed by
+[opentimestamps-client#166](https://github.com/opentimestamps/opentimestamps-client/pull/166).
