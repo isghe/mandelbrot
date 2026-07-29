@@ -5,13 +5,11 @@ class MandelbrotApp {
   static MAX_ITER = 8192;
 
   // State (JS = f64)
-  centerX = -0.5;
-  centerY = 0.0;
+  center = new DOMPointReadOnly(-0.5, 0.0);
   scale   = 3.0;
   maxIter = 256;
   juliaMode = 0;
-  juliaCx = -0.8;
-  juliaCy = 0.156;
+  juliaC = new DOMPointReadOnly(-0.8, 0.156);
   paletteType = 4;
   smoothColoring = 0;
 
@@ -20,23 +18,18 @@ class MandelbrotApp {
   progressiveIter = 1;
 
   // pivot for centered zoom
-  pivotX = -0.5;
-  pivotY = 0.0;
-  pivotScreenX = 0.5;
-  pivotScreenY = 0.5;
+  pivot = new DOMPointReadOnly(-0.5, 0.0);
+  pivotScreen = new DOMPointReadOnly(0.5, 0.5);
 
   // pan
   isDragging = false;
   hasDragged = false;
-  dragStartX = 0;
-  dragStartY = 0;
-  startCenterX = 0;
-  startCenterY = 0;
+  dragStart = new DOMPointReadOnly(0, 0);
+  startCenter = new DOMPointReadOnly(0, 0);
 
   // selection area (Ctrl + drag)
   isSelecting = false;
-  selectStartX = 0;
-  selectStartY = 0;
+  selectStart = new DOMPointReadOnly(0, 0);
 
   // render scheduling
   rafPending = false;
@@ -46,13 +39,11 @@ class MandelbrotApp {
 
   constructor(canvas) {
     this.initialState = {
-      centerX: this.centerX,
-      centerY: this.centerY,
+      center: this.center,
       scale: this.scale,
       maxIter: this.maxIter,
       juliaMode: this.juliaMode,
-      juliaCx: this.juliaCx,
-      juliaCy: this.juliaCy,
+      juliaC: this.juliaC,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
       smoothColoring: this.smoothColoring,
@@ -362,17 +353,13 @@ class MandelbrotApp {
   onReset = () => {
     if (!this.device) return;
     const s = this.initialState;
-    this.centerX = s.centerX;
-    this.centerY = s.centerY;
-    this.pivotX = s.centerX;
-    this.pivotY = s.centerY;
-    this.pivotScreenX = 0.5;
-    this.pivotScreenY = 0.5;
+    this.center = s.center;
+    this.pivot = s.center;
+    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
     this.setScale(s.scale);
     this.setMaxIter(s.maxIter);
     this.juliaMode = s.juliaMode;
-    this.juliaCx = s.juliaCx;
-    this.juliaCy = s.juliaCy;
+    this.juliaC = s.juliaC;
     this.progressiveMode = s.progressiveMode;
     this.smoothColoring = s.smoothColoring;
 
@@ -392,10 +379,9 @@ class MandelbrotApp {
     this.canvas.setPointerCapture(e.pointerId);
     if (e.ctrlKey) {
       this.isSelecting = true;
-      this.selectStartX = e.clientX;
-      this.selectStartY = e.clientY;
-      this.selectionBox.style.left = this.selectStartX + "px";
-      this.selectionBox.style.top = this.selectStartY + "px";
+      this.selectStart = new DOMPointReadOnly(e.clientX, e.clientY);
+      this.selectionBox.style.left = this.selectStart.x + "px";
+      this.selectionBox.style.top = this.selectStart.y + "px";
       this.selectionBox.style.width = "0px";
       this.selectionBox.style.height = "0px";
       this.selectionBox.style.display = "block";
@@ -404,20 +390,18 @@ class MandelbrotApp {
     this.isDragging = true;
     this.hasDragged = false;
     const rect = this.canvas.getBoundingClientRect();
-    this.dragStartX = (e.clientX - rect.left) / rect.width;
-    this.dragStartY = (e.clientY - rect.top)  / rect.height;
-    this.startCenterX = this.centerX;
-    this.startCenterY = this.centerY;
+    this.dragStart = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+    this.startCenter = this.center;
   };
 
   onPointerMove = (e) => {
     if (this.isSelecting) {
-      const x = Math.min(e.clientX, this.selectStartX);
-      const y = Math.min(e.clientY, this.selectStartY);
+      const x = Math.min(e.clientX, this.selectStart.x);
+      const y = Math.min(e.clientY, this.selectStart.y);
       this.selectionBox.style.left = x + "px";
       this.selectionBox.style.top = y + "px";
-      this.selectionBox.style.width = Math.abs(e.clientX - this.selectStartX) + "px";
-      this.selectionBox.style.height = Math.abs(e.clientY - this.selectStartY) + "px";
+      this.selectionBox.style.width = Math.abs(e.clientX - this.selectStart.x) + "px";
+      this.selectionBox.style.height = Math.abs(e.clientY - this.selectStart.y) + "px";
       return;
     }
     if (!this.isDragging) return;
@@ -426,12 +410,14 @@ class MandelbrotApp {
     const mx = (e.clientX - rect.left) / rect.width;
     const my = (e.clientY - rect.top)  / rect.height;
 
-    const dx = mx - this.dragStartX;
-    const dy = my - this.dragStartY;
+    const dx = mx - this.dragStart.x;
+    const dy = my - this.dragStart.y;
     const aspect = this.canvas.width / this.canvas.height;
 
-    this.centerX = this.startCenterX - dx * this.scale * aspect;
-    this.centerY = this.startCenterY + dy * this.scale;
+    this.center = new DOMPointReadOnly(
+      this.startCenter.x - dx * this.scale * aspect,
+      this.startCenter.y + dy * this.scale
+    );
     this.scheduleRender();
   };
 
@@ -441,32 +427,29 @@ class MandelbrotApp {
       this.selectionBox.style.display = "none";
 
       const rect = this.canvas.getBoundingClientRect();
-      const x1 = Math.min(e.clientX, this.selectStartX) - rect.left;
-      const y1 = Math.min(e.clientY, this.selectStartY) - rect.top;
-      const x2 = Math.max(e.clientX, this.selectStartX) - rect.left;
-      const y2 = Math.max(e.clientY, this.selectStartY) - rect.top;
+      const x1 = Math.min(e.clientX, this.selectStart.x) - rect.left;
+      const y1 = Math.min(e.clientY, this.selectStart.y) - rect.top;
+      const x2 = Math.max(e.clientX, this.selectStart.x) - rect.left;
+      const y2 = Math.max(e.clientY, this.selectStart.y) - rect.top;
 
       // ignore selections that are too small (e.g. Ctrl+click without dragging)
       if (x2 - x1 < 3 || y2 - y1 < 3) return;
 
       const aspect = this.canvas.width / this.canvas.height;
 
-      const fx1 = ((x1 / rect.width)  - 0.5) * this.scale * aspect + this.centerX;
-      const fx2 = ((x2 / rect.width)  - 0.5) * this.scale * aspect + this.centerX;
-      const fy1 = (0.5 - (y1 / rect.height)) * this.scale + this.centerY;
-      const fy2 = (0.5 - (y2 / rect.height)) * this.scale + this.centerY;
+      const fx1 = ((x1 / rect.width)  - 0.5) * this.scale * aspect + this.center.x;
+      const fx2 = ((x2 / rect.width)  - 0.5) * this.scale * aspect + this.center.x;
+      const fy1 = (0.5 - (y1 / rect.height)) * this.scale + this.center.y;
+      const fy2 = (0.5 - (y2 / rect.height)) * this.scale + this.center.y;
 
-      this.centerX = (fx1 + fx2) / 2;
-      this.centerY = (fy1 + fy2) / 2;
+      this.center = new DOMPointReadOnly((fx1 + fx2) / 2, (fy1 + fy2) / 2);
 
       const selWidth  = Math.abs(fx2 - fx1);
       const selHeight = Math.abs(fy1 - fy2);
       this.setScale(Math.max(selHeight, selWidth / aspect));
 
-      this.pivotX = this.centerX;
-      this.pivotY = this.centerY;
-      this.pivotScreenX = 0.5;
-      this.pivotScreenY = 0.5;
+      this.pivot = this.center;
+      this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
 
       this.resetProgressive();
       this.scheduleRender();
@@ -483,15 +466,15 @@ class MandelbrotApp {
 
       const aspect = this.canvas.width / this.canvas.height;
 
-      this.pivotScreenX = mx;
-      this.pivotScreenY = my;
+      this.pivotScreen = new DOMPointReadOnly(mx, my);
 
-      this.pivotX = (mx - 0.5) * this.scale * aspect + this.centerX;
-      this.pivotY = (0.5 - my) * this.scale + this.centerY;
+      this.pivot = new DOMPointReadOnly(
+        (mx - 0.5) * this.scale * aspect + this.center.x,
+        (0.5 - my) * this.scale + this.center.y
+      );
 
       if (this.juliaMode === 1) {
-        this.juliaCx = this.pivotX;
-        this.juliaCy = this.pivotY;
+        this.juliaC = this.pivot;
         this.resetProgressive();
       }
       this.scheduleRender();
@@ -514,8 +497,10 @@ class MandelbrotApp {
 
     this.setScale(this.scale * zoomFactor);
 
-    this.centerX = this.pivotX - (this.pivotScreenX - 0.5) * this.scale * aspect;
-    this.centerY = this.pivotY - (0.5 - this.pivotScreenY) * this.scale;
+    this.center = new DOMPointReadOnly(
+      this.pivot.x - (this.pivotScreen.x - 0.5) * this.scale * aspect,
+      this.pivot.y - (0.5 - this.pivotScreen.y) * this.scale
+    );
 
     this.resetProgressive();
     this.scheduleRender();
@@ -524,10 +509,10 @@ class MandelbrotApp {
   // RENDER
   renderOnce = () => {
     if (this.deviceLost) return;
-    const [cx_hi, cx_lo] = MandelbrotApp.split64(this.centerX);
-    const [cy_hi, cy_lo] = MandelbrotApp.split64(this.centerY);
-    const [jx_hi, jx_lo] = MandelbrotApp.split64(this.juliaCx);
-    const [jy_hi, jy_lo] = MandelbrotApp.split64(this.juliaCy);
+    const [cx_hi, cx_lo] = MandelbrotApp.split64(this.center.x);
+    const [cy_hi, cy_lo] = MandelbrotApp.split64(this.center.y);
+    const [jx_hi, jx_lo] = MandelbrotApp.split64(this.juliaC.x);
+    const [jy_hi, jy_lo] = MandelbrotApp.split64(this.juliaC.y);
 
     let displayIter = this.maxIter;
     if (this.progressiveMode && !this.isDragging) {
