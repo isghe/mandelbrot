@@ -101,6 +101,12 @@ fn ds_mul(a:vec2<f32>, b:vec2<f32>) -> vec2<f32> {
     return quick_two_sum(p.x, e);
 }
 
+// A 2D point where each coordinate is a df64 (hi/lo) number.
+struct Point {
+    x: vec2<f32>,
+    y: vec2<f32>,
+};
+
 // Analytic test for the main cardioid and period-2 bulb: points inside
 // either region never escape, so the caller can skip the iteration loop
 // entirely. Uses plain f32, so it's only safe to call at shallow zoom
@@ -123,16 +129,20 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     let uv = in.fragPos*0.5 + vec2<f32>(0.5,0.5);
     let aspect = params.width / params.height;
 
-    let centerX = vec2<f32>(params.centerX_hi, params.centerX_lo);
-    let centerY = vec2<f32>(params.centerY_hi, params.centerY_lo);
-    let juliaCx = vec2<f32>(params.juliaCx_hi, params.juliaCx_lo);
-    let juliaCy = vec2<f32>(params.juliaCy_hi, params.juliaCy_lo);
+    let center = Point(
+        vec2<f32>(params.centerX_hi, params.centerX_lo),
+        vec2<f32>(params.centerY_hi, params.centerY_lo)
+    );
+    let juliaC = Point(
+        vec2<f32>(params.juliaCx_hi, params.juliaCx_lo),
+        vec2<f32>(params.juliaCy_hi, params.juliaCy_lo)
+    );
 
     let offsetX = (uv.x - 0.5) * params.scale * aspect;
     let offsetY = (uv.y - 0.5) * params.scale;
 
-    let x0 = ds_add(centerX, vec2<f32>(offsetX, 0.0));
-    let y0 = ds_add(centerY, vec2<f32>(offsetY, 0.0));
+    let x0 = ds_add(center.x, vec2<f32>(offsetX, 0.0));
+    let y0 = ds_add(center.y, vec2<f32>(offsetY, 0.0));
 
     var x:vec2<f32>;
     var y:vec2<f32>;
@@ -147,8 +157,8 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     } else {
         x = x0;
         y = y0;
-        cx = juliaCx;
-        cy = juliaCy;
+        cx = juliaC.x;
+        cy = juliaC.y;
     }
 
     var iter:i32 = 0;
