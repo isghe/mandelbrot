@@ -396,27 +396,28 @@ class MandelbrotApp {
 
   onPointerMove = (e) => {
     if (this.isSelecting) {
-      const x = Math.min(e.clientX, this.selectStart.x);
-      const y = Math.min(e.clientY, this.selectStart.y);
-      this.selectionBox.style.left = x + "px";
-      this.selectionBox.style.top = y + "px";
-      this.selectionBox.style.width = Math.abs(e.clientX - this.selectStart.x) + "px";
-      this.selectionBox.style.height = Math.abs(e.clientY - this.selectStart.y) + "px";
+      const box = DOMRectReadOnly.fromRect({
+        x: Math.min(e.clientX, this.selectStart.x),
+        y: Math.min(e.clientY, this.selectStart.y),
+        width: Math.abs(e.clientX - this.selectStart.x),
+        height: Math.abs(e.clientY - this.selectStart.y),
+      });
+      this.selectionBox.style.left = box.x + "px";
+      this.selectionBox.style.top = box.y + "px";
+      this.selectionBox.style.width = box.width + "px";
+      this.selectionBox.style.height = box.height + "px";
       return;
     }
     if (!this.isDragging) return;
     this.hasDragged = true;
     const rect = this.canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / rect.width;
-    const my = (e.clientY - rect.top)  / rect.height;
-
-    const dx = mx - this.dragStart.x;
-    const dy = my - this.dragStart.y;
+    const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+    const delta = new DOMPointReadOnly(mouse.x - this.dragStart.x, mouse.y - this.dragStart.y);
     const aspect = this.canvas.width / this.canvas.height;
 
     this.center = new DOMPointReadOnly(
-      this.startCenter.x - dx * this.scale * aspect,
-      this.startCenter.y + dy * this.scale
+      this.startCenter.x - delta.x * this.scale * aspect,
+      this.startCenter.y + delta.y * this.scale
     );
     this.scheduleRender();
   };
@@ -427,20 +428,22 @@ class MandelbrotApp {
       this.selectionBox.style.display = "none";
 
       const rect = this.canvas.getBoundingClientRect();
-      const x1 = Math.min(e.clientX, this.selectStart.x) - rect.left;
-      const y1 = Math.min(e.clientY, this.selectStart.y) - rect.top;
-      const x2 = Math.max(e.clientX, this.selectStart.x) - rect.left;
-      const y2 = Math.max(e.clientY, this.selectStart.y) - rect.top;
+      const screenSel = DOMRectReadOnly.fromRect({
+        x: Math.min(e.clientX, this.selectStart.x) - rect.left,
+        y: Math.min(e.clientY, this.selectStart.y) - rect.top,
+        width: Math.abs(e.clientX - this.selectStart.x),
+        height: Math.abs(e.clientY - this.selectStart.y),
+      });
 
       // ignore selections that are too small (e.g. Ctrl+click without dragging)
-      if (x2 - x1 < 3 || y2 - y1 < 3) return;
+      if (screenSel.width < 3 || screenSel.height < 3) return;
 
       const aspect = this.canvas.width / this.canvas.height;
 
-      const fx1 = ((x1 / rect.width)  - 0.5) * this.scale * aspect + this.center.x;
-      const fx2 = ((x2 / rect.width)  - 0.5) * this.scale * aspect + this.center.x;
-      const fy1 = (0.5 - (y1 / rect.height)) * this.scale + this.center.y;
-      const fy2 = (0.5 - (y2 / rect.height)) * this.scale + this.center.y;
+      const fx1 = (screenSel.left / rect.width - 0.5) * this.scale * aspect + this.center.x;
+      const fx2 = (screenSel.right / rect.width - 0.5) * this.scale * aspect + this.center.x;
+      const fy1 = (0.5 - screenSel.top / rect.height) * this.scale + this.center.y;
+      const fy2 = (0.5 - screenSel.bottom / rect.height) * this.scale + this.center.y;
 
       this.center = new DOMPointReadOnly((fx1 + fx2) / 2, (fy1 + fy2) / 2);
 
@@ -461,16 +464,14 @@ class MandelbrotApp {
     // Genuine CLICK (no dragging) → pivot (Y corrected: NDC vs canvas)
     if (!this.hasDragged) {
       const rect = this.canvas.getBoundingClientRect();
-      const mx = (e.clientX - rect.left) / rect.width;
-      const my = (e.clientY - rect.top)  / rect.height;
-
+      const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
       const aspect = this.canvas.width / this.canvas.height;
 
-      this.pivotScreen = new DOMPointReadOnly(mx, my);
+      this.pivotScreen = mouse;
 
       this.pivot = new DOMPointReadOnly(
-        (mx - 0.5) * this.scale * aspect + this.center.x,
-        (0.5 - my) * this.scale + this.center.y
+        (mouse.x - 0.5) * this.scale * aspect + this.center.x,
+        (0.5 - mouse.y) * this.scale + this.center.y
       );
 
       if (this.juliaMode === 1) {
