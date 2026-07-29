@@ -317,6 +317,15 @@ class MandelbrotApp {
     return [hi, lo];
   }
 
+  // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
+  toFractal(normPoint, anchor) {
+    const aspect = this.canvas.width / this.canvas.height;
+    return new DOMPointReadOnly(
+      (normPoint.x - 0.5) * this.scale * aspect + anchor.x,
+      (0.5 - normPoint.y) * this.scale + anchor.y
+    );
+  }
+
   onIterInput = () => {
     this.setMaxIter(10 ** Number(this.iterSlider.value));
     this.resetProgressive();
@@ -440,15 +449,15 @@ class MandelbrotApp {
 
       const aspect = this.canvas.width / this.canvas.height;
 
-      const fx1 = (screenSel.left / rect.width - 0.5) * this.scale * aspect + this.center.x;
-      const fx2 = (screenSel.right / rect.width - 0.5) * this.scale * aspect + this.center.x;
-      const fy1 = (0.5 - screenSel.top / rect.height) * this.scale + this.center.y;
-      const fy2 = (0.5 - screenSel.bottom / rect.height) * this.scale + this.center.y;
+      const topLeftNorm = new DOMPointReadOnly(screenSel.left / rect.width, screenSel.top / rect.height);
+      const bottomRightNorm = new DOMPointReadOnly(screenSel.right / rect.width, screenSel.bottom / rect.height);
+      const f1 = this.toFractal(topLeftNorm, this.center);
+      const f2 = this.toFractal(bottomRightNorm, this.center);
 
-      this.center = new DOMPointReadOnly((fx1 + fx2) / 2, (fy1 + fy2) / 2);
+      this.center = new DOMPointReadOnly((f1.x + f2.x) / 2, (f1.y + f2.y) / 2);
 
-      const selWidth  = Math.abs(fx2 - fx1);
-      const selHeight = Math.abs(fy1 - fy2);
+      const selWidth  = Math.abs(f2.x - f1.x);
+      const selHeight = Math.abs(f1.y - f2.y);
       this.setScale(Math.max(selHeight, selWidth / aspect));
 
       this.pivot = this.center;
@@ -465,14 +474,9 @@ class MandelbrotApp {
     if (!this.hasDragged) {
       const rect = this.canvas.getBoundingClientRect();
       const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-      const aspect = this.canvas.width / this.canvas.height;
 
       this.pivotScreen = mouse;
-
-      this.pivot = new DOMPointReadOnly(
-        (mouse.x - 0.5) * this.scale * aspect + this.center.x,
-        (0.5 - mouse.y) * this.scale + this.center.y
-      );
+      this.pivot = this.toFractal(mouse, this.center);
 
       if (this.juliaMode === 1) {
         this.juliaC = this.pivot;
