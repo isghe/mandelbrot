@@ -107,6 +107,10 @@ struct Point {
     y: vec2<f32>,
 };
 
+fn point_add(a: Point, b: Point) -> Point {
+    return Point(ds_add(a.x, b.x), ds_add(a.y, b.y));
+}
+
 // Analytic test for the main cardioid and period-2 bulb: points inside
 // either region never escape, so the caller can skip the iteration loop
 // entirely. Uses plain f32, so it's only safe to call at shallow zoom
@@ -141,24 +145,18 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     let offsetX = (uv.x - 0.5) * params.scale * aspect;
     let offsetY = (uv.y - 0.5) * params.scale;
 
-    let x0 = ds_add(center.x, vec2<f32>(offsetX, 0.0));
-    let y0 = ds_add(center.y, vec2<f32>(offsetY, 0.0));
+    let offset = Point(vec2<f32>(offsetX, 0.0), vec2<f32>(offsetY, 0.0));
+    let z0 = point_add(center, offset);
 
-    var x:vec2<f32>;
-    var y:vec2<f32>;
-    var cx:vec2<f32>;
-    var cy:vec2<f32>;
+    var z: Point;
+    var c: Point;
 
     if (params.juliaMode == 0.0) {
-        x = vec2<f32>(0.0, 0.0);
-        y = vec2<f32>(0.0, 0.0);
-        cx = x0;
-        cy = y0;
+        z = Point(vec2<f32>(0.0, 0.0), vec2<f32>(0.0, 0.0));
+        c = z0;
     } else {
-        x = x0;
-        y = y0;
-        cx = juliaC.x;
-        cy = juliaC.y;
+        z = z0;
+        c = juliaC;
     }
 
     var iter:i32 = 0;
@@ -169,12 +167,12 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     // lie in the main cardioid or period-2 bulb. Only valid against the
     // Mandelbrot c-plane (not Julia, where c is fixed and z0 varies), and
     // only at shallow zoom where plain f32 precision is safe.
-    let skipLoop = params.juliaMode == 0.0 && params.scale > 1e-6 && is_main_interior(cx.x, cy.x);
+    let skipLoop = params.juliaMode == 0.0 && params.scale > 1e-6 && is_main_interior(c.x.x, c.y.x);
 
     if (!skipLoop) {
         loop {
-            let x2 = ds_mul(x, x);
-            let y2 = ds_mul(y, y);
+            let x2 = ds_mul(z.x, z.x);
+            let y2 = ds_mul(z.y, z.y);
             radius2 = ds_add(x2, y2);
 
             if (radius2.x > 4.0 || (radius2.x == 4.0 && radius2.y > 0.0)) {
@@ -183,10 +181,10 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
             }
             if (iter >= i32(params.maxIter)) { break; }
 
-            let xt = ds_add(ds_sub(x2, y2), cx);
-            let xy = ds_mul(x, y);
-            y = ds_add(vec2<f32>(xy.x * 2.0, xy.y * 2.0), cy);
-            x = xt;
+            let xt = ds_add(ds_sub(x2, y2), c.x);
+            let xy = ds_mul(z.x, z.y);
+            z.y = ds_add(vec2<f32>(xy.x * 2.0, xy.y * 2.0), c.y);
+            z.x = xt;
 
             iter = iter + 1;
         }
