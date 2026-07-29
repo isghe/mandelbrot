@@ -1,4 +1,4 @@
-import { domPointSub, domPointMid } from './geometry.js';
+import { domPoint } from './geometry.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -423,7 +423,7 @@ class MandelbrotApp {
     this.hasDragged = true;
     const rect = this.canvas.getBoundingClientRect();
     const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-    const delta = domPointSub(mouse, this.dragStart);
+    const delta = domPoint.sub(mouse, this.dragStart);
     const aspect = this.canvas.width / this.canvas.height;
 
     this.center = new DOMPointReadOnly(
@@ -456,7 +456,7 @@ class MandelbrotApp {
       const f1 = this.toFractal(topLeftNorm, this.center);
       const f2 = this.toFractal(bottomRightNorm, this.center);
 
-      this.center = domPointMid(f1, f2);
+      this.center = domPoint.mid(f1, f2);
 
       const selWidth  = Math.abs(f2.x - f1.x);
       const selHeight = Math.abs(f1.y - f2.y);
