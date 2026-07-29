@@ -51,3 +51,14 @@ switching to a recent Chromium-based release (Chrome, Edge, Brave).
 - Iteration count and zoom level are adjustable via log-scale sliders (for precise control
   at both the low and deep-zoom ends of their range); palette is also adjustable via the
   UI panel.
+
+## Verification
+
+Commits in this repository are GPG-signed and anchored with
+[OpenTimestamps](https://opentimestamps.org/) proofs embedded directly in the commit
+objects. The signing key fingerprint is `0F11E7FD 81B2D24A D6C1C75F 8E8FEE26 37C508B1`.
+
+Note: `git log --show-signature` may report some commits as unverified depending on your
+local OpenTimestamps tooling/network access (e.g. whether a Bitcoin node is reachable) —
+this reflects local verification tooling quirks, not the underlying commit signatures,
+which can be confirmed independently via `git cat-file -p <commit>`.
