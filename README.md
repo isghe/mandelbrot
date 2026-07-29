@@ -5,6 +5,8 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 
 **Live demo:** https://isghe.github.io/mandelbrot/
 
+![Deep zoom example](example.png)
+
 ## Running
 
 Serve the directory over `http://` or `https://` and open `index.html`:
