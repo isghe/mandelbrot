@@ -1,0 +1,11 @@
+{
+  "name": "mandelbrot-tests",
+  "private": true,
+  "description": "Dev-only tooling for the end-to-end test suite. The app itself is vanilla JS with no build step.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0"
+  }
+}

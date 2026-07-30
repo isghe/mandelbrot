@@ -56,6 +56,23 @@ switching to a recent Chromium-based release (Chrome, Edge, Brave).
   at both the low and deep-zoom ends of their range); palette is also adjustable via the
   UI panel.
 
+## Testing
+
+The app itself is **vanilla JS with no build step** — `package.json` and the
+`devDependencies` below exist only to run the end-to-end test suite during
+development; they are not required to run or serve the app (see "Running" above).
+
+```sh
+npm install
+npm test
+```
+
+This runs a [Playwright](https://playwright.dev/) suite (`tests/`) that drives a
+real headless browser against the app: pan, wheel-zoom, palette/Julia/progressive/
+smooth toggles, and the Back/Forward view history. It launches Chromium with
+software rendering flags (SwiftShader) so WebGPU works in headless/CI environments
+without a real GPU.
+
 ## Verification
 
 Commits in this repository are GPG-signed and anchored with
