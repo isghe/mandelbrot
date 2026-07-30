@@ -5,6 +5,7 @@ class MandelbrotApp {
   static MAX_SCALE = 4.0;
   static MIN_ITER = 1;
   static MAX_ITER = 8192;
+  static WHEEL_HISTORY_MS = 250;
 
   // State (JS = f64)
   center = new DOMPointReadOnly(-0.5, 0.0);
@@ -32,6 +33,15 @@ class MandelbrotApp {
   // selection area (Ctrl + drag)
   isSelecting = false;
   selectStart = new DOMPointReadOnly(0, 0);
+
+  // view history (Back / Forward)
+  viewHistory = [];
+  viewFuture = [];
+  dragStartSnapshot = null;
+  pendingZoomSnapshot = null;
+  pendingIterSnapshot = null;
+  pendingWheelSnapshot = null;
+  wheelHistoryTimer = null;
 
   // render scheduling
   rafPending = false;
@@ -73,14 +83,30 @@ class MandelbrotApp {
     this.juliaChk   = document.getElementById("juliaMode");
     this.progressiveChk = document.getElementById("progressiveMode");
     this.smoothColoringChk = document.getElementById("smoothColoring");
+    this.backBtn    = document.getElementById("backBtn");
+    this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
 
     this.iterSlider.oninput = this.onIterInput;
+    this.iterSlider.onchange = () => {
+      if (this.pendingIterSnapshot) {
+        this.pushHistory(this.pendingIterSnapshot);
+        this.pendingIterSnapshot = null;
+      }
+    };
     this.zoomSlider.oninput = this.onZoomInput;
+    this.zoomSlider.onchange = () => {
+      if (this.pendingZoomSnapshot) {
+        this.pushHistory(this.pendingZoomSnapshot);
+        this.pendingZoomSnapshot = null;
+      }
+    };
     this.paletteSel.onchange = this.onPaletteChange;
     this.juliaChk.onchange   = this.onJuliaChange;
     this.progressiveChk.onchange = this.onProgressiveChange;
     this.smoothColoringChk.onchange = this.onSmoothColoringChange;
+    this.backBtn.onclick    = this.onBack;
+    this.forwardBtn.onclick = this.onForward;
     this.resetBtn.onclick   = this.onReset;
 
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
@@ -100,6 +126,69 @@ class MandelbrotApp {
     this.scale = Math.min(MandelbrotApp.MAX_SCALE, Math.max(MandelbrotApp.MIN_SCALE, next));
     this.zoomSlider.value = Math.log10(this.scale);
     this.zoomLabel.textContent = this.scale;
+  }
+
+  snapshotView() {
+    return {
+      center: this.center,
+      scale: this.scale,
+      maxIter: this.maxIter,
+      juliaMode: this.juliaMode,
+      juliaC: this.juliaC,
+      paletteType: this.paletteType,
+      progressiveMode: this.progressiveMode,
+      smoothColoring: this.smoothColoring,
+    };
+  }
+
+  pushHistory(snapshot) {
+    if (this.wheelHistoryTimer) {
+      this.flushPendingWheelHistory();
+    }
+    this.viewHistory.push(snapshot);
+    this.viewFuture = [];
+    this.updateHistoryButtons();
+  }
+
+  flushPendingWheelHistory() {
+    if (this.wheelHistoryTimer) {
+      clearTimeout(this.wheelHistoryTimer);
+      this.wheelHistoryTimer = null;
+    }
+    if (this.pendingWheelSnapshot) {
+      const snap = this.pendingWheelSnapshot;
+      this.pendingWheelSnapshot = null;
+      this.pushHistory(snap);
+    }
+  }
+
+  updateHistoryButtons() {
+    this.backBtn.disabled = this.viewHistory.length === 0 && !this.pendingWheelSnapshot;
+    this.forwardBtn.disabled = this.viewFuture.length === 0;
+  }
+
+  applySnapshot(s) {
+    this.center = s.center;
+    this.pivot = s.center;
+    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+    this.setScale(s.scale);
+    this.setMaxIter(s.maxIter);
+
+    this.juliaMode = s.juliaMode;
+    this.juliaChk.checked = !!s.juliaMode;
+    this.juliaC = s.juliaC;
+
+    this.applyPalette(s.paletteType);
+    this.paletteSel.value = s.paletteType;
+
+    this.progressiveMode = s.progressiveMode;
+    this.progressiveChk.checked = !!s.progressiveMode;
+
+    this.smoothColoring = s.smoothColoring;
+    this.smoothColoringChk.checked = !!s.smoothColoring;
+
+    this.resetProgressive();
+    this.scheduleRender();
   }
 
   setMaxIter(next) {
@@ -329,60 +418,75 @@ class MandelbrotApp {
   }
 
   onIterInput = () => {
+    if (!this.pendingIterSnapshot) this.pendingIterSnapshot = this.snapshotView();
     this.setMaxIter(10 ** Number(this.iterSlider.value));
     this.resetProgressive();
     this.scheduleRender();
   };
 
   onZoomInput = () => {
+    if (!this.pendingZoomSnapshot) this.pendingZoomSnapshot = this.snapshotView();
     this.setScale(10 ** Number(this.zoomSlider.value));
     this.scheduleRender();
   };
 
   onPaletteChange = () => {
+    this.pushHistory(this.snapshotView());
     this.applyPalette(Number(this.paletteSel.value));
     this.scheduleRender();
   };
 
   onJuliaChange = () => {
+    this.pushHistory(this.snapshotView());
     this.juliaMode = this.juliaChk.checked ? 1 : 0;
     this.resetProgressive();
     this.scheduleRender();
   };
 
   onProgressiveChange = () => {
+    this.pushHistory(this.snapshotView());
     this.progressiveMode = this.progressiveChk.checked ? 1 : 0;
     this.resetProgressive();
     this.scheduleRender();
   };
 
   onSmoothColoringChange = () => {
+    this.pushHistory(this.snapshotView());
     this.smoothColoring = this.smoothColoringChk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
   onReset = () => {
     if (!this.device) return;
-    const s = this.initialState;
-    this.center = s.center;
-    this.pivot = s.center;
-    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.setScale(s.scale);
-    this.setMaxIter(s.maxIter);
-    this.juliaMode = s.juliaMode;
-    this.juliaC = s.juliaC;
-    this.progressiveMode = s.progressiveMode;
-    this.smoothColoring = s.smoothColoring;
+    clearTimeout(this.wheelHistoryTimer);
+    this.wheelHistoryTimer = null;
+    this.pendingWheelSnapshot = null;
+    this.pendingIterSnapshot = null;
+    this.pendingZoomSnapshot = null;
+    this.viewHistory = [];
+    this.viewFuture = [];
+    this.updateHistoryButtons();
+    this.applySnapshot(this.initialState);
+  };
 
-    this.juliaChk.checked = !!this.juliaMode;
-    this.progressiveChk.checked = !!this.progressiveMode;
-    this.smoothColoringChk.checked = !!this.smoothColoring;
+  onBack = () => {
+    this.flushPendingWheelHistory();
+    if (this.viewHistory.length === 0) return;
+    const current = this.snapshotView();
+    const prev = this.viewHistory.pop();
+    this.viewFuture.push(current);
+    this.applySnapshot(prev);
+    this.updateHistoryButtons();
+  };
 
-    this.applyPalette(s.paletteType);
-    this.paletteSel.value = this.paletteType;
-
-    this.resetProgressive();
-    this.scheduleRender();
+  onForward = () => {
+    this.flushPendingWheelHistory();
+    if (this.viewFuture.length === 0) return;
+    const current = this.snapshotView();
+    const next = this.viewFuture.pop();
+    this.viewHistory.push(current);
+    this.applySnapshot(next);
+    this.updateHistoryButtons();
   };
 
   // PAN: pointerdown / pointermove / pointerup
@@ -390,6 +494,7 @@ class MandelbrotApp {
     this.canvas.setPointerCapture(e.pointerId);
     if (e.ctrlKey) {
       this.isSelecting = true;
+      this.dragStartSnapshot = this.snapshotView();
       this.selectStart = new DOMPointReadOnly(e.clientX, e.clientY);
       this.selectionBox.style.left = this.selectStart.x + "px";
       this.selectionBox.style.top = this.selectStart.y + "px";
@@ -400,6 +505,7 @@ class MandelbrotApp {
     }
     this.isDragging = true;
     this.hasDragged = false;
+    this.dragStartSnapshot = this.snapshotView();
     const rect = this.canvas.getBoundingClientRect();
     this.dragStart = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
     this.startCenter = this.center;
@@ -465,6 +571,7 @@ class MandelbrotApp {
       this.pivot = this.center;
       this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
 
+      this.pushHistory(this.dragStartSnapshot);
       this.resetProgressive();
       this.scheduleRender();
       return;
@@ -481,10 +588,17 @@ class MandelbrotApp {
       this.pivot = this.toFractal(mouse, this.center);
 
       if (this.juliaMode === 1) {
+        this.pushHistory(this.snapshotView());
         this.juliaC = this.pivot;
         this.resetProgressive();
       }
       this.scheduleRender();
+      return;
+    }
+
+    if (this.hasDragged && this.dragStartSnapshot) {
+      this.pushHistory(this.dragStartSnapshot);
+      this.dragStartSnapshot = null;
     }
   };
 
@@ -499,6 +613,12 @@ class MandelbrotApp {
   // WHEEL → zoom centered on the pivot
   onWheel = (e) => {
     e.preventDefault();
+    if (!this.pendingWheelSnapshot) {
+      this.pendingWheelSnapshot = this.snapshotView();
+      this.updateHistoryButtons();
+    }
+    clearTimeout(this.wheelHistoryTimer);
+    this.wheelHistoryTimer = setTimeout(() => this.flushPendingWheelHistory(), MandelbrotApp.WHEEL_HISTORY_MS);
     const aspect = this.canvas.width / this.canvas.height;
     const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
 
