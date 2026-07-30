@@ -17,6 +17,10 @@ const SWIFTSHADER_ARGS = [
 
 export default defineConfig({
   testDir: './tests',
+  // Explicit, rather than the default (which also matches *.test.js): the
+  // node:test unit tests under tests/unit/*.test.js are not Playwright tests
+  // and must not be picked up here.
+  testMatch: '**/*.spec.js',
   fullyParallel: false,
   retries: 1,
   reporter: 'list',

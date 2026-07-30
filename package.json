@@ -1,9 +1,12 @@
 {
   "name": "mandelbrot-tests",
   "private": true,
-  "description": "Dev-only tooling for the end-to-end test suite. The app itself is vanilla JS with no build step.",
+  "type": "module",
+  "description": "Dev-only tooling for the test suites (unit + end-to-end). The app itself is vanilla JS with no build step.",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:unit": "node --test",
+    "test:all": "npm run test:unit && npm test"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0"
