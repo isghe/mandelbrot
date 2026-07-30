@@ -163,7 +163,7 @@ class MandelbrotApp {
   }
 
   updateHistoryButtons() {
-    this.backBtn.disabled = this.viewHistory.length === 0;
+    this.backBtn.disabled = this.viewHistory.length === 0 && !this.pendingWheelSnapshot;
     this.forwardBtn.disabled = this.viewFuture.length === 0;
   }
 
@@ -461,6 +461,8 @@ class MandelbrotApp {
     clearTimeout(this.wheelHistoryTimer);
     this.wheelHistoryTimer = null;
     this.pendingWheelSnapshot = null;
+    this.pendingIterSnapshot = null;
+    this.pendingZoomSnapshot = null;
     this.viewHistory = [];
     this.viewFuture = [];
     this.updateHistoryButtons();
@@ -613,6 +615,7 @@ class MandelbrotApp {
     e.preventDefault();
     if (!this.pendingWheelSnapshot) {
       this.pendingWheelSnapshot = this.snapshotView();
+      this.updateHistoryButtons();
     }
     clearTimeout(this.wheelHistoryTimer);
     this.wheelHistoryTimer = setTimeout(() => this.flushPendingWheelHistory(), MandelbrotApp.WHEEL_HISTORY_MS);
