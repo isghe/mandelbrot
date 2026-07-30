@@ -1,4 +1,5 @@
 import { domPoint } from './geometry.js';
+import { split64 } from './precision.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -401,13 +402,6 @@ class MandelbrotApp {
     );
   }
 
-  // Double-single split (f64 -> hi+lo f32)
-  static split64(x) {
-    const hi = Math.fround(x);
-    const lo = x - hi;
-    return [hi, lo];
-  }
-
   // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
   toFractal(normPoint, anchor) {
     const aspect = this.canvas.width / this.canvas.height;
@@ -642,10 +636,10 @@ class MandelbrotApp {
   // RENDER
   renderOnce = () => {
     if (this.deviceLost) return;
-    const [cx_hi, cx_lo] = MandelbrotApp.split64(this.center.x);
-    const [cy_hi, cy_lo] = MandelbrotApp.split64(this.center.y);
-    const [jx_hi, jx_lo] = MandelbrotApp.split64(this.juliaC.x);
-    const [jy_hi, jy_lo] = MandelbrotApp.split64(this.juliaC.y);
+    const [cx_hi, cx_lo] = split64(this.center.x);
+    const [cy_hi, cy_lo] = split64(this.center.y);
+    const [jx_hi, jx_lo] = split64(this.juliaC.x);
+    const [jy_hi, jy_lo] = split64(this.juliaC.y);
 
     let displayIter = this.maxIter;
     if (this.progressiveMode && !this.isDragging) {
