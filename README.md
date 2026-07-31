@@ -36,8 +36,8 @@ switching to a recent Chromium-based release (Chrome, Edge, Brave).
 ## Controls
 
 - **Drag** — pan the view.
-- **Click** (without dragging) — set the zoom pivot point; in Julia mode, also sets the
-  Julia constant.
+- **Click** (without dragging) — set the zoom pivot point, and also set the Julia constant
+  (regardless of mode, so it can be picked while still viewing the Mandelbrot set).
 - **Scroll wheel** — zoom in/out, centered on the last pivot point.
 - **Ctrl+drag** — draw a selection rectangle; releasing recenters and zooms to fit it.
 - **Julia mode** checkbox — switch between the Mandelbrot set and the Julia set for the
@@ -46,9 +46,16 @@ switching to a recent Chromium-based release (Chrome, Edge, Brave).
   jumping straight to full quality.
 - **Smooth coloring** checkbox (off by default) — continuous escape-time coloring instead
   of the classic per-iteration banded look.
+- **Show grid** checkbox (off by default) — overlay a cartesian grid with "nice number"
+  spaced gridlines and brighter x=0/y=0 axes.
+- **Show center marker** checkbox (off by default) — overlay a crosshair at the current
+  view center.
+- **Show Julia point marker** checkbox (off by default) — overlay a diamond at the current
+  Julia constant, in either mode.
 - **Back / Forward** buttons — step through the view history (center, zoom, iterations,
   palette, Julia mode/constant, progressive mode, smooth coloring). Continuous wheel-zoom
-  and slider drags each count as a single history step.
+  and slider drags each count as a single history step. The grid/marker checkboxes above
+  are display preferences, not view state, and are not part of this history.
 - **Reset to initial condition** button — restore the default view, iterations, palette,
   Julia mode/constant, progressive mode, and smooth coloring. Also clears the Back/Forward
   history.
@@ -69,9 +76,9 @@ npm test
 
 This runs a [Playwright](https://playwright.dev/) suite (`tests/`) that drives a
 real headless browser against the app: pan, wheel-zoom, palette/Julia/progressive/
-smooth toggles, and the Back/Forward view history. It launches Chromium with
-software rendering flags (SwiftShader) so WebGPU works in headless/CI environments
-without a real GPU.
+smooth toggles, the Back/Forward view history, and the grid/marker overlay checkboxes.
+It launches Chromium with software rendering flags (SwiftShader) so WebGPU works in
+headless/CI environments without a real GPU.
 
 Pure-logic helpers (`geometry.js`, `precision.js`) also have a fast, browser-free unit
 test suite using Node's built-in test runner:
