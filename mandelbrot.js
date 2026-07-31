@@ -1,4 +1,4 @@
-import { domPoint } from './geometry.js';
+import { domPoint, view, grid } from './geometry.js';
 import { split64 } from './precision.js';
 
 class MandelbrotApp {
@@ -16,6 +16,11 @@ class MandelbrotApp {
   juliaC = new DOMPointReadOnly(-0.8, 0.156);
   paletteType = 4;
   smoothColoring = 0;
+
+  // overlay display preferences (not part of view history)
+  gridOverlay = 0;
+  centerMarker = 0;
+  juliaMarker = 0;
 
   // progressive mode (reveals the fractal iteration by iteration)
   progressiveMode = 0;
@@ -65,6 +70,10 @@ class MandelbrotApp {
     this.canvas = canvas;
     this.resizeCanvas();
 
+    this.overlayCanvas = document.getElementById("overlay");
+    this.overlayCtx = this.overlayCanvas.getContext("2d");
+    this.resizeOverlayCanvas();
+
     this.selectionBox = document.getElementById("selectionBox");
     this.errorBox = document.getElementById("gpuError");
     this.errorMessage = document.getElementById("gpuErrorMessage");
@@ -84,6 +93,12 @@ class MandelbrotApp {
     this.juliaChk   = document.getElementById("juliaMode");
     this.progressiveChk = document.getElementById("progressiveMode");
     this.smoothColoringChk = document.getElementById("smoothColoring");
+    this.gridOverlayChk = document.getElementById("gridOverlay");
+    this.centerMarkerChk = document.getElementById("centerMarker");
+    this.juliaMarkerChk = document.getElementById("juliaMarker");
+    this.gridOverlayChk.checked = !!this.gridOverlay;
+    this.centerMarkerChk.checked = !!this.centerMarker;
+    this.juliaMarkerChk.checked = !!this.juliaMarker;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
@@ -106,6 +121,9 @@ class MandelbrotApp {
     this.juliaChk.onchange   = this.onJuliaChange;
     this.progressiveChk.onchange = this.onProgressiveChange;
     this.smoothColoringChk.onchange = this.onSmoothColoringChange;
+    this.gridOverlayChk.onchange = this.onGridOverlayChange;
+    this.centerMarkerChk.onchange = this.onCenterMarkerChange;
+    this.juliaMarkerChk.onchange = this.onJuliaMarkerChange;
     this.backBtn.onclick    = this.onBack;
     this.forwardBtn.onclick = this.onForward;
     this.resetBtn.onclick   = this.onReset;
@@ -121,6 +139,8 @@ class MandelbrotApp {
     this.setScale(this.scale);
     this.setMaxIter(this.maxIter);
     this.palette256 = this.makePalette(this.paletteType);
+
+    this.drawOverlay();
   }
 
   setScale(next) {
@@ -209,8 +229,25 @@ class MandelbrotApp {
     }
   }
 
+  // Keeps the overlay's backing store in sync with #gfx; the transform
+  // reset lets overlay draw calls be written in CSS pixels.
+  resizeOverlayCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.overlayCanvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width * dpr));
+    const height = Math.max(1, Math.round(rect.height * dpr));
+    if (this.overlayCanvas.width !== width || this.overlayCanvas.height !== height) {
+      this.overlayCanvas.width = width;
+      this.overlayCanvas.height = height;
+    }
+    this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.overlayCssWidth = rect.width;
+    this.overlayCssHeight = rect.height;
+  }
+
   onResize = () => {
     this.resizeCanvas();
+    this.resizeOverlayCanvas();
     this.scheduleRender();
   };
 
@@ -222,12 +259,131 @@ class MandelbrotApp {
     this.rafPending = true;
     requestAnimationFrame(() => {
       this.rafPending = false;
+      // Drawn before renderOnce() so the overlay still shows up even if
+      // WebGPU init failed (renderOnce() is a no-op/throws in that case).
+      this.drawOverlay();
       this.renderOnce();
       if (this.progressiveMode && this.progressiveIter < this.maxIter && !this.isDragging) {
         this.scheduleRender();
       }
     });
   };
+
+  drawOverlay = () => {
+    const ctx = this.overlayCtx;
+    const w = this.overlayCssWidth;
+    const h = this.overlayCssHeight;
+    ctx.clearRect(0, 0, w, h);
+    if (this.gridOverlay) this.drawGrid(ctx, w, h);
+    if (this.centerMarker) this.drawCenterMarker(ctx, w, h);
+    if (this.juliaMarker) this.drawJuliaMarker(ctx, w, h);
+  };
+
+  // Fractal-space point -> overlay pixel point (CSS px), for the current
+  // view. Thin wrapper pulling instance state around the pure
+  // view.fractalToPixel, so overlay drawing stays in DOMPoint terms until
+  // the final ctx.* calls, the only place scalars are unavoidable (Canvas 2D API).
+  toPixel(fractalPoint, w, h) {
+    const aspect = this.canvas.width / this.canvas.height;
+    return view.fractalToPixel(fractalPoint, this.center, this.scale, aspect, w, h);
+  }
+
+  drawGrid(ctx, w, h) {
+    const aspect = this.canvas.width / this.canvas.height;
+    const step = grid.niceGridStep(this.scale, 8);
+    const half = new DOMPointReadOnly((this.scale * aspect) / 2, this.scale / 2);
+    const min = domPoint.sub(this.center, half);
+    const max = domPoint.add(this.center, half);
+    const eps = step * 1e-9;
+
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const x of grid.gridLines(min.x, max.x, step)) {
+      if (Math.abs(x) < eps) continue;
+      const p = this.toPixel(new DOMPointReadOnly(x, 0), w, h);
+      ctx.moveTo(p.x, 0);
+      ctx.lineTo(p.x, h);
+    }
+    for (const y of grid.gridLines(min.y, max.y, step)) {
+      if (Math.abs(y) < eps) continue;
+      const p = this.toPixel(new DOMPointReadOnly(0, y), w, h);
+      ctx.moveTo(0, p.y);
+      ctx.lineTo(w, p.y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (min.x <= 0 && 0 <= max.x) {
+      const p = this.toPixel(new DOMPointReadOnly(0, 0), w, h);
+      ctx.moveTo(p.x, 0);
+      ctx.lineTo(p.x, h);
+    }
+    if (min.y <= 0 && 0 <= max.y) {
+      const p = this.toPixel(new DOMPointReadOnly(0, 0), w, h);
+      ctx.moveTo(0, p.y);
+      ctx.lineTo(w, p.y);
+    }
+    ctx.stroke();
+  }
+
+  // Position is always (w/2, h/2) since `center` is toFractal's anchor, but
+  // it's still routed through toPixel for symmetry with drawJuliaMarker and
+  // so it stays correct if that invariant ever changes.
+  drawCenterMarker(ctx, w, h) {
+    const p = this.toPixel(this.center, w, h);
+    const r = 6;
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    this.strokeCrosshair(ctx, p, r);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#ffffff";
+    this.strokeCrosshair(ctx, p, r);
+  }
+
+  strokeCrosshair(ctx, p, r) {
+    const { x: px, y: py } = p;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.moveTo(px - r - 4, py);
+    ctx.lineTo(px - r, py);
+    ctx.moveTo(px + r, py);
+    ctx.lineTo(px + r + 4, py);
+    ctx.moveTo(px, py - r - 4);
+    ctx.lineTo(px, py - r);
+    ctx.moveTo(px, py + r);
+    ctx.lineTo(px, py + r + 4);
+    ctx.stroke();
+  }
+
+  // Diamond marker, distinct in shape and color from the center crosshair
+  // so the two are never confused when both are visible.
+  drawJuliaMarker(ctx, w, h) {
+    const p = this.toPixel(this.juliaC, w, h);
+    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) return;
+    const r = 7;
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    this.strokeDiamond(ctx, p, r);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#ffee33";
+    this.strokeDiamond(ctx, p, r);
+  }
+
+  strokeDiamond(ctx, p, r) {
+    const { x: px, y: py } = p;
+    ctx.beginPath();
+    ctx.moveTo(px, py - r);
+    ctx.lineTo(px + r, py);
+    ctx.lineTo(px, py + r);
+    ctx.lineTo(px - r, py);
+    ctx.closePath();
+    ctx.stroke();
+  }
 
   showError(msg) {
     this.errorMessage.textContent = msg;
@@ -450,6 +606,24 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
+  // Overlay display preferences are not part of view history: they don't
+  // change what the fractal render pass produces, only what's drawn on the
+  // separate #overlay canvas, so no pushHistory here (unlike the toggles above).
+  onGridOverlayChange = () => {
+    this.gridOverlay = this.gridOverlayChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
+  onCenterMarkerChange = () => {
+    this.centerMarker = this.centerMarkerChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
+  onJuliaMarkerChange = () => {
+    this.juliaMarker = this.juliaMarkerChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
   onReset = () => {
     if (!this.device) return;
     clearTimeout(this.wheelHistoryTimer);
@@ -581,11 +755,12 @@ class MandelbrotApp {
       this.pivotScreen = mouse;
       this.pivot = this.toFractal(mouse, this.center);
 
-      if (this.juliaMode === 1) {
-        this.pushHistory(this.snapshotView());
-        this.juliaC = this.pivot;
-        this.resetProgressive();
-      }
+      this.pushHistory(this.snapshotView());
+      this.juliaC = this.pivot;
+      // Only the Julia render actually depends on juliaC; in Mandelbrot
+      // mode this just moves the marker, so don't restart its progressive
+      // reveal over an unrelated, unchanged image.
+      if (this.juliaMode === 1) this.resetProgressive();
       this.scheduleRender();
       return;
     }

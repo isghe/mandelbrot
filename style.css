@@ -1,5 +1,6 @@
 body { margin:0; overflow:hidden; background:#000; }
 #gfx { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; }
+#overlay { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; pointer-events:none; }
 #ui {
   position:fixed; top:10px; left:10px;
   background:#0008; padding:10px; border-radius:8px;

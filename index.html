@@ -13,6 +13,7 @@
 <body>
 
 <canvas id="gfx"></canvas>
+<canvas id="overlay"></canvas>
 <div id="selectionBox"></div>
 <div id="gpuError">
   <div id="gpuErrorMessage"></div>
@@ -40,6 +41,12 @@
   <label><input type="checkbox" id="progressiveMode"> Progressive mode</label>
 
   <label><input type="checkbox" id="smoothColoring"> Smooth coloring</label>
+
+  <label><input type="checkbox" id="gridOverlay"> Show grid</label>
+
+  <label><input type="checkbox" id="centerMarker"> Show center marker</label>
+
+  <label><input type="checkbox" id="juliaMarker"> Show Julia point marker</label>
 
   <button type="button" id="backBtn" disabled>Back</button>
   <button type="button" id="forwardBtn" disabled>Forward</button>
