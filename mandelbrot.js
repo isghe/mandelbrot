@@ -270,71 +270,74 @@ class MandelbrotApp {
     if (this.juliaMarker && this.juliaMode) this.drawJuliaMarker(ctx, w, h);
   };
 
+  // Fractal-space point -> overlay pixel point (CSS px), for the current
+  // view. Centralizes the aspect/fractalToNormalized/scale-by-size chain so
+  // overlay drawing stays in DOMPoint terms until the final ctx.* calls,
+  // which are the only place scalars are unavoidable (Canvas 2D API).
+  toPixel(fractalPoint, w, h) {
+    const aspect = this.canvas.width / this.canvas.height;
+    const n = view.fractalToNormalized(fractalPoint, this.center, this.scale, aspect);
+    return new DOMPointReadOnly(n.x * w, n.y * h);
+  }
+
   drawGrid(ctx, w, h) {
     const aspect = this.canvas.width / this.canvas.height;
     const step = grid.niceGridStep(this.scale, 8);
-    const xHalf = (this.scale * aspect) / 2;
-    const yHalf = this.scale / 2;
-    const xMin = this.center.x - xHalf, xMax = this.center.x + xHalf;
-    const yMin = this.center.y - yHalf, yMax = this.center.y + yHalf;
+    const half = new DOMPointReadOnly((this.scale * aspect) / 2, this.scale / 2);
+    const min = domPoint.sub(this.center, half);
+    const max = domPoint.add(this.center, half);
     const eps = step * 1e-9;
-
-    const toPx = (fx, fy) => {
-      const n = view.fractalToNormalized(new DOMPointReadOnly(fx, fy), this.center, this.scale, aspect);
-      return [n.x * w, n.y * h];
-    };
 
     ctx.strokeStyle = "rgba(255,255,255,0.25)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (const x of grid.gridLines(xMin, xMax, step)) {
+    for (const x of grid.gridLines(min.x, max.x, step)) {
       if (Math.abs(x) < eps) continue;
-      const [px] = toPx(x, 0);
-      ctx.moveTo(px, 0);
-      ctx.lineTo(px, h);
+      const p = this.toPixel(new DOMPointReadOnly(x, 0), w, h);
+      ctx.moveTo(p.x, 0);
+      ctx.lineTo(p.x, h);
     }
-    for (const y of grid.gridLines(yMin, yMax, step)) {
+    for (const y of grid.gridLines(min.y, max.y, step)) {
       if (Math.abs(y) < eps) continue;
-      const [, py] = toPx(0, y);
-      ctx.moveTo(0, py);
-      ctx.lineTo(w, py);
+      const p = this.toPixel(new DOMPointReadOnly(0, y), w, h);
+      ctx.moveTo(0, p.y);
+      ctx.lineTo(w, p.y);
     }
     ctx.stroke();
 
     ctx.strokeStyle = "rgba(255,255,255,0.6)";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    if (xMin <= 0 && 0 <= xMax) {
-      const [px] = toPx(0, 0);
-      ctx.moveTo(px, 0);
-      ctx.lineTo(px, h);
+    if (min.x <= 0 && 0 <= max.x) {
+      const p = this.toPixel(new DOMPointReadOnly(0, 0), w, h);
+      ctx.moveTo(p.x, 0);
+      ctx.lineTo(p.x, h);
     }
-    if (yMin <= 0 && 0 <= yMax) {
-      const [, py] = toPx(0, 0);
-      ctx.moveTo(0, py);
-      ctx.lineTo(w, py);
+    if (min.y <= 0 && 0 <= max.y) {
+      const p = this.toPixel(new DOMPointReadOnly(0, 0), w, h);
+      ctx.moveTo(0, p.y);
+      ctx.lineTo(w, p.y);
     }
     ctx.stroke();
   }
 
   // Position is always (w/2, h/2) since `center` is toFractal's anchor, but
-  // it's still routed through fractalToNormalized for symmetry with
-  // drawJuliaMarker and so it stays correct if that invariant ever changes.
+  // it's still routed through toPixel for symmetry with drawJuliaMarker and
+  // so it stays correct if that invariant ever changes.
   drawCenterMarker(ctx, w, h) {
-    const aspect = this.canvas.width / this.canvas.height;
-    const n = view.fractalToNormalized(this.center, this.center, this.scale, aspect);
-    const px = n.x * w, py = n.y * h;
+    const p = this.toPixel(this.center, w, h);
     const r = 6;
 
     ctx.lineWidth = 3;
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    this.strokeCrosshair(ctx, px, py, r);
+    this.strokeCrosshair(ctx, p, r);
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = "#ffffff";
-    this.strokeCrosshair(ctx, px, py, r);
+    this.strokeCrosshair(ctx, p, r);
   }
 
-  strokeCrosshair(ctx, px, py, r) {
+  strokeCrosshair(ctx, p, r) {
+    const { x: px, y: py } = p;
     ctx.beginPath();
     ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.moveTo(px - r - 4, py);
@@ -351,21 +354,20 @@ class MandelbrotApp {
   // Diamond marker, distinct in shape and color from the center crosshair
   // so the two are never confused when both are visible.
   drawJuliaMarker(ctx, w, h) {
-    const aspect = this.canvas.width / this.canvas.height;
-    const n = view.fractalToNormalized(this.juliaC, this.center, this.scale, aspect);
-    const px = n.x * w, py = n.y * h;
-    if (px < 0 || px > w || py < 0 || py > h) return;
+    const p = this.toPixel(this.juliaC, w, h);
+    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) return;
     const r = 7;
 
     ctx.lineWidth = 3;
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    this.strokeDiamond(ctx, px, py, r);
+    this.strokeDiamond(ctx, p, r);
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = "#ffee33";
-    this.strokeDiamond(ctx, px, py, r);
+    this.strokeDiamond(ctx, p, r);
   }
 
-  strokeDiamond(ctx, px, py, r) {
+  strokeDiamond(ctx, p, r) {
+    const { x: px, y: py } = p;
     ctx.beginPath();
     ctx.moveTo(px, py - r);
     ctx.lineTo(px + r, py);
