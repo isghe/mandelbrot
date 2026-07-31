@@ -18,9 +18,9 @@ class MandelbrotApp {
   smoothColoring = 0;
 
   // overlay display preferences (not part of view history)
-  gridOverlay = 1;
-  centerMarker = 1;
-  juliaMarker = 1;
+  gridOverlay = 0;
+  centerMarker = 0;
+  juliaMarker = 0;
 
   // progressive mode (reveals the fractal iteration by iteration)
   progressiveMode = 0;
@@ -93,6 +93,12 @@ class MandelbrotApp {
     this.juliaChk   = document.getElementById("juliaMode");
     this.progressiveChk = document.getElementById("progressiveMode");
     this.smoothColoringChk = document.getElementById("smoothColoring");
+    this.gridOverlayChk = document.getElementById("gridOverlay");
+    this.centerMarkerChk = document.getElementById("centerMarker");
+    this.juliaMarkerChk = document.getElementById("juliaMarker");
+    this.gridOverlayChk.checked = !!this.gridOverlay;
+    this.centerMarkerChk.checked = !!this.centerMarker;
+    this.juliaMarkerChk.checked = !!this.juliaMarker;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
@@ -115,6 +121,9 @@ class MandelbrotApp {
     this.juliaChk.onchange   = this.onJuliaChange;
     this.progressiveChk.onchange = this.onProgressiveChange;
     this.smoothColoringChk.onchange = this.onSmoothColoringChange;
+    this.gridOverlayChk.onchange = this.onGridOverlayChange;
+    this.centerMarkerChk.onchange = this.onCenterMarkerChange;
+    this.juliaMarkerChk.onchange = this.onJuliaMarkerChange;
     this.backBtn.onclick    = this.onBack;
     this.forwardBtn.onclick = this.onForward;
     this.resetBtn.onclick   = this.onReset;
@@ -594,6 +603,24 @@ class MandelbrotApp {
   onSmoothColoringChange = () => {
     this.pushHistory(this.snapshotView());
     this.smoothColoring = this.smoothColoringChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
+  // Overlay display preferences are not part of view history: they don't
+  // change what the fractal render pass produces, only what's drawn on the
+  // separate #overlay canvas, so no pushHistory here (unlike the toggles above).
+  onGridOverlayChange = () => {
+    this.gridOverlay = this.gridOverlayChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
+  onCenterMarkerChange = () => {
+    this.centerMarker = this.centerMarkerChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
+  onJuliaMarkerChange = () => {
+    this.juliaMarker = this.juliaMarkerChk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
