@@ -796,10 +796,7 @@ class MandelbrotApp {
     const delta = domPoint.sub(mouse, this.dragStart);
     const aspect = this.canvas.width / this.canvas.height;
 
-    this.center = new DOMPointReadOnly(
-      this.startCenter.x - delta.x * this.scale * aspect,
-      this.startCenter.y + delta.y * this.scale
-    );
+    this.center = view.pan(this.startCenter, delta, this.scale, aspect);
     this.pivot = this.center;
     this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
     this.scheduleRender();
@@ -891,16 +888,8 @@ class MandelbrotApp {
 
     this.setScale(this.scale * zoomFactor);
 
-    // Inverse of toFractal(pivotScreen, center) === pivot: solve for the new
-    // center that keeps the fractal point under pivotScreen at the new scale.
-    // (Not a true functional inverse of toFractal over normPoint<->fractal:
-    // here normPoint and fractal are both fixed, and we solve the same
-    // equation for `anchor` instead, which is just isolating a term since
-    // anchor enters additively with coefficient 1.)
-    this.center = new DOMPointReadOnly(
-      this.pivot.x - (this.pivotScreen.x - 0.5) * this.scale * aspect,
-      this.pivot.y - (0.5 - this.pivotScreen.y) * this.scale
-    );
+    // Keeps the fractal point under pivotScreen fixed at the new scale.
+    this.center = view.anchorFor(this.pivot, this.pivotScreen, this.scale, aspect);
 
     this.resetProgressive();
     this.scheduleRender();

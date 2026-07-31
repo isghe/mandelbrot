@@ -79,6 +79,56 @@ test('toFractal accounts for aspect ratio on x only', () => {
   assertPoint(r, 1, 0);
 });
 
+test('anchorFor is the inverse of toFractal, solved for anchor', () => {
+  const anchor = new DOMPointReadOnly(-0.5, 0.1);
+  const scale = 3.2;
+  const aspect = 1.6;
+  for (const [nx, ny] of [[0, 0], [1, 1], [0.25, 0.75], [0.5, 0.5]]) {
+    const normPoint = new DOMPointReadOnly(nx, ny);
+    const fractalPoint = view.toFractal(normPoint, anchor, scale, aspect);
+    const back = view.anchorFor(fractalPoint, normPoint, scale, aspect);
+    assertPointClose(back, anchor.x, anchor.y, `round-trip (${nx},${ny})`);
+  }
+});
+
+test('anchorFor with normPoint at screen center returns the fractal point itself', () => {
+  const fractalPoint = new DOMPointReadOnly(-1.25, 0.4);
+  const r = view.anchorFor(fractalPoint, new DOMPointReadOnly(0.5, 0.5), 2, 1);
+  assertPoint(r, -1.25, 0.4);
+});
+
+test('anchorFor accounts for aspect ratio on x only', () => {
+  const fractalPoint = new DOMPointReadOnly(0, 0);
+  const r = view.anchorFor(fractalPoint, new DOMPointReadOnly(1, 0.5), 2, 2);
+  assertPoint(r, -2, 0);
+});
+
+test('pan with zero delta returns the anchor unchanged', () => {
+  const anchor = new DOMPointReadOnly(-0.5, 0.25);
+  const r = view.pan(anchor, new DOMPointReadOnly(0, 0), 2, 1);
+  assertPoint(r, -0.5, 0.25);
+});
+
+test('pan: dragging right/down moves the anchor left/up (screen vs fractal y are inverted)', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  const r = view.pan(anchor, new DOMPointReadOnly(0.1, 0.1), 2, 1);
+  assertPoint(r, -0.2, 0.2);
+});
+
+test('pan accounts for aspect ratio on x only', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  const r = view.pan(anchor, new DOMPointReadOnly(0.1, 0), 2, 2);
+  assertPoint(r, -0.4, 0);
+});
+
+test('pan is the inverse of itself for the opposite screenDelta', () => {
+  const anchor = new DOMPointReadOnly(-0.5, 0.1);
+  const delta = new DOMPointReadOnly(0.15, -0.2);
+  const panned = view.pan(anchor, delta, 3.2, 1.6);
+  const back = view.pan(panned, domPoint.negate(delta), 3.2, 1.6);
+  assertPointClose(back, anchor.x, anchor.y, 'round-trip');
+});
+
 test('fractalToNormalized maps the anchor to the screen center', () => {
   const anchor = new DOMPointReadOnly(0, 0);
   const r = view.fractalToNormalized(new DOMPointReadOnly(0, 0), anchor, 2, 1);
