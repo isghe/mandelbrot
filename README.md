@@ -60,10 +60,16 @@ switching to a recent Chromium-based release (Chrome, Edge, Brave).
   are display preferences, not view state, and are not part of this history.
 - **Reset to initial condition** button — restore the default view, iterations, palette,
   Julia mode/constant, progressive mode, and smooth coloring. Also clears the Back/Forward
-  history.
+  history. Note this also overwrites the persisted settings below with these defaults,
+  once the next render fires.
 - Iteration count and zoom level are adjustable via log-scale sliders (for precise control
   at both the low and deep-zoom ends of their range); palette is also adjustable via the
   UI panel.
+
+All of the above (view, iterations, palette, Julia mode/constant, progressive mode, smooth
+coloring, and the grid/marker overlay checkboxes) is persisted to `localStorage` and restored
+on the next page load, so the app reopens where you left it. Settings-panel visibility (the
+☰ toggle / **H** key) is a session-only preference and is not persisted.
 
 ## Testing
 

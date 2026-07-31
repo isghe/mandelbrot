@@ -7,6 +7,8 @@ class MandelbrotApp {
   static MIN_ITER = 1;
   static MAX_ITER = 8192;
   static WHEEL_HISTORY_MS = 250;
+  static SETTINGS_KEY = 'isghe-mandelbrot-settings';
+  static SETTINGS_SAVE_MS = 400;
 
   // State (JS = f64)
   center = new DOMPointReadOnly(-0.5, 0.0);
@@ -48,6 +50,7 @@ class MandelbrotApp {
   pendingIterSnapshot = null;
   pendingWheelSnapshot = null;
   wheelHistoryTimer = null;
+  saveSettingsTimer = null;
 
   // render scheduling
   rafPending = false;
@@ -66,6 +69,8 @@ class MandelbrotApp {
       progressiveMode: this.progressiveMode,
       smoothColoring: this.smoothColoring,
     };
+
+    this.restoreSettings();
 
     this.canvas = canvas;
     this.resizeCanvas();
@@ -101,6 +106,10 @@ class MandelbrotApp {
     this.gridOverlayChk.checked = !!this.gridOverlay;
     this.centerMarkerChk.checked = !!this.centerMarker;
     this.juliaMarkerChk.checked = !!this.juliaMarker;
+    this.juliaChk.checked = !!this.juliaMode;
+    this.paletteSel.value = this.paletteType;
+    this.progressiveChk.checked = !!this.progressiveMode;
+    this.smoothColoringChk.checked = !!this.smoothColoring;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
@@ -164,6 +173,62 @@ class MandelbrotApp {
       progressiveMode: this.progressiveMode,
       smoothColoring: this.smoothColoring,
     };
+  }
+
+  saveSettings() {
+    const data = {
+      center: { x: this.center.x, y: this.center.y },
+      scale: this.scale,
+      maxIter: this.maxIter,
+      juliaMode: this.juliaMode,
+      juliaC: { x: this.juliaC.x, y: this.juliaC.y },
+      paletteType: this.paletteType,
+      progressiveMode: this.progressiveMode,
+      smoothColoring: this.smoothColoring,
+      gridOverlay: this.gridOverlay,
+      centerMarker: this.centerMarker,
+      juliaMarker: this.juliaMarker,
+    };
+    try {
+      localStorage.setItem(MandelbrotApp.SETTINGS_KEY, JSON.stringify(data));
+    } catch {
+      // localStorage unavailable (private browsing, quota, etc.) — ignore
+    }
+  }
+
+  loadSettings() {
+    try {
+      const raw = localStorage.getItem(MandelbrotApp.SETTINGS_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  scheduleSaveSettings = () => {
+    clearTimeout(this.saveSettingsTimer);
+    this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
+  };
+
+  restoreSettings() {
+    const s = this.loadSettings();
+    if (!s) return;
+    if (s.center && Number.isFinite(s.center.x) && Number.isFinite(s.center.y)) {
+      this.center = new DOMPointReadOnly(s.center.x, s.center.y);
+    }
+    if (typeof s.scale === "number") this.scale = s.scale;
+    if (typeof s.maxIter === "number") this.maxIter = s.maxIter;
+    if (typeof s.juliaMode === "number") this.juliaMode = s.juliaMode;
+    if (s.juliaC && Number.isFinite(s.juliaC.x) && Number.isFinite(s.juliaC.y)) {
+      this.juliaC = new DOMPointReadOnly(s.juliaC.x, s.juliaC.y);
+    }
+    if (typeof s.paletteType === "number") this.paletteType = s.paletteType;
+    if (typeof s.progressiveMode === "number") this.progressiveMode = s.progressiveMode;
+    if (typeof s.smoothColoring === "number") this.smoothColoring = s.smoothColoring;
+    if (typeof s.gridOverlay === "number") this.gridOverlay = s.gridOverlay;
+    if (typeof s.centerMarker === "number") this.centerMarker = s.centerMarker;
+    if (typeof s.juliaMarker === "number") this.juliaMarker = s.juliaMarker;
+    this.pivot = this.center;
   }
 
   pushHistory(snapshot) {
@@ -267,6 +332,7 @@ class MandelbrotApp {
       // WebGPU init failed (renderOnce() is a no-op/throws in that case).
       this.drawOverlay();
       this.renderOnce();
+      this.scheduleSaveSettings();
       if (this.progressiveMode && this.progressiveIter < this.maxIter && !this.isDragging) {
         this.scheduleRender();
       }
