@@ -33,3 +33,9 @@ label { display:block; margin-top:6px; }
   color:#f88; font-family:sans-serif; text-align:center;
 }
 #gpuReloadBtn { margin-top:12px; }
+
+#repoLink {
+  position:fixed; bottom:10px; left:50%; transform:translateX(-50%); z-index:2;
+  background:#0008; color:white; padding:6px 10px; border-radius:8px;
+  font-family:sans-serif; font-size:0.85em; text-decoration:none;
+}

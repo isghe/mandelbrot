@@ -37,6 +37,7 @@ switching to a recent Chromium-based release (Chrome, Edge, Brave).
 
 - **☰ button** (top-left) — hide/show the settings panel for an unobstructed view of the
   fractal. Also toggleable with the **H** key.
+- **Repo link** (bottom-center) — links back to this GitHub repository.
 - **Drag** — pan the view.
 - **Click** (without dragging) — set the zoom pivot point, and also set the Julia constant
   (regardless of mode, so it can be picked while still viewing the Mandelbrot set).
