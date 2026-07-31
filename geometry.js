@@ -24,9 +24,17 @@ function mid(a, b) {
 
 export const domPoint = { add, sub, scale, negate, lerp, mid };
 
-// Inverse of MandelbrotApp.toFractal: fractal-space point -> screen-normalized
-// [0,1] point, anchored at `anchor`, given the view's vertical extent `scale`
-// (complex-plane units) and the canvas `aspect` ratio (width/height).
+// Screen-normalized [0,1] point -> fractal-space point, anchored at
+// `anchor`, given the view's vertical extent `scale` (complex-plane units)
+// and the canvas `aspect` ratio (width/height).
+function toFractal(normPoint, anchor, scale, aspect) {
+  return new DOMPointReadOnly(
+    (normPoint.x - 0.5) * scale * aspect + anchor.x,
+    (0.5 - normPoint.y) * scale + anchor.y
+  );
+}
+
+// Inverse of toFractal: fractal-space point -> screen-normalized [0,1] point.
 function fractalToNormalized(fractalPoint, anchor, scale, aspect) {
   return new DOMPointReadOnly(
     (fractalPoint.x - anchor.x) / (scale * aspect) + 0.5,
@@ -40,7 +48,7 @@ function fractalToPixel(fractalPoint, anchor, scale, aspect, w, h) {
   return new DOMPointReadOnly(n.x * w, n.y * h);
 }
 
-export const view = { fractalToNormalized, fractalToPixel };
+export const view = { toFractal, fractalToNormalized, fractalToPixel };
 
 // Rounds a raw grid step (range / targetLines) to a "nice" value of the form
 // {1, 2, 5} * 10^n, so grid line density stays reasonable across zoom levels.
