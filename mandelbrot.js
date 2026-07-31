@@ -81,6 +81,8 @@ class MandelbrotApp {
     this.reloadBtn.onclick = () => location.reload();
 
     // UI
+    this.uiToggleBtn = document.getElementById("uiToggleBtn");
+    this.uiPanel = document.getElementById("ui");
     this.iterSlider = document.getElementById("iterSlider");
     this.iterLabel  = document.getElementById("iterLabel");
     this.iterSlider.min = Math.log10(MandelbrotApp.MIN_ITER);
@@ -127,6 +129,7 @@ class MandelbrotApp {
     this.backBtn.onclick    = this.onBack;
     this.forwardBtn.onclick = this.onForward;
     this.resetBtn.onclick   = this.onReset;
+    this.uiToggleBtn.onclick = this.onUiToggle;
 
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
     this.canvas.addEventListener("pointermove", this.onPointerMove);
@@ -135,6 +138,7 @@ class MandelbrotApp {
     this.canvas.addEventListener("pointerleave", this.onPointerLeave);
     this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
     window.addEventListener("resize", this.onResize);
+    window.addEventListener("keydown", this.onKeyDown);
 
     this.setScale(this.scale);
     this.setMaxIter(this.maxIter);
@@ -622,6 +626,18 @@ class MandelbrotApp {
   onJuliaMarkerChange = () => {
     this.juliaMarker = this.juliaMarkerChk.checked ? 1 : 0;
     this.scheduleRender();
+  };
+
+  // Panel visibility is a display preference, not view state — no pushHistory (mirrors overlay toggles above).
+  onUiToggle = () => {
+    this.uiPanel.classList.toggle("hidden");
+  };
+
+  onKeyDown = (e) => {
+    if (e.key !== "h" && e.key !== "H") return;
+    const tag = document.activeElement?.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    this.onUiToggle();
   };
 
   onReset = () => {
