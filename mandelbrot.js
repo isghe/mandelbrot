@@ -716,6 +716,15 @@ class MandelbrotApp {
     this.viewHistory = [];
     this.viewFuture = [];
     this.updateHistoryButtons();
+    // Overlay display preferences aren't part of view history (see the
+    // comment on the on*Change handlers below), but Reset should still
+    // restore them to their defaults along with everything else.
+    this.gridOverlay = 0;
+    this.gridOverlayChk.checked = false;
+    this.centerMarker = 0;
+    this.centerMarkerChk.checked = false;
+    this.juliaMarker = 0;
+    this.juliaMarkerChk.checked = false;
     this.applySnapshot(this.initialState);
   };
 
