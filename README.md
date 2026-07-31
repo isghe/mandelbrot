@@ -60,9 +60,10 @@ switching to a recent Chromium-based release (Chrome, Edge, Brave).
   and slider drags each count as a single history step. The grid/marker checkboxes above
   are display preferences, not view state, and are not part of this history.
 - **Reset to initial condition** button — restore the default view, iterations, palette,
-  Julia mode/constant, progressive mode, and smooth coloring. Also clears the Back/Forward
-  history. Note this also overwrites the persisted settings below with these defaults,
-  once the next render fires.
+  Julia mode/constant, progressive mode, smooth coloring, and the grid/marker overlay
+  checkboxes (unchecked, even though they're not part of the Back/Forward history). Also
+  clears the Back/Forward history. Note this also overwrites the persisted settings below
+  with these defaults, once the next render fires.
 - Iteration count and zoom level are adjustable via log-scale sliders (for precise control
   at both the low and deep-zoom ends of their range); palette is also adjustable via the
   UI panel.

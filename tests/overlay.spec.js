@@ -130,3 +130,17 @@ test('the grid overlay redraws to match a new view after pan/zoom', async ({ pag
 
   expect((await fractalShot(page)).equals(beforePan)).toBe(false);
 });
+
+test('Reset unchecks the grid/marker overlay checkboxes', async ({ page }) => {
+  await page.check('#gridOverlay');
+  await page.check('#centerMarker');
+  await page.check('#juliaMarker');
+  await page.waitForTimeout(200);
+
+  await page.click('#resetBtn');
+  await page.waitForTimeout(200);
+
+  await expect(page.locator('#gridOverlay')).not.toBeChecked();
+  await expect(page.locator('#centerMarker')).not.toBeChecked();
+  await expect(page.locator('#juliaMarker')).not.toBeChecked();
+});
