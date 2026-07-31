@@ -796,10 +796,7 @@ class MandelbrotApp {
     const delta = domPoint.sub(mouse, this.dragStart);
     const aspect = this.canvas.width / this.canvas.height;
 
-    this.center = new DOMPointReadOnly(
-      this.startCenter.x - delta.x * this.scale * aspect,
-      this.startCenter.y + delta.y * this.scale
-    );
+    this.center = view.pan(this.startCenter, delta, this.scale, aspect);
     this.pivot = this.center;
     this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
     this.scheduleRender();

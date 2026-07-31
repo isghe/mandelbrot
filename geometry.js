@@ -48,7 +48,17 @@ function fractalToPixel(fractalPoint, anchor, scale, aspect, w, h) {
   return new DOMPointReadOnly(n.x * w, n.y * h);
 }
 
-export const view = { toFractal, fractalToNormalized, fractalToPixel };
+// New anchor after dragging by `screenDelta` (a normalized [0,1] screen-space
+// displacement), given the view's `scale` and `aspect`. Same fractal-per-screen-unit
+// relationship as toFractal, just solved for a shifted anchor instead of a point.
+function pan(anchor, screenDelta, scale, aspect) {
+  return new DOMPointReadOnly(
+    anchor.x - screenDelta.x * scale * aspect,
+    anchor.y + screenDelta.y * scale
+  );
+}
+
+export const view = { toFractal, fractalToNormalized, fractalToPixel, pan };
 
 // Rounds a raw grid step (range / targetLines) to a "nice" value of the form
 // {1, 2, 5} * 10^n, so grid line density stays reasonable across zoom levels.

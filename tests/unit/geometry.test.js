@@ -79,6 +79,32 @@ test('toFractal accounts for aspect ratio on x only', () => {
   assertPoint(r, 1, 0);
 });
 
+test('pan with zero delta returns the anchor unchanged', () => {
+  const anchor = new DOMPointReadOnly(-0.5, 0.25);
+  const r = view.pan(anchor, new DOMPointReadOnly(0, 0), 2, 1);
+  assertPoint(r, -0.5, 0.25);
+});
+
+test('pan: dragging right/down moves the anchor left/up (screen vs fractal y are inverted)', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  const r = view.pan(anchor, new DOMPointReadOnly(0.1, 0.1), 2, 1);
+  assertPoint(r, -0.2, 0.2);
+});
+
+test('pan accounts for aspect ratio on x only', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  const r = view.pan(anchor, new DOMPointReadOnly(0.1, 0), 2, 2);
+  assertPoint(r, -0.4, 0);
+});
+
+test('pan is the inverse of itself for the opposite screenDelta', () => {
+  const anchor = new DOMPointReadOnly(-0.5, 0.1);
+  const delta = new DOMPointReadOnly(0.15, -0.2);
+  const panned = view.pan(anchor, delta, 3.2, 1.6);
+  const back = view.pan(panned, domPoint.negate(delta), 3.2, 1.6);
+  assertPointClose(back, anchor.x, anchor.y, 'round-trip');
+});
+
 test('fractalToNormalized maps the anchor to the screen center', () => {
   const anchor = new DOMPointReadOnly(0, 0);
   const r = view.fractalToNormalized(new DOMPointReadOnly(0, 0), anchor, 2, 1);
