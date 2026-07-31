@@ -18,6 +18,17 @@ function assertPoint(actual, expectedX, expectedY, msg) {
   assert.strictEqual(actual.y, expectedY, msg && `${msg} (y)`);
 }
 
+test('binaryOperation applies the operator component-wise', () => {
+  const r = domPoint.binaryOperation(new DOMPointReadOnly(6, 8), new DOMPointReadOnly(2, 4), (x, y) => x / y);
+  assertPoint(r, 3, 2);
+});
+
+test('binaryOperation with (x, y) => x + y is equivalent to add', () => {
+  const a = new DOMPointReadOnly(1, 2);
+  const b = new DOMPointReadOnly(3, 4);
+  assertPoint(domPoint.binaryOperation(a, b, (x, y) => x + y), domPoint.add(a, b).x, domPoint.add(a, b).y);
+});
+
 test('add sums both components', () => {
   const r = domPoint.add(new DOMPointReadOnly(1, 2), new DOMPointReadOnly(3, 4));
   assertPoint(r, 4, 6);
