@@ -34,7 +34,13 @@ function fractalToNormalized(fractalPoint, anchor, scale, aspect) {
   );
 }
 
-export const view = { fractalToNormalized };
+// fractalToNormalized, then scaled into a `w`x`h` pixel viewport.
+function fractalToPixel(fractalPoint, anchor, scale, aspect, w, h) {
+  const n = fractalToNormalized(fractalPoint, anchor, scale, aspect);
+  return new DOMPointReadOnly(n.x * w, n.y * h);
+}
+
+export const view = { fractalToNormalized, fractalToPixel };
 
 // Rounds a raw grid step (range / targetLines) to a "nice" value of the form
 // {1, 2, 5} * 10^n, so grid line density stays reasonable across zoom levels.

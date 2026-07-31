@@ -105,6 +105,26 @@ test('fractalToNormalized is the inverse of toFractal', () => {
   }
 });
 
+test('fractalToPixel maps the anchor to the viewport center', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  const r = view.fractalToPixel(new DOMPointReadOnly(0, 0), anchor, 2, 1, 900, 700);
+  assertPointClose(r, 450, 350);
+});
+
+test('fractalToPixel scales normalized coordinates by viewport size', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  // fractalToNormalized(1,0) with scale=2, aspect=1 -> nx=1.0, ny=0.5
+  const r = view.fractalToPixel(new DOMPointReadOnly(1, 0), anchor, 2, 1, 900, 700);
+  assertPointClose(r, 900, 350);
+});
+
+test('fractalToPixel accounts for aspect ratio and a non-origin anchor', () => {
+  const anchor = new DOMPointReadOnly(-0.5, 0.25);
+  // fractalToNormalized(0.5,0.25) with anchor=(-0.5,0.25), scale=2, aspect=2 -> nx=0.75, ny=0.5
+  const r = view.fractalToPixel(new DOMPointReadOnly(0.5, 0.25), anchor, 2, 2, 800, 400);
+  assertPointClose(r, 600, 200);
+});
+
 test('niceGridStep rounds to {1,2,5} * 10^n', () => {
   for (const range of [3, 0.003, 3e-9, 4000, 0.7, 12345]) {
     const step = grid.niceGridStep(range, 8);

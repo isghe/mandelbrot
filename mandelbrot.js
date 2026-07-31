@@ -271,13 +271,12 @@ class MandelbrotApp {
   };
 
   // Fractal-space point -> overlay pixel point (CSS px), for the current
-  // view. Centralizes the aspect/fractalToNormalized/scale-by-size chain so
-  // overlay drawing stays in DOMPoint terms until the final ctx.* calls,
-  // which are the only place scalars are unavoidable (Canvas 2D API).
+  // view. Thin wrapper pulling instance state around the pure
+  // view.fractalToPixel, so overlay drawing stays in DOMPoint terms until
+  // the final ctx.* calls, the only place scalars are unavoidable (Canvas 2D API).
   toPixel(fractalPoint, w, h) {
     const aspect = this.canvas.width / this.canvas.height;
-    const n = view.fractalToNormalized(fractalPoint, this.center, this.scale, aspect);
-    return new DOMPointReadOnly(n.x * w, n.y * h);
+    return view.fractalToPixel(fractalPoint, this.center, this.scale, aspect, w, h);
   }
 
   drawGrid(ctx, w, h) {
