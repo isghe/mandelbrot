@@ -265,6 +265,30 @@ test('Reset mid-slider-drag discards the pending snapshot without a spurious pus
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
+test('clicking sets the Julia point and is undoable, even outside Julia mode', async ({ page }) => {
+  const backBtn = page.locator('#backBtn');
+
+  // The Julia point only affects the rendered fractal in Julia mode, so show
+  // its overlay marker to get a visible signal of the click's effect while
+  // staying in Mandelbrot mode.
+  await page.check('#juliaMarker');
+  await page.waitForTimeout(200);
+  const baseline = await fractalShot(page);
+
+  await expect(page.locator('#juliaMode')).not.toBeChecked();
+  await page.mouse.click(600, 300); // plain click, no drag
+  await page.waitForTimeout(200);
+
+  await expect(backBtn).toBeEnabled();
+  const afterClick = await fractalShot(page);
+  expect(afterClick.equals(baseline)).toBe(false);
+
+  await backBtn.click();
+  await page.waitForTimeout(200);
+  expect((await fractalShot(page)).equals(baseline)).toBe(true);
+  await expect(backBtn).toBeDisabled();
+});
+
 test('Reset clears history and discards pending sessions without spurious entries', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const forwardBtn = page.locator('#forwardBtn');

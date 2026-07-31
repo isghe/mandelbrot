@@ -755,11 +755,12 @@ class MandelbrotApp {
       this.pivotScreen = mouse;
       this.pivot = this.toFractal(mouse, this.center);
 
-      if (this.juliaMode === 1) {
-        this.pushHistory(this.snapshotView());
-        this.juliaC = this.pivot;
-        this.resetProgressive();
-      }
+      this.pushHistory(this.snapshotView());
+      this.juliaC = this.pivot;
+      // Only the Julia render actually depends on juliaC; in Mandelbrot
+      // mode this just moves the marker, so don't restart its progressive
+      // reveal over an unrelated, unchanged image.
+      if (this.juliaMode === 1) this.resetProgressive();
       this.scheduleRender();
       return;
     }
