@@ -289,6 +289,33 @@ test('clicking sets the Julia point and is undoable, even outside Julia mode', a
   await expect(backBtn).toBeDisabled();
 });
 
+test('wheel-zoom after panning centers on the new position, not the stale pivot', async ({ page }) => {
+  const box = await page.locator('#gfx').boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 200, cy + 120, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+
+  const centerAfterPan = await page.evaluate(() => ({ x: window.app.center.x, y: window.app.center.y }));
+
+  // Zoom with the cursor exactly at the screen center: a correctly tracked
+  // pivot keeps the center fixed (only scale changes). Before the fix, the
+  // pivot was still the pre-pan default/click point, so the center would
+  // jump back toward it instead of staying at centerAfterPan.
+  await page.mouse.move(cx, cy);
+  await page.mouse.wheel(0, -200);
+  await page.waitForTimeout(400);
+
+  const centerAfterZoom = await page.evaluate(() => ({ x: window.app.center.x, y: window.app.center.y }));
+
+  expect(centerAfterZoom.x).toBeCloseTo(centerAfterPan.x, 4);
+  expect(centerAfterZoom.y).toBeCloseTo(centerAfterPan.y, 4);
+});
+
 test('Reset clears history and discards pending sessions without spurious entries', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const forwardBtn = page.locator('#forwardBtn');

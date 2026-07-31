@@ -786,6 +786,8 @@ class MandelbrotApp {
       this.startCenter.x - delta.x * this.scale * aspect,
       this.startCenter.y + delta.y * this.scale
     );
+    this.pivot = this.center;
+    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
     this.scheduleRender();
   };
 
@@ -942,6 +944,7 @@ class MandelbrotApp {
 }
 
 const app = new MandelbrotApp(document.getElementById("gfx"));
+window.app = app; // exposed for e2e test assertions on internal state (tests/)
 try {
   await app.init();
 } catch (e) {
