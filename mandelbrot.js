@@ -276,7 +276,7 @@ class MandelbrotApp {
     ctx.clearRect(0, 0, w, h);
     if (this.gridOverlay) this.drawGrid(ctx, w, h);
     if (this.centerMarker) this.drawCenterMarker(ctx, w, h);
-    if (this.juliaMarker && this.juliaMode) this.drawJuliaMarker(ctx, w, h);
+    if (this.juliaMarker) this.drawJuliaMarker(ctx, w, h);
   };
 
   // Fractal-space point -> overlay pixel point (CSS px), for the current
