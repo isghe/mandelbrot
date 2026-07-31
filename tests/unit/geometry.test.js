@@ -121,3 +121,26 @@ test('niceGridStep keeps line density in a reasonable range', () => {
     assert.ok(lines >= 4 && lines <= 20, `range/step=${lines} for range ${range} should be roughly between 4 and 20`);
   }
 });
+
+test('gridLines returns every multiple of step within [min, max]', () => {
+  assert.deepStrictEqual(grid.gridLines(-2.5, 2.5, 1), [-2, -1, 0, 1, 2]);
+  assert.deepStrictEqual(grid.gridLines(0, 3, 1), [0, 1, 2, 3]);
+  assert.deepStrictEqual(grid.gridLines(0.1, 0.9, 1), []);
+});
+
+test('gridLines excludes values just outside the range (boundary rounding)', () => {
+  // 2 is just past max=1.9999999 -> Math.floor(max/step) must exclude it
+  assert.deepStrictEqual(grid.gridLines(0, 1.9999999, 1), [0, 1]);
+  // -2 is just before min=-1.9999999 -> Math.ceil(min/step) must exclude it
+  assert.deepStrictEqual(grid.gridLines(-1.9999999, 0, 1), [-1, 0]);
+});
+
+test('gridLines does not accumulate floating-point drift over many lines', () => {
+  // With a naive `x += step` loop, repeated addition of a step like 0.1
+  // accumulates rounding error; index-based i * step must not.
+  const step = 0.1;
+  const lines = grid.gridLines(0, 5, step);
+  for (let i = 0; i < lines.length; i++) {
+    assert.strictEqual(lines[i], i * step, `line ${i} should be exactly i * step`);
+  }
+});

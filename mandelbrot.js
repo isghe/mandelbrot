@@ -283,19 +283,13 @@ class MandelbrotApp {
     ctx.strokeStyle = "rgba(255,255,255,0.25)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    // Indexed multiplication (i * step) instead of repeated += step, so
-    // floating-point error doesn't accumulate across iterations.
-    const xi0 = Math.ceil(xMin / step), xi1 = Math.floor(xMax / step);
-    for (let i = xi0; i <= xi1; i++) {
-      const x = i * step;
+    for (const x of grid.gridLines(xMin, xMax, step)) {
       if (Math.abs(x) < eps) continue;
       const [px] = toPx(x, 0);
       ctx.moveTo(px, 0);
       ctx.lineTo(px, h);
     }
-    const yi0 = Math.ceil(yMin / step), yi1 = Math.floor(yMax / step);
-    for (let i = yi0; i <= yi1; i++) {
-      const y = i * step;
+    for (const y of grid.gridLines(yMin, yMax, step)) {
       if (Math.abs(y) < eps) continue;
       const [, py] = toPx(0, y);
       ctx.moveTo(0, py);

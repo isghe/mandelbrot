@@ -50,4 +50,15 @@ function niceGridStep(range, targetLines = 8) {
   return niceFraction * 10 ** exponent;
 }
 
-export const grid = { niceGridStep };
+// Positions of grid lines (multiples of `step`) within [min, max], computed
+// as i * step (integer index times step) rather than by repeatedly adding
+// step, so floating-point error can't accumulate across iterations.
+function gridLines(min, max, step) {
+  const i0 = Math.ceil(min / step);
+  const i1 = Math.floor(max / step);
+  const lines = [];
+  for (let i = i0; i <= i1; i++) lines.push(i * step);
+  return lines;
+}
+
+export const grid = { niceGridStep, gridLines };
