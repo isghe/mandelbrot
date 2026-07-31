@@ -70,7 +70,7 @@ function fractalToNormalized(fractalPoint, anchor, scale, aspect) {
 // fractalToNormalized, then scaled into a `w`x`h` pixel viewport.
 function fractalToPixel(fractalPoint, anchor, scale, aspect, w, h) {
   const n = fractalToNormalized(fractalPoint, anchor, scale, aspect);
-  return new DOMPointReadOnly(n.x * w, n.y * h);
+  return multiply(n, new DOMPointReadOnly(w, h));
 }
 
 // New anchor after dragging by `screenDelta` (a normalized [0,1] screen-space
