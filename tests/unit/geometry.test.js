@@ -125,6 +125,19 @@ test('fractalToPixel accounts for aspect ratio and a non-origin anchor', () => {
   assertPointClose(r, 600, 200);
 });
 
+test('fractalToPixel is exactly fractalToNormalized scaled by (w, h)', () => {
+  const cases = [
+    [new DOMPointReadOnly(0.3, -0.7), new DOMPointReadOnly(-0.5, 0.1), 3.2, 1.6, 1024, 512],
+    [new DOMPointReadOnly(-2, 5), new DOMPointReadOnly(0, 0), 0.5, 2.4, 640, 480],
+  ];
+  for (const [fractalPoint, anchor, scale, aspect, w, h] of cases) {
+    const n = view.fractalToNormalized(fractalPoint, anchor, scale, aspect);
+    const expected = new DOMPointReadOnly(n.x * w, n.y * h);
+    const actual = view.fractalToPixel(fractalPoint, anchor, scale, aspect, w, h);
+    assertPointClose(actual, expected.x, expected.y, `w=${w},h=${h}`);
+  }
+});
+
 test('niceGridStep rounds to {1,2,5} * 10^n', () => {
   for (const range of [3, 0.003, 3e-9, 4000, 0.7, 12345]) {
     const step = grid.niceGridStep(range, 8);
