@@ -213,21 +213,29 @@ class MandelbrotApp {
   restoreSettings() {
     const s = this.loadSettings();
     if (!s) return;
-    if (s.center && Number.isFinite(s.center.x) && Number.isFinite(s.center.y)) {
-      this.center = new DOMPointReadOnly(s.center.x, s.center.y);
-    }
-    if (typeof s.scale === "number") this.scale = s.scale;
-    if (typeof s.maxIter === "number") this.maxIter = s.maxIter;
-    if (typeof s.juliaMode === "number") this.juliaMode = s.juliaMode;
-    if (s.juliaC && Number.isFinite(s.juliaC.x) && Number.isFinite(s.juliaC.y)) {
-      this.juliaC = new DOMPointReadOnly(s.juliaC.x, s.juliaC.y);
-    }
-    if (typeof s.paletteType === "number") this.paletteType = s.paletteType;
-    if (typeof s.progressiveMode === "number") this.progressiveMode = s.progressiveMode;
-    if (typeof s.smoothColoring === "number") this.smoothColoring = s.smoothColoring;
-    if (typeof s.gridOverlay === "number") this.gridOverlay = s.gridOverlay;
-    if (typeof s.centerMarker === "number") this.centerMarker = s.centerMarker;
-    if (typeof s.juliaMarker === "number") this.juliaMarker = s.juliaMarker;
+
+    const restoreNumber = (field) => {
+      if (typeof s[field] === "number") this[field] = s[field];
+    };
+    const restorePoint = (field) => {
+      const p = s[field];
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+        this[field] = new DOMPointReadOnly(p.x, p.y);
+      }
+    };
+
+    restorePoint("center");
+    restoreNumber("scale");
+    restoreNumber("maxIter");
+    restoreNumber("juliaMode");
+    restorePoint("juliaC");
+    restoreNumber("paletteType");
+    restoreNumber("progressiveMode");
+    restoreNumber("smoothColoring");
+    restoreNumber("gridOverlay");
+    restoreNumber("centerMarker");
+    restoreNumber("juliaMarker");
+
     this.pivot = this.center;
   }
 
