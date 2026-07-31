@@ -1,5 +1,17 @@
+// Applies `op` component-wise to two DOMPoints, e.g.
+// binaryOperation(a, b, (x, y) => x + y) is equivalent to add(a, b).
+function binaryOperation(a, b, op) {
+  return new DOMPointReadOnly(op(a.x, b.x), op(a.y, b.y));
+}
+
 function add(a, b) {
-  return new DOMPointReadOnly(a.x + b.x, a.y + b.y);
+  return binaryOperation(a, b, (x, y) => x + y);
+}
+
+// Component-wise (Hadamard) product of two DOMPoints — as opposed to
+// scale(), which multiplies a DOMPoint by a scalar.
+function multiply(a, b) {
+  return binaryOperation(a, b, (x, y) => x * y);
 }
 
 function scale(p, k) {
@@ -22,7 +34,7 @@ function mid(a, b) {
   return lerp(a, b, 0.5);
 }
 
-export const domPoint = { add, sub, scale, negate, lerp, mid };
+export const domPoint = { binaryOperation, add, sub, scale, multiply, negate, lerp, mid };
 
 // Screen-normalized [0,1] point -> fractal-space point, anchored at
 // `anchor`, given the view's vertical extent `scale` (complex-plane units)

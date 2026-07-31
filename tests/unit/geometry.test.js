@@ -18,9 +18,27 @@ function assertPoint(actual, expectedX, expectedY, msg) {
   assert.strictEqual(actual.y, expectedY, msg && `${msg} (y)`);
 }
 
+test('binaryOperation applies the operator component-wise', () => {
+  const r = domPoint.binaryOperation(new DOMPointReadOnly(6, 8), new DOMPointReadOnly(2, 4), (x, y) => x / y);
+  assertPoint(r, 3, 2);
+});
+
+test('binaryOperation with (x, y) => x + y is equivalent to add', () => {
+  const a = new DOMPointReadOnly(1, 2);
+  const b = new DOMPointReadOnly(3, 4);
+  const viaOp = domPoint.binaryOperation(a, b, (x, y) => x + y);
+  const viaAdd = domPoint.add(a, b);
+  assertPoint(viaOp, viaAdd.x, viaAdd.y);
+});
+
 test('add sums both components', () => {
   const r = domPoint.add(new DOMPointReadOnly(1, 2), new DOMPointReadOnly(3, 4));
   assertPoint(r, 4, 6);
+});
+
+test('multiply computes the component-wise product of two DOMPoints', () => {
+  const r = domPoint.multiply(new DOMPointReadOnly(2, -3), new DOMPointReadOnly(4, 5));
+  assertPoint(r, 8, -15);
 });
 
 test('scale multiplies both components by a scalar', () => {
