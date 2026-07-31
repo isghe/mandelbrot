@@ -56,19 +56,28 @@ test('mid returns the midpoint of two points', () => {
   assertPoint(r, 5, 7);
 });
 
-// Mirrors MandelbrotApp.toFractal (mandelbrot.js), used below to check that
-// fractalToNormalized is a true inverse without importing the browser-only class.
-function toFractal(normPoint, anchor, scale, aspect) {
-  return new DOMPointReadOnly(
-    (normPoint.x - 0.5) * scale * aspect + anchor.x,
-    (0.5 - normPoint.y) * scale + anchor.y
-  );
-}
-
 function assertPointClose(actual, expectedX, expectedY, msg) {
   assert.ok(Math.abs(actual.x - expectedX) < 1e-9, msg && `${msg} (x): ${actual.x} vs ${expectedX}`);
   assert.ok(Math.abs(actual.y - expectedY) < 1e-9, msg && `${msg} (y): ${actual.y} vs ${expectedY}`);
 }
+
+test('toFractal maps the screen center to the anchor', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  const r = view.toFractal(new DOMPointReadOnly(0.5, 0.5), anchor, 2, 1);
+  assertPoint(r, 0, 0);
+});
+
+test('toFractal: x grows right, y grows up (inverted from screen y)', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  assertPoint(view.toFractal(new DOMPointReadOnly(1.0, 0.5), anchor, 2, 1), 1, 0);
+  assertPoint(view.toFractal(new DOMPointReadOnly(0.5, 0.0), anchor, 2, 1), 0, 1);
+});
+
+test('toFractal accounts for aspect ratio on x only', () => {
+  const anchor = new DOMPointReadOnly(0, 0);
+  const r = view.toFractal(new DOMPointReadOnly(0.75, 0.5), anchor, 2, 2);
+  assertPoint(r, 1, 0);
+});
 
 test('fractalToNormalized maps the anchor to the screen center', () => {
   const anchor = new DOMPointReadOnly(0, 0);
@@ -99,7 +108,7 @@ test('fractalToNormalized is the inverse of toFractal', () => {
   const scale = 3.2;
   const aspect = 1.6;
   for (const [nx, ny] of [[0, 0], [1, 1], [0.25, 0.75], [0.5, 0.5]]) {
-    const fractal = toFractal(new DOMPointReadOnly(nx, ny), anchor, scale, aspect);
+    const fractal = view.toFractal(new DOMPointReadOnly(nx, ny), anchor, scale, aspect);
     const back = view.fractalToNormalized(fractal, anchor, scale, aspect);
     assertPointClose(back, nx, ny, `round-trip (${nx},${ny})`);
   }
