@@ -19,6 +19,7 @@ class MandelbrotApp {
 
   // overlay display preferences (not part of view history)
   gridOverlay = 1;
+  centerMarker = 1;
 
   // progressive mode (reveals the fractal iteration by iteration)
   progressiveMode = 0;
@@ -264,6 +265,7 @@ class MandelbrotApp {
     const h = this.overlayCssHeight;
     ctx.clearRect(0, 0, w, h);
     if (this.gridOverlay) this.drawGrid(ctx, w, h);
+    if (this.centerMarker) this.drawCenterMarker(ctx, w, h);
   };
 
   drawGrid(ctx, w, h) {
@@ -310,6 +312,37 @@ class MandelbrotApp {
       ctx.moveTo(0, py);
       ctx.lineTo(w, py);
     }
+    ctx.stroke();
+  }
+
+  // Position is always (w/2, h/2) since `center` is toFractal's anchor, but
+  // it's still routed through fractalToNormalized for symmetry with
+  // drawJuliaMarker and so it stays correct if that invariant ever changes.
+  drawCenterMarker(ctx, w, h) {
+    const aspect = this.canvas.width / this.canvas.height;
+    const n = view.fractalToNormalized(this.center, this.center, this.scale, aspect);
+    const px = n.x * w, py = n.y * h;
+    const r = 6;
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    this.strokeCrosshair(ctx, px, py, r);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#ffffff";
+    this.strokeCrosshair(ctx, px, py, r);
+  }
+
+  strokeCrosshair(ctx, px, py, r) {
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.moveTo(px - r - 4, py);
+    ctx.lineTo(px - r, py);
+    ctx.moveTo(px + r, py);
+    ctx.lineTo(px + r + 4, py);
+    ctx.moveTo(px, py - r - 4);
+    ctx.lineTo(px, py - r);
+    ctx.moveTo(px, py + r);
+    ctx.lineTo(px, py + r + 4);
     ctx.stroke();
   }
 
