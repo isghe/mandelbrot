@@ -283,13 +283,19 @@ class MandelbrotApp {
     ctx.strokeStyle = "rgba(255,255,255,0.25)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let x = Math.ceil(xMin / step) * step; x <= xMax; x += step) {
+    // Indexed multiplication (i * step) instead of repeated += step, so
+    // floating-point error doesn't accumulate across iterations.
+    const xi0 = Math.ceil(xMin / step), xi1 = Math.floor(xMax / step);
+    for (let i = xi0; i <= xi1; i++) {
+      const x = i * step;
       if (Math.abs(x) < eps) continue;
       const [px] = toPx(x, 0);
       ctx.moveTo(px, 0);
       ctx.lineTo(px, h);
     }
-    for (let y = Math.ceil(yMin / step) * step; y <= yMax; y += step) {
+    const yi0 = Math.ceil(yMin / step), yi1 = Math.floor(yMax / step);
+    for (let i = yi0; i <= yi1; i++) {
+      const y = i * step;
       if (Math.abs(y) < eps) continue;
       const [, py] = toPx(0, y);
       ctx.moveTo(0, py);
