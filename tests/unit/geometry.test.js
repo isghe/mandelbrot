@@ -26,7 +26,9 @@ test('binaryOperation applies the operator component-wise', () => {
 test('binaryOperation with (x, y) => x + y is equivalent to add', () => {
   const a = new DOMPointReadOnly(1, 2);
   const b = new DOMPointReadOnly(3, 4);
-  assertPoint(domPoint.binaryOperation(a, b, (x, y) => x + y), domPoint.add(a, b).x, domPoint.add(a, b).y);
+  const viaOp = domPoint.binaryOperation(a, b, (x, y) => x + y);
+  const viaAdd = domPoint.add(a, b);
+  assertPoint(viaOp, viaAdd.x, viaAdd.y);
 });
 
 test('add sums both components', () => {
