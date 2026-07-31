@@ -1,4 +1,4 @@
-import { domPoint } from './geometry.js';
+import { domPoint, view, grid } from './geometry.js';
 import { split64 } from './precision.js';
 
 class MandelbrotApp {
@@ -16,6 +16,9 @@ class MandelbrotApp {
   juliaC = new DOMPointReadOnly(-0.8, 0.156);
   paletteType = 4;
   smoothColoring = 0;
+
+  // overlay display preferences (not part of view history)
+  gridOverlay = 1;
 
   // progressive mode (reveals the fractal iteration by iteration)
   progressiveMode = 0;
@@ -64,6 +67,10 @@ class MandelbrotApp {
 
     this.canvas = canvas;
     this.resizeCanvas();
+
+    this.overlayCanvas = document.getElementById("overlay");
+    this.overlayCtx = this.overlayCanvas.getContext("2d");
+    this.resizeOverlayCanvas();
 
     this.selectionBox = document.getElementById("selectionBox");
     this.errorBox = document.getElementById("gpuError");
@@ -121,6 +128,8 @@ class MandelbrotApp {
     this.setScale(this.scale);
     this.setMaxIter(this.maxIter);
     this.palette256 = this.makePalette(this.paletteType);
+
+    this.drawOverlay();
   }
 
   setScale(next) {
@@ -209,8 +218,25 @@ class MandelbrotApp {
     }
   }
 
+  // Keeps the overlay's backing store in sync with #gfx; the transform
+  // reset lets overlay draw calls be written in CSS pixels.
+  resizeOverlayCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.overlayCanvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width * dpr));
+    const height = Math.max(1, Math.round(rect.height * dpr));
+    if (this.overlayCanvas.width !== width || this.overlayCanvas.height !== height) {
+      this.overlayCanvas.width = width;
+      this.overlayCanvas.height = height;
+    }
+    this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.overlayCssWidth = rect.width;
+    this.overlayCssHeight = rect.height;
+  }
+
   onResize = () => {
     this.resizeCanvas();
+    this.resizeOverlayCanvas();
     this.scheduleRender();
   };
 
@@ -222,12 +248,70 @@ class MandelbrotApp {
     this.rafPending = true;
     requestAnimationFrame(() => {
       this.rafPending = false;
+      // Drawn before renderOnce() so the overlay still shows up even if
+      // WebGPU init failed (renderOnce() is a no-op/throws in that case).
+      this.drawOverlay();
       this.renderOnce();
       if (this.progressiveMode && this.progressiveIter < this.maxIter && !this.isDragging) {
         this.scheduleRender();
       }
     });
   };
+
+  drawOverlay = () => {
+    const ctx = this.overlayCtx;
+    const w = this.overlayCssWidth;
+    const h = this.overlayCssHeight;
+    ctx.clearRect(0, 0, w, h);
+    if (this.gridOverlay) this.drawGrid(ctx, w, h);
+  };
+
+  drawGrid(ctx, w, h) {
+    const aspect = this.canvas.width / this.canvas.height;
+    const step = grid.niceGridStep(this.scale, 8);
+    const xHalf = (this.scale * aspect) / 2;
+    const yHalf = this.scale / 2;
+    const xMin = this.center.x - xHalf, xMax = this.center.x + xHalf;
+    const yMin = this.center.y - yHalf, yMax = this.center.y + yHalf;
+    const eps = step * 1e-9;
+
+    const toPx = (fx, fy) => {
+      const n = view.fractalToNormalized(new DOMPointReadOnly(fx, fy), this.center, this.scale, aspect);
+      return [n.x * w, n.y * h];
+    };
+
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = Math.ceil(xMin / step) * step; x <= xMax; x += step) {
+      if (Math.abs(x) < eps) continue;
+      const [px] = toPx(x, 0);
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, h);
+    }
+    for (let y = Math.ceil(yMin / step) * step; y <= yMax; y += step) {
+      if (Math.abs(y) < eps) continue;
+      const [, py] = toPx(0, y);
+      ctx.moveTo(0, py);
+      ctx.lineTo(w, py);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (xMin <= 0 && 0 <= xMax) {
+      const [px] = toPx(0, 0);
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, h);
+    }
+    if (yMin <= 0 && 0 <= yMax) {
+      const [, py] = toPx(0, 0);
+      ctx.moveTo(0, py);
+      ctx.lineTo(w, py);
+    }
+    ctx.stroke();
+  }
 
   showError(msg) {
     this.errorMessage.textContent = msg;
