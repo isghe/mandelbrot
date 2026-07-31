@@ -34,6 +34,11 @@ test('add sums both components', () => {
   assertPoint(r, 4, 6);
 });
 
+test('multiply computes the component-wise product of two DOMPoints', () => {
+  const r = domPoint.multiply(new DOMPointReadOnly(2, -3), new DOMPointReadOnly(4, 5));
+  assertPoint(r, 8, -15);
+});
+
 test('scale multiplies both components by a scalar', () => {
   const r = domPoint.scale(new DOMPointReadOnly(2, -3), 2.5);
   assertPoint(r, 5, -7.5);

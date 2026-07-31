@@ -8,6 +8,12 @@ function add(a, b) {
   return binaryOperation(a, b, (x, y) => x + y);
 }
 
+// Component-wise (Hadamard) product of two DOMPoints — as opposed to
+// scale(), which multiplies a DOMPoint by a scalar.
+function multiply(a, b) {
+  return binaryOperation(a, b, (x, y) => x * y);
+}
+
 function scale(p, k) {
   return new DOMPointReadOnly(p.x * k, p.y * k);
 }
@@ -28,7 +34,7 @@ function mid(a, b) {
   return lerp(a, b, 0.5);
 }
 
-export const domPoint = { binaryOperation, add, sub, scale, negate, lerp, mid };
+export const domPoint = { binaryOperation, add, sub, scale, multiply, negate, lerp, mid };
 
 // Screen-normalized [0,1] point -> fractal-space point, anchored at
 // `anchor`, given the view's vertical extent `scale` (complex-plane units)
