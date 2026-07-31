@@ -20,6 +20,7 @@ class MandelbrotApp {
   // overlay display preferences (not part of view history)
   gridOverlay = 1;
   centerMarker = 1;
+  juliaMarker = 1;
 
   // progressive mode (reveals the fractal iteration by iteration)
   progressiveMode = 0;
@@ -266,6 +267,7 @@ class MandelbrotApp {
     ctx.clearRect(0, 0, w, h);
     if (this.gridOverlay) this.drawGrid(ctx, w, h);
     if (this.centerMarker) this.drawCenterMarker(ctx, w, h);
+    if (this.juliaMarker && this.juliaMode) this.drawJuliaMarker(ctx, w, h);
   };
 
   drawGrid(ctx, w, h) {
@@ -343,6 +345,33 @@ class MandelbrotApp {
     ctx.lineTo(px, py - r);
     ctx.moveTo(px, py + r);
     ctx.lineTo(px, py + r + 4);
+    ctx.stroke();
+  }
+
+  // Diamond marker, distinct in shape and color from the center crosshair
+  // so the two are never confused when both are visible.
+  drawJuliaMarker(ctx, w, h) {
+    const aspect = this.canvas.width / this.canvas.height;
+    const n = view.fractalToNormalized(this.juliaC, this.center, this.scale, aspect);
+    const px = n.x * w, py = n.y * h;
+    if (px < 0 || px > w || py < 0 || py > h) return;
+    const r = 7;
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    this.strokeDiamond(ctx, px, py, r);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#ffee33";
+    this.strokeDiamond(ctx, px, py, r);
+  }
+
+  strokeDiamond(ctx, px, py, r) {
+    ctx.beginPath();
+    ctx.moveTo(px, py - r);
+    ctx.lineTo(px + r, py);
+    ctx.lineTo(px, py + r);
+    ctx.lineTo(px - r, py);
+    ctx.closePath();
     ctx.stroke();
   }
 
