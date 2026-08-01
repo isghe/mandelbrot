@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
   }
 });
 
-test('Copy URL puts a URL with all current settings on the clipboard', async ({ page, context }) => {
+test('Copy URL puts a URL with only the changed settings on the clipboard', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await page.selectOption('#paletteType', '1');
@@ -35,10 +35,31 @@ test('Copy URL puts a URL with all current settings on the clipboard', async ({ 
   expect(url.searchParams.get('palette')).toBe('1');
   expect(url.searchParams.get('julia')).toBe('1');
   expect(url.searchParams.get('grid')).toBe('1');
-  expect(url.searchParams.get('x')).not.toBeNull();
-  expect(url.searchParams.get('y')).not.toBeNull();
-  expect(url.searchParams.get('scale')).not.toBeNull();
-  expect(url.searchParams.get('iter')).not.toBeNull();
+  // center/scale/iter were never touched, so they stay off the URL entirely.
+  expect(url.searchParams.get('x')).toBeNull();
+  expect(url.searchParams.get('scale')).toBeNull();
+  expect(url.searchParams.get('iter')).toBeNull();
+});
+
+test('the address bar URL updates live as settings change, omitting untouched fields', async ({ page }) => {
+  const initialUrl = page.url();
+
+  await page.selectOption('#paletteType', '1');
+  await expect.poll(() => page.url()).not.toBe(initialUrl);
+
+  const url = new URL(page.url());
+  expect(url.searchParams.get('palette')).toBe('1');
+  expect(url.searchParams.get('x')).toBeNull();
+});
+
+test('Reset clears every parameter back to a bare URL', async ({ page }) => {
+  await page.selectOption('#paletteType', '1');
+  await page.click('#juliaMode');
+  await page.click('#gridOverlay');
+  await expect.poll(() => new URL(page.url()).searchParams.get('palette')).toBe('1');
+
+  await page.click('#resetBtn');
+  await expect.poll(() => new URL(page.url()).search).toBe('');
 });
 
 test('opening a share URL overrides both defaults and localStorage', async ({ page }) => {

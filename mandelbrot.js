@@ -197,6 +197,7 @@ class MandelbrotApp {
     } catch {
       // localStorage unavailable (private browsing, quota, etc.) — ignore
     }
+    history.replaceState(null, '', this.buildShareUrl());
   }
 
   loadSettings() {
@@ -213,23 +214,35 @@ class MandelbrotApp {
     this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
   };
 
+  // Only encodes fields that differ from the initial condition, so the
+  // "Reset to initial condition" state always maps to a bare URL and the
+  // address bar only ever names what's actually been changed.
   buildShareUrl() {
-    const params = new URLSearchParams({
-      x: this.center.x,
-      y: this.center.y,
-      scale: this.scale,
-      iter: this.maxIter,
-      julia: this.juliaMode,
-      jx: this.juliaC.x,
-      jy: this.juliaC.y,
-      palette: this.paletteType,
-      progressive: this.progressiveMode,
-      smooth: this.smoothColoring,
-      grid: this.gridOverlay,
-      centerMark: this.centerMarker,
-      juliaMark: this.juliaMarker,
-    });
-    return `${location.origin}${location.pathname}?${params.toString()}`;
+    const init = this.initialState;
+    const params = new URLSearchParams();
+
+    if (this.center.x !== init.center.x || this.center.y !== init.center.y) {
+      params.set("x", this.center.x);
+      params.set("y", this.center.y);
+    }
+    if (this.scale !== init.scale) params.set("scale", this.scale);
+    if (this.maxIter !== init.maxIter) params.set("iter", this.maxIter);
+    if (this.juliaMode !== init.juliaMode) params.set("julia", this.juliaMode);
+    if (this.juliaC.x !== init.juliaC.x || this.juliaC.y !== init.juliaC.y) {
+      params.set("jx", this.juliaC.x);
+      params.set("jy", this.juliaC.y);
+    }
+    if (this.paletteType !== init.paletteType) params.set("palette", this.paletteType);
+    if (this.progressiveMode !== init.progressiveMode) params.set("progressive", this.progressiveMode);
+    if (this.smoothColoring !== init.smoothColoring) params.set("smooth", this.smoothColoring);
+    // Overlay display preferences aren't part of initialState (see the
+    // comment on the on*Change handlers below); Reset always zeroes them.
+    if (this.gridOverlay) params.set("grid", this.gridOverlay);
+    if (this.centerMarker) params.set("centerMark", this.centerMarker);
+    if (this.juliaMarker) params.set("juliaMark", this.juliaMarker);
+
+    const qs = params.toString();
+    return `${location.origin}${location.pathname}${qs ? "?" + qs : ""}`;
   }
 
   parseShareParams() {
