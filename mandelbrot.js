@@ -257,19 +257,25 @@ class MandelbrotApp {
     };
 
     const s = {};
+    const setIfPresent = (field, paramName) => {
+      const v = num(paramName);
+      if (v !== undefined) s[field] = v;
+    };
+
     const x = num("x"), y = num("y");
     if (x !== undefined && y !== undefined) s.center = { x, y };
-    const scale = num("scale"); if (scale !== undefined) s.scale = scale;
-    const maxIter = num("iter"); if (maxIter !== undefined) s.maxIter = maxIter;
-    const juliaMode = num("julia"); if (juliaMode !== undefined) s.juliaMode = juliaMode;
     const jx = num("jx"), jy = num("jy");
     if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
-    const paletteType = num("palette"); if (paletteType !== undefined) s.paletteType = paletteType;
-    const progressiveMode = num("progressive"); if (progressiveMode !== undefined) s.progressiveMode = progressiveMode;
-    const smoothColoring = num("smooth"); if (smoothColoring !== undefined) s.smoothColoring = smoothColoring;
-    const gridOverlay = num("grid"); if (gridOverlay !== undefined) s.gridOverlay = gridOverlay;
-    const centerMarker = num("centerMark"); if (centerMarker !== undefined) s.centerMarker = centerMarker;
-    const juliaMarker = num("juliaMark"); if (juliaMarker !== undefined) s.juliaMarker = juliaMarker;
+
+    setIfPresent("scale", "scale");
+    setIfPresent("maxIter", "iter");
+    setIfPresent("juliaMode", "julia");
+    setIfPresent("paletteType", "palette");
+    setIfPresent("progressiveMode", "progressive");
+    setIfPresent("smoothColoring", "smooth");
+    setIfPresent("gridOverlay", "grid");
+    setIfPresent("centerMarker", "centerMark");
+    setIfPresent("juliaMarker", "juliaMark");
 
     return Object.keys(s).length > 0 ? s : null;
   }
