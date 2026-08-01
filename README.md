@@ -67,11 +67,22 @@ switching to a recent Chromium-based release (Chrome, Edge, Brave).
 - Iteration count and zoom level are adjustable via log-scale sliders (for precise control
   at both the low and deep-zoom ends of their range); palette is also adjustable via the
   UI panel.
+- **Copy URL** button — copy a link to the clipboard that reproduces the current view,
+  iterations, palette, Julia mode/constant, progressive mode, smooth coloring, and
+  grid/marker overlay checkboxes. Only fields that differ from the app's built-in defaults
+  are encoded, so the address bar also updates live as you interact and collapses back to a
+  bare URL after **Reset to initial condition**.
 
 All of the above (view, iterations, palette, Julia mode/constant, progressive mode, smooth
 coloring, and the grid/marker overlay checkboxes) is persisted to `localStorage` and restored
 on the next page load, so the app reopens where you left it. Settings-panel visibility (the
 ☰ toggle / **H** key) is a session-only preference and is not persisted.
+
+Opening a URL with share parameters (`?x=...&y=...&scale=...`, etc.) always takes
+precedence over `localStorage`: any field present in the URL is applied, and any field
+*not* present falls back to the app's built-in defaults, not to whatever was previously
+saved locally in that browser. In other words, a partial share link is not merged with
+your existing local settings — it's applied against a clean slate.
 
 ## Testing
 

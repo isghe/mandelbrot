@@ -251,7 +251,7 @@ class MandelbrotApp {
 
     const num = (name) => {
       const raw = params.get(name);
-      if (raw === null) return undefined;
+      if (raw === null || raw === "") return undefined;
       const v = Number(raw);
       return Number.isFinite(v) ? v : undefined;
     };

@@ -97,11 +97,21 @@ test('a share URL with only some params leaves the rest at their defaults', asyn
   expect(state.paletteType).toBe(4);
 
   // The live address-bar update shouldn't fabricate params for untouched fields either.
-  await page.waitForTimeout(600);
+  await expect.poll(() => new URL(page.url()).searchParams.get('x')).not.toBeNull();
   const url = new URL(page.url());
   expect(url.searchParams.get('iter')).toBeNull();
   expect(url.searchParams.get('jx')).toBeNull();
   expect(url.searchParams.get('palette')).toBeNull();
+});
+
+test('a param present but empty (e.g. ?iter=) is treated as absent, not zero', async ({ page }) => {
+  await page.goto('/index.html?iter=&x=-1.25&y=0.1');
+
+  const gpuError = page.locator('#gpuError');
+  await expect(gpuError).toBeHidden();
+
+  const maxIter = await page.evaluate(() => window.app.maxIter);
+  expect(maxIter).toBe(256);
 });
 
 const DEFAULTS = {
@@ -120,6 +130,8 @@ const SINGLE_PARAM_CASES = [
   ['centerMark=1', 'centerMarker', 1],
   ['juliaMark=1', 'juliaMarker', 1],
   ['scale=1.5', 'scale', 1.5],
+  ['x=-1.25&y=0.1', 'center', { x: -1.25, y: 0.1 }],
+  ['jx=-0.3&jy=0.9', 'juliaC', { x: -0.3, y: 0.9 }],
 ];
 
 for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
