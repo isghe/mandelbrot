@@ -7,6 +7,15 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 
 ![Deep zoom example](example.png)
 
+- **Real-time WebGPU rendering** — the whole Mandelbrot/Julia iteration runs on the GPU,
+  panning and zooming at interactive framerates.
+- **Deep zoom** via double-single precision arithmetic in the shader, pushing past the
+  ~1e-7 wall of native `f32` down to ~1e-13/1e-14.
+- **Interactive Julia mode** — click anywhere on the Mandelbrot set to preview and pin the
+  corresponding Julia set.
+- **Shareable view URLs** — copy a link that reproduces the exact view, iterations,
+  palette, and mode you're looking at.
+
 ## Running
 
 Serve the directory over `http://` or `https://` and open `index.html`:
