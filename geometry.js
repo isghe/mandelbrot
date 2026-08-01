@@ -39,19 +39,19 @@ export const domPoint = { binaryOperation, add, sub, scale, multiply, negate, le
 // Screen-normalized [0,1] point -> fractal-space point, anchored at
 // `anchor`, given the view's vertical extent `scale` (complex-plane units)
 // and the canvas `aspect` ratio (width/height).
-function toFractal(normPoint, anchor, scale, aspect) {
+function normalizedToFractal(normPoint, anchor, scale, aspect) {
   return new DOMPointReadOnly(
     (normPoint.x - 0.5) * scale * aspect + anchor.x,
     (0.5 - normPoint.y) * scale + anchor.y
   );
 }
 
-// Solves toFractal(normPoint, anchor, scale, aspect) === fractalPoint for
+// Solves normalizedToFractal(normPoint, anchor, scale, aspect) === fractalPoint for
 // `anchor`, given `normPoint` and `fractalPoint` fixed. Used to zoom while
 // keeping a chosen fractal point under a fixed screen position: not a true
-// functional inverse of toFractal over normPoint<->fractal (those stay
+// functional inverse of normalizedToFractal over normPoint<->fractal (those stay
 // fixed here) — just isolating the other term, since anchor enters
-// toFractal additively with coefficient 1.
+// normalizedToFractal additively with coefficient 1.
 function anchorFor(fractalPoint, normPoint, scale, aspect) {
   return new DOMPointReadOnly(
     fractalPoint.x - (normPoint.x - 0.5) * scale * aspect,
@@ -59,7 +59,7 @@ function anchorFor(fractalPoint, normPoint, scale, aspect) {
   );
 }
 
-// Inverse of toFractal: fractal-space point -> screen-normalized [0,1] point.
+// Inverse of normalizedToFractal: fractal-space point -> screen-normalized [0,1] point.
 function fractalToNormalized(fractalPoint, anchor, scale, aspect) {
   return new DOMPointReadOnly(
     (fractalPoint.x - anchor.x) / (scale * aspect) + 0.5,
@@ -75,7 +75,7 @@ function fractalToPixel(fractalPoint, anchor, scale, aspect, w, h) {
 
 // New anchor after dragging by `screenDelta` (a normalized [0,1] screen-space
 // displacement), given the view's `scale` and `aspect`. Same fractal-per-screen-unit
-// relationship as toFractal, just solved for a shifted anchor instead of a point.
+// relationship as normalizedToFractal, just solved for a shifted anchor instead of a point.
 function pan(anchor, screenDelta, scale, aspect) {
   return new DOMPointReadOnly(
     anchor.x - screenDelta.x * scale * aspect,
@@ -83,7 +83,7 @@ function pan(anchor, screenDelta, scale, aspect) {
   );
 }
 
-export const view = { toFractal, anchorFor, fractalToNormalized, fractalToPixel, pan };
+export const view = { normalizedToFractal, anchorFor, fractalToNormalized, fractalToPixel, pan };
 
 // Rounds a raw grid step (range / targetLines) to a "nice" value of the form
 // {1, 2, 5} * 10^n, so grid line density stays reasonable across zoom levels.
