@@ -16,6 +16,10 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 - **Shareable view URLs** — copy a link that reproduces the exact view, iterations,
   palette, and mode you're looking at.
 
+  Example: https://isghe.github.io/mandelbrot/?x=-0.7445137502875607&y=0.16445045543801942&scale=0.007380653541488702
+
+  ![Spiral view reached via a shared URL](share-example.png)
+
 ## Running
 
 Serve the directory over `http://` or `https://` and open `index.html`:
