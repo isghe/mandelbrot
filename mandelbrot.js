@@ -51,6 +51,7 @@ class MandelbrotApp {
   pendingWheelSnapshot = null;
   wheelHistoryTimer = null;
   saveSettingsTimer = null;
+  shareBtnResetTimer = null;
 
   // render scheduling
   rafPending = false;
@@ -113,6 +114,7 @@ class MandelbrotApp {
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
+    this.shareBtn   = document.getElementById("shareBtn");
 
     this.iterSlider.oninput = this.onIterInput;
     this.iterSlider.onchange = () => {
@@ -138,6 +140,7 @@ class MandelbrotApp {
     this.backBtn.onclick    = this.onBack;
     this.forwardBtn.onclick = this.onForward;
     this.resetBtn.onclick   = this.onReset;
+    this.shareBtn.onclick   = this.onShare;
     this.uiToggleBtn.onclick = this.onUiToggle;
 
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
@@ -194,6 +197,7 @@ class MandelbrotApp {
     } catch {
       // localStorage unavailable (private browsing, quota, etc.) — ignore
     }
+    history.replaceState(null, '', this.buildShareUrl());
   }
 
   loadSettings() {
@@ -210,8 +214,75 @@ class MandelbrotApp {
     this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
   };
 
+  // Only encodes fields that differ from the initial condition, so the
+  // "Reset to initial condition" state always maps to a bare URL and the
+  // address bar only ever names what's actually been changed.
+  buildShareUrl() {
+    const init = this.initialState;
+    const params = new URLSearchParams();
+
+    if (this.center.x !== init.center.x || this.center.y !== init.center.y) {
+      params.set("x", this.center.x);
+      params.set("y", this.center.y);
+    }
+    if (this.scale !== init.scale) params.set("scale", this.scale);
+    if (this.maxIter !== init.maxIter) params.set("iter", this.maxIter);
+    if (this.juliaMode !== init.juliaMode) params.set("julia", this.juliaMode);
+    if (this.juliaC.x !== init.juliaC.x || this.juliaC.y !== init.juliaC.y) {
+      params.set("jx", this.juliaC.x);
+      params.set("jy", this.juliaC.y);
+    }
+    if (this.paletteType !== init.paletteType) params.set("palette", this.paletteType);
+    if (this.progressiveMode !== init.progressiveMode) params.set("progressive", this.progressiveMode);
+    if (this.smoothColoring !== init.smoothColoring) params.set("smooth", this.smoothColoring);
+    // Overlay display preferences aren't part of initialState (see the
+    // comment on the on*Change handlers below); Reset always zeroes them.
+    if (this.gridOverlay) params.set("grid", this.gridOverlay);
+    if (this.centerMarker) params.set("centerMark", this.centerMarker);
+    if (this.juliaMarker) params.set("juliaMark", this.juliaMarker);
+
+    const qs = params.toString();
+    return `${location.origin}${location.pathname}${qs ? "?" + qs : ""}`;
+  }
+
+  parseShareParams() {
+    const params = new URLSearchParams(location.search);
+    if ([...params.keys()].length === 0) return null;
+
+    const num = (name) => {
+      const raw = params.get(name);
+      if (raw === null || raw === "") return undefined;
+      const v = Number(raw);
+      return Number.isFinite(v) ? v : undefined;
+    };
+
+    const s = {};
+    const setIfPresent = (field, paramName) => {
+      const v = num(paramName);
+      if (v !== undefined) s[field] = v;
+    };
+
+    const x = num("x"), y = num("y");
+    if (x !== undefined && y !== undefined) s.center = { x, y };
+    const jx = num("jx"), jy = num("jy");
+    if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
+
+    setIfPresent("scale", "scale");
+    setIfPresent("maxIter", "iter");
+    setIfPresent("juliaMode", "julia");
+    setIfPresent("paletteType", "palette");
+    setIfPresent("progressiveMode", "progressive");
+    setIfPresent("smoothColoring", "smooth");
+    setIfPresent("gridOverlay", "grid");
+    setIfPresent("centerMarker", "centerMark");
+    setIfPresent("juliaMarker", "juliaMark");
+
+    return Object.keys(s).length > 0 ? s : null;
+  }
+
   restoreSettings() {
-    const s = this.loadSettings();
+    const shared = this.parseShareParams();
+    const s = shared || this.loadSettings();
     if (!s) return;
 
     const restoreNumber = (field) => {
@@ -237,6 +308,8 @@ class MandelbrotApp {
     restoreNumber("juliaMarker");
 
     this.pivot = this.center;
+
+    if (shared) this.saveSettings();
   }
 
   pushHistory(snapshot) {
@@ -702,6 +775,21 @@ class MandelbrotApp {
   // Panel visibility is a display preference, not view state — no pushHistory (mirrors overlay toggles above).
   onUiToggle = () => {
     this.uiPanel.classList.toggle("hidden");
+  };
+
+  onShare = async () => {
+    const url = this.buildShareUrl();
+    const originalLabel = this.shareBtn.textContent;
+    try {
+      await navigator.clipboard.writeText(url);
+      this.shareBtn.textContent = "Copied!";
+    } catch {
+      window.prompt("Copy this link:", url);
+    }
+    clearTimeout(this.shareBtnResetTimer);
+    this.shareBtnResetTimer = setTimeout(() => {
+      this.shareBtn.textContent = originalLabel;
+    }, 1500);
   };
 
   onKeyDown = (e) => {
