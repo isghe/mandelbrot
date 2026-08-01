@@ -639,7 +639,7 @@ class MandelbrotApp {
   // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
   toFractal(normPoint, anchor) {
     const aspect = this.canvas.width / this.canvas.height;
-    return view.toFractal(normPoint, anchor, this.scale, aspect);
+    return view.normalizedToFractal(normPoint, anchor, this.scale, aspect);
   }
 
   onIterInput = () => {

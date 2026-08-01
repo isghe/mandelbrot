@@ -79,31 +79,31 @@ function assertPointClose(actual, expectedX, expectedY, msg) {
   assert.ok(Math.abs(actual.y - expectedY) < 1e-9, msg && `${msg} (y): ${actual.y} vs ${expectedY}`);
 }
 
-test('toFractal maps the screen center to the anchor', () => {
+test('normalizedToFractal maps the screen center to the anchor', () => {
   const anchor = new DOMPointReadOnly(0, 0);
-  const r = view.toFractal(new DOMPointReadOnly(0.5, 0.5), anchor, 2, 1);
+  const r = view.normalizedToFractal(new DOMPointReadOnly(0.5, 0.5), anchor, 2, 1);
   assertPoint(r, 0, 0);
 });
 
-test('toFractal: x grows right, y grows up (inverted from screen y)', () => {
+test('normalizedToFractal: x grows right, y grows up (inverted from screen y)', () => {
   const anchor = new DOMPointReadOnly(0, 0);
-  assertPoint(view.toFractal(new DOMPointReadOnly(1.0, 0.5), anchor, 2, 1), 1, 0);
-  assertPoint(view.toFractal(new DOMPointReadOnly(0.5, 0.0), anchor, 2, 1), 0, 1);
+  assertPoint(view.normalizedToFractal(new DOMPointReadOnly(1.0, 0.5), anchor, 2, 1), 1, 0);
+  assertPoint(view.normalizedToFractal(new DOMPointReadOnly(0.5, 0.0), anchor, 2, 1), 0, 1);
 });
 
-test('toFractal accounts for aspect ratio on x only', () => {
+test('normalizedToFractal accounts for aspect ratio on x only', () => {
   const anchor = new DOMPointReadOnly(0, 0);
-  const r = view.toFractal(new DOMPointReadOnly(0.75, 0.5), anchor, 2, 2);
+  const r = view.normalizedToFractal(new DOMPointReadOnly(0.75, 0.5), anchor, 2, 2);
   assertPoint(r, 1, 0);
 });
 
-test('anchorFor is the inverse of toFractal, solved for anchor', () => {
+test('anchorFor is the inverse of normalizedToFractal, solved for anchor', () => {
   const anchor = new DOMPointReadOnly(-0.5, 0.1);
   const scale = 3.2;
   const aspect = 1.6;
   for (const [nx, ny] of [[0, 0], [1, 1], [0.25, 0.75], [0.5, 0.5]]) {
     const normPoint = new DOMPointReadOnly(nx, ny);
-    const fractalPoint = view.toFractal(normPoint, anchor, scale, aspect);
+    const fractalPoint = view.normalizedToFractal(normPoint, anchor, scale, aspect);
     const back = view.anchorFor(fractalPoint, normPoint, scale, aspect);
     assertPointClose(back, anchor.x, anchor.y, `round-trip (${nx},${ny})`);
   }
@@ -171,12 +171,12 @@ test('fractalToNormalized accounts for a non-origin anchor', () => {
   assertPoint(r, 0.5, 0.5);
 });
 
-test('fractalToNormalized is the inverse of toFractal', () => {
+test('fractalToNormalized is the inverse of normalizedToFractal', () => {
   const anchor = new DOMPointReadOnly(-0.5, 0.1);
   const scale = 3.2;
   const aspect = 1.6;
   for (const [nx, ny] of [[0, 0], [1, 1], [0.25, 0.75], [0.5, 0.5]]) {
-    const fractal = view.toFractal(new DOMPointReadOnly(nx, ny), anchor, scale, aspect);
+    const fractal = view.normalizedToFractal(new DOMPointReadOnly(nx, ny), anchor, scale, aspect);
     const back = view.fractalToNormalized(fractal, anchor, scale, aspect);
     assertPointClose(back, nx, ny, `round-trip (${nx},${ny})`);
   }
