@@ -81,6 +81,75 @@ test('opening a share URL overrides both defaults and localStorage', async ({ pa
   await expect(page.locator('#iterLabel')).toHaveText('512');
 });
 
+test('a share URL with only some params leaves the rest at their defaults', async ({ page }) => {
+  await page.goto('/index.html?x=-0.17662744107034933&y=1.0765741326067357&scale=0.14087522978004308');
+
+  const gpuError = page.locator('#gpuError');
+  await expect(gpuError).toBeHidden();
+
+  const state = await page.evaluate(() => ({
+    maxIter: window.app.maxIter,
+    juliaC: { x: window.app.juliaC.x, y: window.app.juliaC.y },
+    paletteType: window.app.paletteType,
+  }));
+  expect(state.maxIter).toBe(256);
+  expect(state.juliaC).toEqual({ x: -0.8, y: 0.156 });
+  expect(state.paletteType).toBe(4);
+
+  // The live address-bar update shouldn't fabricate params for untouched fields either.
+  await page.waitForTimeout(600);
+  const url = new URL(page.url());
+  expect(url.searchParams.get('iter')).toBeNull();
+  expect(url.searchParams.get('jx')).toBeNull();
+  expect(url.searchParams.get('palette')).toBeNull();
+});
+
+const DEFAULTS = {
+  maxIter: 256, juliaMode: 0, paletteType: 4, progressiveMode: 0, smoothColoring: 0,
+  gridOverlay: 0, centerMarker: 0, juliaMarker: 0,
+  center: { x: -0.5, y: 0 }, juliaC: { x: -0.8, y: 0.156 }, scale: 3,
+};
+
+const SINGLE_PARAM_CASES = [
+  ['iter=999', 'maxIter', 999],
+  ['julia=1', 'juliaMode', 1],
+  ['palette=2', 'paletteType', 2],
+  ['progressive=1', 'progressiveMode', 1],
+  ['smooth=1', 'smoothColoring', 1],
+  ['grid=1', 'gridOverlay', 1],
+  ['centerMark=1', 'centerMarker', 1],
+  ['juliaMark=1', 'juliaMarker', 1],
+  ['scale=1.5', 'scale', 1.5],
+];
+
+for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
+  test(`a share URL with only "${qs}" sets just that field, others stay default`, async ({ page }) => {
+    await page.goto(`/index.html?${qs}`);
+    const gpuError = page.locator('#gpuError');
+    await expect(gpuError).toBeHidden();
+
+    const state = await page.evaluate(() => ({
+      maxIter: window.app.maxIter,
+      juliaMode: window.app.juliaMode,
+      paletteType: window.app.paletteType,
+      progressiveMode: window.app.progressiveMode,
+      smoothColoring: window.app.smoothColoring,
+      gridOverlay: window.app.gridOverlay,
+      centerMarker: window.app.centerMarker,
+      juliaMarker: window.app.juliaMarker,
+      center: { x: window.app.center.x, y: window.app.center.y },
+      juliaC: { x: window.app.juliaC.x, y: window.app.juliaC.y },
+      scale: window.app.scale,
+    }));
+
+    expect(state[field]).toEqual(expected);
+    for (const key of Object.keys(DEFAULTS)) {
+      if (key === field) continue;
+      expect(state[key]).toEqual(DEFAULTS[key]);
+    }
+  });
+}
+
 test('opening a share URL persists the shared settings to localStorage', async ({ page }) => {
   await page.goto('/index.html?x=-1.25&y=0.1&scale=0.5&iter=512&julia=1&jx=-0.7&jy=0.25&palette=3&progressive=0&smooth=1&grid=1&centerMark=0&juliaMark=0');
 
