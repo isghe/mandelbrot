@@ -51,6 +51,7 @@ class MandelbrotApp {
   pendingWheelSnapshot = null;
   wheelHistoryTimer = null;
   saveSettingsTimer = null;
+  shareBtnResetTimer = null;
 
   // render scheduling
   rafPending = false;
@@ -113,6 +114,7 @@ class MandelbrotApp {
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
+    this.shareBtn   = document.getElementById("shareBtn");
 
     this.iterSlider.oninput = this.onIterInput;
     this.iterSlider.onchange = () => {
@@ -138,6 +140,7 @@ class MandelbrotApp {
     this.backBtn.onclick    = this.onBack;
     this.forwardBtn.onclick = this.onForward;
     this.resetBtn.onclick   = this.onReset;
+    this.shareBtn.onclick   = this.onShare;
     this.uiToggleBtn.onclick = this.onUiToggle;
 
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
@@ -210,8 +213,55 @@ class MandelbrotApp {
     this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
   };
 
+  buildShareUrl() {
+    const params = new URLSearchParams({
+      x: this.center.x,
+      y: this.center.y,
+      scale: this.scale,
+      iter: this.maxIter,
+      julia: this.juliaMode,
+      jx: this.juliaC.x,
+      jy: this.juliaC.y,
+      palette: this.paletteType,
+      progressive: this.progressiveMode,
+      smooth: this.smoothColoring,
+      grid: this.gridOverlay,
+      centerMark: this.centerMarker,
+      juliaMark: this.juliaMarker,
+    });
+    return `${location.origin}${location.pathname}?${params.toString()}`;
+  }
+
+  parseShareParams() {
+    const params = new URLSearchParams(location.search);
+    if ([...params.keys()].length === 0) return null;
+
+    const num = (name) => {
+      const v = Number(params.get(name));
+      return Number.isFinite(v) ? v : undefined;
+    };
+
+    const s = {};
+    const x = num("x"), y = num("y");
+    if (x !== undefined && y !== undefined) s.center = { x, y };
+    const scale = num("scale"); if (scale !== undefined) s.scale = scale;
+    const maxIter = num("iter"); if (maxIter !== undefined) s.maxIter = maxIter;
+    const juliaMode = num("julia"); if (juliaMode !== undefined) s.juliaMode = juliaMode;
+    const jx = num("jx"), jy = num("jy");
+    if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
+    const paletteType = num("palette"); if (paletteType !== undefined) s.paletteType = paletteType;
+    const progressiveMode = num("progressive"); if (progressiveMode !== undefined) s.progressiveMode = progressiveMode;
+    const smoothColoring = num("smooth"); if (smoothColoring !== undefined) s.smoothColoring = smoothColoring;
+    const gridOverlay = num("grid"); if (gridOverlay !== undefined) s.gridOverlay = gridOverlay;
+    const centerMarker = num("centerMark"); if (centerMarker !== undefined) s.centerMarker = centerMarker;
+    const juliaMarker = num("juliaMark"); if (juliaMarker !== undefined) s.juliaMarker = juliaMarker;
+
+    return Object.keys(s).length > 0 ? s : null;
+  }
+
   restoreSettings() {
-    const s = this.loadSettings();
+    const shared = this.parseShareParams();
+    const s = shared || this.loadSettings();
     if (!s) return;
 
     const restoreNumber = (field) => {
@@ -237,6 +287,8 @@ class MandelbrotApp {
     restoreNumber("juliaMarker");
 
     this.pivot = this.center;
+
+    if (shared) this.saveSettings();
   }
 
   pushHistory(snapshot) {
@@ -702,6 +754,21 @@ class MandelbrotApp {
   // Panel visibility is a display preference, not view state — no pushHistory (mirrors overlay toggles above).
   onUiToggle = () => {
     this.uiPanel.classList.toggle("hidden");
+  };
+
+  onShare = async () => {
+    const url = this.buildShareUrl();
+    const originalLabel = this.shareBtn.textContent;
+    try {
+      await navigator.clipboard.writeText(url);
+      this.shareBtn.textContent = "Copied!";
+    } catch {
+      window.prompt("Copy this link:", url);
+    }
+    clearTimeout(this.shareBtnResetTimer);
+    this.shareBtnResetTimer = setTimeout(() => {
+      this.shareBtn.textContent = originalLabel;
+    }, 1500);
   };
 
   onKeyDown = (e) => {
