@@ -4,6 +4,7 @@ import { makePalette } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
+import { createRenderer } from './renderer.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -369,83 +370,18 @@ class MandelbrotApp {
   }
 
   async initGPU() {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
+    const renderer = await createRenderer(this.canvas, this.palette256, {
+      onDeviceLost: (info) => {
+        this.deviceLost = true;
+        this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
+      },
+      onUncapturedError: (message) => this.showError(`WebGPU error: ${message}`),
+    });
+    if (!renderer) {
       this.showError("No WebGPU adapter available.");
       return;
     }
-    this.device  = await adapter.requestDevice();
-
-    this.device.lost.then((info) => {
-      if (info.reason === "destroyed") return; // we tore it down ourselves
-      this.deviceLost = true;
-      this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
-    });
-    this.device.addEventListener("uncapturederror", (event) => {
-      this.showError(`WebGPU error: ${event.error.message}`);
-    });
-
-    this.context = this.canvas.getContext("webgpu");
-    if (!this.context) {
-      throw new Error("Unable to create the WebGPU canvas context.");
-    }
-    this.format  = navigator.gpu.getPreferredCanvasFormat();
-    this.context.configure({ device: this.device, format: this.format });
-
-    this.paletteTex = this.device.createTexture({
-      size:[256,1],
-      format:"rgba8unorm",
-      usage:GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
-    });
-    this.device.queue.writeTexture(
-      {texture:this.paletteTex},
-      this.palette256,
-      {bytesPerRow:256*4},
-      {width:256,height:1}
-    );
-    this.paletteSampler = this.device.createSampler({
-      magFilter:"linear", minFilter:"linear"
-    });
-
-    // WGSL (f32 + double-single center/julia)
-    const shaderResponse = await fetch("mandelbrot.wgsl", { cache: "no-cache" });
-    if (!shaderResponse.ok) {
-      throw new Error(`WGSL fetch failed: ${shaderResponse.status}`);
-    }
-    const shaderCode = await shaderResponse.text();
-    const module = this.device.createShaderModule({code:shaderCode});
-
-    const compilationInfo = await module.getCompilationInfo();
-    const shaderErrors = compilationInfo.messages.filter((message) => message.type === "error");
-    if (shaderErrors.length > 0) {
-      throw new Error(
-        shaderErrors.map((error) => `${error.lineNum}:${error.linePos} ${error.message}`).join("\n")
-      );
-    }
-
-    this.pipeline = this.device.createRenderPipeline({
-      layout:"auto",
-      vertex:{module,entryPoint:"vs_main"},
-      fragment:{module,entryPoint:"fs_main",targets:[{format:this.format}]},
-      primitive:{topology:"triangle-list"}
-    });
-
-    // Uniform buffer: 14 logical f32 fields + 2 padding floats, since WGSL
-    // rounds a uniform struct's size up to a 16-byte multiple (64 B here).
-    this.uniformBuffer = this.device.createBuffer({
-      size: 16 * 4,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-
-    this.bindGroup = this.device.createBindGroup({
-      layout:this.pipeline.getBindGroupLayout(0),
-      entries:[
-        {binding:0,resource:{buffer:this.uniformBuffer}},
-        {binding:1,resource:this.paletteSampler},
-        {binding:2,resource:this.paletteTex.createView()}
-      ]
-    });
-
+    this.renderer = renderer;
     this.scheduleRender();
   }
 
@@ -456,13 +392,8 @@ class MandelbrotApp {
   applyPalette(type) {
     this.paletteType = type;
     this.palette256 = makePalette(type);
-    if (!this.device) return;
-    this.device.queue.writeTexture(
-      {texture:this.paletteTex},
-      this.palette256,
-      {bytesPerRow:256*4},
-      {width:256,height:1}
-    );
+    if (!this.renderer) return;
+    this.renderer.writePalette(this.palette256);
   }
 
   // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
@@ -556,7 +487,7 @@ class MandelbrotApp {
   };
 
   onReset = () => {
-    if (!this.device) return;
+    if (!this.renderer) return;
     this.pendingIterSnapshot = null;
     this.pendingZoomSnapshot = null;
     this.history.reset();
@@ -746,27 +677,10 @@ class MandelbrotApp {
       this.canvas.height,
       this.juliaMode,
       this.smoothColoring,
-      0, 0 // padding to 64 B (16 floats), see uniformBuffer comment in init()
+      0, 0 // padding to 64 B (16 floats), see renderer.js's uniformBuffer comment
     ]);
 
-    this.device.queue.writeBuffer(this.uniformBuffer,0,data);
-
-    const encoder=this.device.createCommandEncoder();
-    const pass=encoder.beginRenderPass({
-      colorAttachments:[{
-        view:this.context.getCurrentTexture().createView(),
-        loadOp:"clear",
-        storeOp:"store",
-        clearValue:{r:0,g:0,b:0,a:1}
-      }]
-    });
-
-    pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0,this.bindGroup);
-    pass.draw(3);
-    pass.end();
-
-    this.device.queue.submit([encoder.finish()]);
+    this.renderer.render(data);
   };
 }
 
