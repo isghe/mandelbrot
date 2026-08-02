@@ -3,6 +3,7 @@ import { split64 } from './precision.js';
 import { makePalette } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
+import { ViewHistory } from './history.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -46,13 +47,10 @@ class MandelbrotApp {
   selectStart = new DOMPointReadOnly(0, 0);
 
   // view history (Back / Forward)
-  viewHistory = [];
-  viewFuture = [];
+  history = new ViewHistory(MandelbrotApp.WHEEL_HISTORY_MS, () => this.updateHistoryButtons());
   dragStartSnapshot = null;
   pendingZoomSnapshot = null;
   pendingIterSnapshot = null;
-  pendingWheelSnapshot = null;
-  wheelHistoryTimer = null;
   saveSettingsTimer = null;
   shareBtnResetTimer = null;
 
@@ -242,29 +240,16 @@ class MandelbrotApp {
   }
 
   pushHistory(snapshot) {
-    if (this.wheelHistoryTimer) {
-      this.flushPendingWheelHistory();
-    }
-    this.viewHistory.push(snapshot);
-    this.viewFuture = [];
-    this.updateHistoryButtons();
+    this.history.push(snapshot);
   }
 
   flushPendingWheelHistory() {
-    if (this.wheelHistoryTimer) {
-      clearTimeout(this.wheelHistoryTimer);
-      this.wheelHistoryTimer = null;
-    }
-    if (this.pendingWheelSnapshot) {
-      const snap = this.pendingWheelSnapshot;
-      this.pendingWheelSnapshot = null;
-      this.pushHistory(snap);
-    }
+    this.history.flushPendingWheel();
   }
 
   updateHistoryButtons() {
-    this.backBtn.disabled = this.viewHistory.length === 0 && !this.pendingWheelSnapshot;
-    this.forwardBtn.disabled = this.viewFuture.length === 0;
+    this.backBtn.disabled = !this.history.canGoBack;
+    this.forwardBtn.disabled = !this.history.canGoForward;
   }
 
   applySnapshot(s) {
@@ -572,14 +557,9 @@ class MandelbrotApp {
 
   onReset = () => {
     if (!this.device) return;
-    clearTimeout(this.wheelHistoryTimer);
-    this.wheelHistoryTimer = null;
-    this.pendingWheelSnapshot = null;
     this.pendingIterSnapshot = null;
     this.pendingZoomSnapshot = null;
-    this.viewHistory = [];
-    this.viewFuture = [];
-    this.updateHistoryButtons();
+    this.history.reset();
     // Overlay display preferences aren't part of view history (see the
     // comment on the on*Change handlers below), but Reset should still
     // restore them to their defaults along with everything else.
@@ -593,23 +573,13 @@ class MandelbrotApp {
   };
 
   onBack = () => {
-    this.flushPendingWheelHistory();
-    if (this.viewHistory.length === 0) return;
-    const current = this.snapshotView();
-    const prev = this.viewHistory.pop();
-    this.viewFuture.push(current);
-    this.applySnapshot(prev);
-    this.updateHistoryButtons();
+    const prev = this.history.back(this.snapshotView());
+    if (prev) this.applySnapshot(prev);
   };
 
   onForward = () => {
-    this.flushPendingWheelHistory();
-    if (this.viewFuture.length === 0) return;
-    const current = this.snapshotView();
-    const next = this.viewFuture.pop();
-    this.viewHistory.push(current);
-    this.applySnapshot(next);
-    this.updateHistoryButtons();
+    const next = this.history.forward(this.snapshotView());
+    if (next) this.applySnapshot(next);
   };
 
   // PAN: pointerdown / pointermove / pointerup
@@ -736,12 +706,7 @@ class MandelbrotApp {
   // WHEEL → zoom centered on the pivot
   onWheel = (e) => {
     e.preventDefault();
-    if (!this.pendingWheelSnapshot) {
-      this.pendingWheelSnapshot = this.snapshotView();
-      this.updateHistoryButtons();
-    }
-    clearTimeout(this.wheelHistoryTimer);
-    this.wheelHistoryTimer = setTimeout(() => this.flushPendingWheelHistory(), MandelbrotApp.WHEEL_HISTORY_MS);
+    this.history.armWheel(() => this.snapshotView());
     const aspect = this.canvas.width / this.canvas.height;
     const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
 
