@@ -124,6 +124,38 @@ test('parseShareParams skips non-finite values', () => {
   assert.strictEqual(s, null);
 });
 
+test('buildShareUrl -> parseShareParams round-trips every changed field', () => {
+  const state = baseState({
+    center: { x: -1.25, y: 0.1 },
+    scale: 1.5,
+    maxIter: 999,
+    juliaMode: 1,
+    juliaC: { x: -0.3, y: 0.9 },
+    paletteType: 2,
+    progressiveMode: 1,
+    smoothColoring: 1,
+    gridOverlay: 1,
+    centerMarker: 1,
+    juliaMarker: 1,
+  });
+  const url = share.buildShareUrl(state, initialState, 'https://example.com', '/');
+  const parsed = share.parseShareParams(new URL(url).search);
+
+  assert.deepStrictEqual(parsed, {
+    center: { x: -1.25, y: 0.1 },
+    scale: 1.5,
+    maxIter: 999,
+    juliaMode: 1,
+    juliaC: { x: -0.3, y: 0.9 },
+    paletteType: 2,
+    progressiveMode: 1,
+    smoothColoring: 1,
+    gridOverlay: 1,
+    centerMarker: 1,
+    juliaMarker: 1,
+  });
+});
+
 test('settingsData produces a plain JSON-serializable snapshot of state', () => {
   const state = baseState({ scale: 1.5, gridOverlay: 1 });
   const data = share.settingsData(state);
