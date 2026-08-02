@@ -487,7 +487,6 @@ class MandelbrotApp {
   };
 
   onReset = () => {
-    if (!this.renderer) return;
     this.pendingIterSnapshot = null;
     this.pendingZoomSnapshot = null;
     this.history.reset();
@@ -670,7 +669,7 @@ class MandelbrotApp {
 
   // RENDER
   renderOnce = () => {
-    if (this.deviceLost) return;
+    if (this.deviceLost || !this.renderer) return;
     const [cx_hi, cx_lo] = split64(this.center.x);
     const [cy_hi, cy_lo] = split64(this.center.y);
     const [jx_hi, jx_lo] = split64(this.juliaC.x);
