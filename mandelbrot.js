@@ -2,6 +2,7 @@ import { domPoint, view } from './geometry.js';
 import { split64 } from './precision.js';
 import { makePalette } from './palette.js';
 import { overlay } from './overlay.js';
+import { share } from './share.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -181,19 +182,7 @@ class MandelbrotApp {
   }
 
   saveSettings() {
-    const data = {
-      center: { x: this.center.x, y: this.center.y },
-      scale: this.scale,
-      maxIter: this.maxIter,
-      juliaMode: this.juliaMode,
-      juliaC: { x: this.juliaC.x, y: this.juliaC.y },
-      paletteType: this.paletteType,
-      progressiveMode: this.progressiveMode,
-      smoothColoring: this.smoothColoring,
-      gridOverlay: this.gridOverlay,
-      centerMarker: this.centerMarker,
-      juliaMarker: this.juliaMarker,
-    };
+    const data = share.settingsData(this);
     try {
       localStorage.setItem(MandelbrotApp.SETTINGS_KEY, JSON.stringify(data));
     } catch {
@@ -216,74 +205,12 @@ class MandelbrotApp {
     this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
   };
 
-  // Only encodes fields that differ from the initial condition, so the
-  // "Reset to initial condition" state always maps to a bare URL and the
-  // address bar only ever names what's actually been changed.
   buildShareUrl() {
-    const init = this.initialState;
-    const params = new URLSearchParams();
-
-    if (this.center.x !== init.center.x || this.center.y !== init.center.y) {
-      params.set("x", this.center.x);
-      params.set("y", this.center.y);
-    }
-    if (this.scale !== init.scale) params.set("scale", this.scale);
-    if (this.maxIter !== init.maxIter) params.set("iter", this.maxIter);
-    if (this.juliaMode !== init.juliaMode) params.set("julia", this.juliaMode);
-    if (this.juliaC.x !== init.juliaC.x || this.juliaC.y !== init.juliaC.y) {
-      params.set("jx", this.juliaC.x);
-      params.set("jy", this.juliaC.y);
-    }
-    if (this.paletteType !== init.paletteType) params.set("palette", this.paletteType);
-    if (this.progressiveMode !== init.progressiveMode) params.set("progressive", this.progressiveMode);
-    if (this.smoothColoring !== init.smoothColoring) params.set("smooth", this.smoothColoring);
-    // Overlay display preferences aren't part of initialState (see the
-    // comment on the on*Change handlers below); Reset always zeroes them.
-    if (this.gridOverlay) params.set("grid", this.gridOverlay);
-    if (this.centerMarker) params.set("centerMark", this.centerMarker);
-    if (this.juliaMarker) params.set("juliaMark", this.juliaMarker);
-
-    const qs = params.toString();
-    return `${location.origin}${location.pathname}${qs ? "?" + qs : ""}`;
-  }
-
-  parseShareParams() {
-    const params = new URLSearchParams(location.search);
-    if ([...params.keys()].length === 0) return null;
-
-    const num = (name) => {
-      const raw = params.get(name);
-      if (raw === null || raw === "") return undefined;
-      const v = Number(raw);
-      return Number.isFinite(v) ? v : undefined;
-    };
-
-    const s = {};
-    const setIfPresent = (field, paramName) => {
-      const v = num(paramName);
-      if (v !== undefined) s[field] = v;
-    };
-
-    const x = num("x"), y = num("y");
-    if (x !== undefined && y !== undefined) s.center = { x, y };
-    const jx = num("jx"), jy = num("jy");
-    if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
-
-    setIfPresent("scale", "scale");
-    setIfPresent("maxIter", "iter");
-    setIfPresent("juliaMode", "julia");
-    setIfPresent("paletteType", "palette");
-    setIfPresent("progressiveMode", "progressive");
-    setIfPresent("smoothColoring", "smooth");
-    setIfPresent("gridOverlay", "grid");
-    setIfPresent("centerMarker", "centerMark");
-    setIfPresent("juliaMarker", "juliaMark");
-
-    return Object.keys(s).length > 0 ? s : null;
+    return share.buildShareUrl(this, this.initialState, location.origin, location.pathname);
   }
 
   restoreSettings() {
-    const shared = this.parseShareParams();
+    const shared = share.parseShareParams(location.search);
     const s = shared || this.loadSettings();
     if (!s) return;
 
