@@ -114,7 +114,7 @@ class MandelbrotApp {
       ["progressiveChk", "progressiveMode"],
       ["smoothColoringChk", "smoothColoring"],
     ];
-    for (const [chk, field] of checkboxFields) this[chk].checked = !!this[field];
+    checkboxFields.forEach(([chk, field]) => { this[chk].checked = !!this[field]; });
     this.paletteSel.value = this.paletteType;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
@@ -231,8 +231,8 @@ class MandelbrotApp {
       "centerMarker", "gridOverlay", "juliaMarker", "juliaMode", "maxIter",
       "paletteType", "progressiveMode", "scale", "smoothColoring",
     ];
-    for (const field of pointFields) restorePoint(field);
-    for (const field of numberFields) restoreNumber(field);
+    pointFields.forEach(restorePoint);
+    numberFields.forEach(restoreNumber);
 
     this.pivot = this.center;
 
@@ -497,10 +497,10 @@ class MandelbrotApp {
       ["gridOverlay", "gridOverlayChk"],
       ["juliaMarker", "juliaMarkerChk"],
     ];
-    for (const [field, chk] of overlayFields) {
+    overlayFields.forEach(([field, chk]) => {
       this[field] = 0;
       this[chk].checked = false;
-    }
+    });
     this.applySnapshot(this.initialState);
   };
 

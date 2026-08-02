@@ -24,7 +24,7 @@ function buildShareUrl(state, initialState, origin, pathname) {
     ["scale", "scale"],
     ["smooth", "smoothColoring"],
   ];
-  for (const [name, field] of changedFields) setIfChanged(name, state[field], init[field]);
+  changedFields.forEach(([name, field]) => setIfChanged(name, state[field], init[field]));
   // Overlay display preferences aren't part of initialState (see the
   // comment on mandelbrot.js's on*Change handlers); Reset always zeroes them.
   if (state.gridOverlay) params.set("grid", state.gridOverlay);
@@ -68,7 +68,7 @@ function parseShareParams(search) {
     ["scale", "scale"],
     ["smoothColoring", "smooth"],
   ];
-  for (const [field, paramName] of presentFields) setIfPresent(field, paramName);
+  presentFields.forEach(([field, paramName]) => setIfPresent(field, paramName));
 
   return Object.keys(s).length > 0 ? s : null;
 }
