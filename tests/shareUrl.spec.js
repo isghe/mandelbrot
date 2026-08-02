@@ -62,6 +62,20 @@ test('Reset clears every parameter back to a bare URL', async ({ page }) => {
   await expect.poll(() => new URL(page.url()).search).toBe('');
 });
 
+test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device lost)', async ({ page }) => {
+  await page.selectOption('#paletteType', '1');
+  await page.click('#juliaMode');
+  await expect.poll(() => new URL(page.url()).searchParams.get('palette')).toBe('1');
+
+  // Simulate the post-device-lost/no-adapter state: app alive, no renderer.
+  await page.evaluate(() => { window.app.renderer = undefined; });
+
+  await page.click('#resetBtn');
+  await expect.poll(() => new URL(page.url()).search).toBe('');
+  await expect(page.locator('#paletteType')).toHaveValue('4');
+  await expect(page.locator('#juliaMode')).not.toBeChecked();
+});
+
 test('opening a share URL overrides both defaults and localStorage', async ({ page }) => {
   await page.selectOption('#paletteType', '2');
   await expect.poll(async () => {
