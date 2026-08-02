@@ -17,11 +17,11 @@ function buildShareUrl(state, initialState, origin, pathname) {
     params.set("jy", state.juliaC.y);
   }
   const changedFields = [
-    ["scale", "scale"],
     ["iter", "maxIter"],
     ["julia", "juliaMode"],
     ["palette", "paletteType"],
     ["progressive", "progressiveMode"],
+    ["scale", "scale"],
     ["smooth", "smoothColoring"],
   ];
   for (const [name, field] of changedFields) setIfChanged(name, state[field], init[field]);
@@ -58,15 +58,15 @@ function parseShareParams(search) {
   if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
 
   const presentFields = [
-    ["scale", "scale"],
-    ["maxIter", "iter"],
+    ["centerMarker", "centerMark"],
+    ["gridOverlay", "grid"],
+    ["juliaMarker", "juliaMark"],
     ["juliaMode", "julia"],
+    ["maxIter", "iter"],
     ["paletteType", "palette"],
     ["progressiveMode", "progressive"],
+    ["scale", "scale"],
     ["smoothColoring", "smooth"],
-    ["gridOverlay", "grid"],
-    ["centerMarker", "centerMark"],
-    ["juliaMarker", "juliaMark"],
   ];
   for (const [field, paramName] of presentFields) setIfPresent(field, paramName);
 

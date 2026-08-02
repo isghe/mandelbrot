@@ -107,10 +107,10 @@ class MandelbrotApp {
     this.centerMarkerChk = document.getElementById("centerMarker");
     this.juliaMarkerChk = document.getElementById("juliaMarker");
     const checkboxFields = [
-      ["gridOverlayChk", "gridOverlay"],
       ["centerMarkerChk", "centerMarker"],
-      ["juliaMarkerChk", "juliaMarker"],
+      ["gridOverlayChk", "gridOverlay"],
       ["juliaChk", "juliaMode"],
+      ["juliaMarkerChk", "juliaMarker"],
       ["progressiveChk", "progressiveMode"],
       ["smoothColoringChk", "smoothColoring"],
     ];
@@ -228,8 +228,8 @@ class MandelbrotApp {
 
     const pointFields = ["center", "juliaC"];
     const numberFields = [
-      "scale", "maxIter", "juliaMode", "paletteType", "progressiveMode",
-      "smoothColoring", "gridOverlay", "centerMarker", "juliaMarker",
+      "centerMarker", "gridOverlay", "juliaMarker", "juliaMode", "maxIter",
+      "paletteType", "progressiveMode", "scale", "smoothColoring",
     ];
     for (const field of pointFields) restorePoint(field);
     for (const field of numberFields) restoreNumber(field);
@@ -493,8 +493,8 @@ class MandelbrotApp {
     // comment on the on*Change handlers below), but Reset should still
     // restore them to their defaults along with everything else.
     const overlayFields = [
-      ["gridOverlay", "gridOverlayChk"],
       ["centerMarker", "centerMarkerChk"],
+      ["gridOverlay", "gridOverlayChk"],
       ["juliaMarker", "juliaMarkerChk"],
     ];
     for (const [field, chk] of overlayFields) {
