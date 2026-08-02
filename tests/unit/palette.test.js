@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makePalette } from '../../palette.js';
+import { makePalette } from '../../src/palette.js';
 
 test('makePalette returns a 256-entry RGBA buffer', () => {
   const palette = makePalette(4);

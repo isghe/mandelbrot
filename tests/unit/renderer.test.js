@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRenderer } from '../../renderer.js';
+import { createRenderer } from '../../src/renderer.js';
 
 // renderer.js wraps the WebGPU API (adapter/device/pipeline/shader
 // compilation), which only exists in a real browser with a GPU adapter (or

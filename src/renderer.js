@@ -46,7 +46,7 @@ export async function createRenderer(canvas, palette256, { onDeviceLost, onUncap
   });
 
   // WGSL (f32 + double-single center/julia)
-  const shaderResponse = await fetch("mandelbrot.wgsl", { cache: "no-cache" });
+  const shaderResponse = await fetch("src/mandelbrot.wgsl", { cache: "no-cache" });
   if (!shaderResponse.ok) {
     throw new Error(`WGSL fetch failed: ${shaderResponse.status}`);
   }

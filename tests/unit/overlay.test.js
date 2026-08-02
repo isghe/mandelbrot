@@ -10,7 +10,7 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
   }
 };
 
-const { overlay } = await import('../../overlay.js');
+const { overlay } = await import('../../src/overlay.js');
 
 // Minimal CanvasRenderingContext2D stand-in: strokeStyle/lineWidth are
 // plain writable properties (never asserted on), draw calls are recorded

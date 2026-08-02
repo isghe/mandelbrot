@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { share } from '../../share.js';
+import { share } from '../../src/share.js';
 
 const initialState = {
   center: { x: -0.5, y: 0 },

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ViewHistory } from '../../history.js';
+import { ViewHistory } from '../../src/history.js';
 
 function makeHistory(wheelDebounceMs = 250) {
   const changes = [];

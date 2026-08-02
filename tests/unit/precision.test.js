@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { split64 } from '../../precision.js';
+import { split64 } from '../../src/precision.js';
 
 test('split64 recombines exactly to the original f64 value', () => {
   const samples = [
