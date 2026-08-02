@@ -1,13 +1,5 @@
 import { domPoint, view, grid } from './geometry.js';
 
-// Fractal-space point -> overlay pixel point (CSS px), for a view anchored
-// at `center` with the given `scale`/`aspect`. Thin wrapper around the pure
-// view.fractalToPixel, so overlay drawing stays in DOMPoint terms until the
-// final ctx.* calls, the only place scalars are unavoidable (Canvas 2D API).
-function toPixel(fractalPoint, center, scale, aspect, w, h) {
-  return view.fractalToPixel(fractalPoint, center, scale, aspect, w, h);
-}
-
 function drawGrid(ctx, w, h, center, scale, aspect) {
   const step = grid.niceGridStep(scale, 8);
   const half = new DOMPointReadOnly((scale * aspect) / 2, scale / 2);
@@ -20,13 +12,13 @@ function drawGrid(ctx, w, h, center, scale, aspect) {
   ctx.beginPath();
   for (const x of grid.gridLines(min.x, max.x, step)) {
     if (Math.abs(x) < eps) continue;
-    const p = toPixel(new DOMPointReadOnly(x, 0), center, scale, aspect, w, h);
+    const p = view.fractalToPixel(new DOMPointReadOnly(x, 0), center, scale, aspect, w, h);
     ctx.moveTo(p.x, 0);
     ctx.lineTo(p.x, h);
   }
   for (const y of grid.gridLines(min.y, max.y, step)) {
     if (Math.abs(y) < eps) continue;
-    const p = toPixel(new DOMPointReadOnly(0, y), center, scale, aspect, w, h);
+    const p = view.fractalToPixel(new DOMPointReadOnly(0, y), center, scale, aspect, w, h);
     ctx.moveTo(0, p.y);
     ctx.lineTo(w, p.y);
   }
@@ -36,23 +28,23 @@ function drawGrid(ctx, w, h, center, scale, aspect) {
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   if (min.x <= 0 && 0 <= max.x) {
-    const p = toPixel(new DOMPointReadOnly(0, 0), center, scale, aspect, w, h);
+    const p = view.fractalToPixel(new DOMPointReadOnly(0, 0), center, scale, aspect, w, h);
     ctx.moveTo(p.x, 0);
     ctx.lineTo(p.x, h);
   }
   if (min.y <= 0 && 0 <= max.y) {
-    const p = toPixel(new DOMPointReadOnly(0, 0), center, scale, aspect, w, h);
+    const p = view.fractalToPixel(new DOMPointReadOnly(0, 0), center, scale, aspect, w, h);
     ctx.moveTo(0, p.y);
     ctx.lineTo(w, p.y);
   }
   ctx.stroke();
 }
 
-// Position is always (w/2, h/2) since `center` is toPixel's anchor, but
-// it's still routed through toPixel for symmetry with drawJuliaMarker and
+// Position is always (w/2, h/2) since `center` is the anchor, but it's
+// still routed through fractalToPixel for symmetry with drawJuliaMarker and
 // so it stays correct if that invariant ever changes.
 function drawCenterMarker(ctx, w, h, center, scale, aspect) {
-  const p = toPixel(center, center, scale, aspect, w, h);
+  const p = view.fractalToPixel(center, center, scale, aspect, w, h);
   const r = 6;
 
   ctx.lineWidth = 3;
@@ -81,7 +73,7 @@ function strokeCrosshair(ctx, p, r) {
 // Diamond marker, distinct in shape and color from the center crosshair
 // so the two are never confused when both are visible.
 function drawJuliaMarker(ctx, w, h, juliaC, center, scale, aspect) {
-  const p = toPixel(juliaC, center, scale, aspect, w, h);
+  const p = view.fractalToPixel(juliaC, center, scale, aspect, w, h);
   if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) return;
   const r = 7;
 
@@ -104,4 +96,4 @@ function strokeDiamond(ctx, p, r) {
   ctx.stroke();
 }
 
-export const overlay = { toPixel, drawGrid, drawCenterMarker, drawJuliaMarker };
+export const overlay = { drawGrid, drawCenterMarker, drawJuliaMarker };
