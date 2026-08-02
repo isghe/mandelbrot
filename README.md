@@ -1,5 +1,7 @@
 # WebGPU Mandelbrot / Julia Fractal
 
+[![CI](https://github.com/isghe/mandelbrot/actions/workflows/ci.yml/badge.svg)](https://github.com/isghe/mandelbrot/actions/workflows/ci.yml)
+
 Real-time Mandelbrot and Julia set renderer using the WebGPU API, with double-single
 precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 
