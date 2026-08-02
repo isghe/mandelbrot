@@ -32,10 +32,10 @@ export async function createRenderer(canvas, palette256, { onDeviceLost, onUncap
     format: "rgba8unorm",
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
   });
-  const writePalette = (palette256) => {
+  const writePalette = (data) => {
     device.queue.writeTexture(
       { texture: paletteTex },
-      palette256,
+      data,
       { bytesPerRow: 256 * 4 },
       { width: 256, height: 1 }
     );
