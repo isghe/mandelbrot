@@ -39,6 +39,9 @@ export default defineConfig({
   webServer: {
     command: 'python3 -m http.server 8000',
     port: 8000,
-    reuseExistingServer: true,
+    // In CI, always start a fresh server rather than reusing whatever might
+    // already be listening on the port; locally, reuse one you already have
+    // running (e.g. for manual testing) instead of racing to bind it twice.
+    reuseExistingServer: !process.env.CI,
   },
 });
