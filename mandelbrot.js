@@ -487,7 +487,6 @@ class MandelbrotApp {
   };
 
   onReset = () => {
-    if (!this.renderer) return;
     this.pendingIterSnapshot = null;
     this.pendingZoomSnapshot = null;
     this.history.reset();
@@ -532,6 +531,7 @@ class MandelbrotApp {
     this.dragStartSnapshot = this.snapshotView();
     const rect = this.canvas.getBoundingClientRect();
     this.dragStart = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+    this.dragStartClient = new DOMPointReadOnly(e.clientX, e.clientY);
     this.startCenter = this.center;
   };
 
@@ -551,15 +551,18 @@ class MandelbrotApp {
     }
     if (!this.isDragging) return;
     this.hasDragged = true;
-    const rect = this.canvas.getBoundingClientRect();
-    const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-    const delta = domPoint.sub(mouse, this.dragStart);
-    const aspect = this.canvas.width / this.canvas.height;
+    // Cheap CSS-transform preview while dragging: the real WebGPU render
+    // (expensive) only runs once, on pointerup, with the final center.
+    const dx = e.clientX - this.dragStartClient.x;
+    const dy = e.clientY - this.dragStartClient.y;
+    const preview = `translate(${dx}px, ${dy}px)`;
+    this.canvas.style.transform = preview;
+    this.overlayCanvas.style.transform = preview;
+  };
 
-    this.center = view.pan(this.startCenter, delta, this.scale, aspect);
-    this.pivot = this.center;
-    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.scheduleRender();
+  clearDragPreview = () => {
+    this.canvas.style.transform = "";
+    this.overlayCanvas.style.transform = "";
   };
 
   onPointerUp = (e) => {
@@ -620,13 +623,27 @@ class MandelbrotApp {
       return;
     }
 
-    if (this.hasDragged && this.dragStartSnapshot) {
+    // Drag finished: commit the CSS preview into the real center and
+    // trigger the one real render this drag gets.
+    this.clearDragPreview();
+    const rect = this.canvas.getBoundingClientRect();
+    const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+    const delta = domPoint.sub(mouse, this.dragStart);
+    const aspect = this.canvas.width / this.canvas.height;
+
+    this.center = view.pan(this.startCenter, delta, this.scale, aspect);
+    this.pivot = this.center;
+    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+
+    if (this.dragStartSnapshot) {
       this.pushHistory(this.dragStartSnapshot);
       this.dragStartSnapshot = null;
     }
+    this.scheduleRender();
   };
 
   onPointerLeave = () => {
+    if (this.isDragging) this.clearDragPreview();
     this.isDragging = false;
     if (this.isSelecting) {
       this.isSelecting = false;
@@ -652,7 +669,7 @@ class MandelbrotApp {
 
   // RENDER
   renderOnce = () => {
-    if (this.deviceLost) return;
+    if (this.deviceLost || !this.renderer) return;
     const [cx_hi, cx_lo] = split64(this.center.x);
     const [cy_hi, cy_lo] = split64(this.center.y);
     const [jx_hi, jx_lo] = split64(this.juliaC.x);

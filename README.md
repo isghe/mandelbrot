@@ -48,6 +48,15 @@ Requires a WebGPU-capable browser. Support varies by browser and platform:
 If the page shows a "WebGPU is not supported" error, try updating your browser or
 switching to a recent Chromium-based release (Chrome, Edge, Brave).
 
+At very deep zooms combined with a high iteration count, a single frame can take long
+enough to compute that the OS/driver's GPU watchdog (e.g. Windows TDR) kills the device,
+which surfaces as a **"WebGPU device lost"** error with a reload prompt. If the adapter
+also fails to come back right after reloading ("No WebGPU adapter available"), that's
+usually the GPU driver still recovering from the crash — try reloading again after a
+minute. Since the URL still points at the same deep zoom/iteration count that caused the
+crash, also try **Reset to initial condition** (it works even without a live renderer) to
+clear that state before dialing the iteration count back up more gradually.
+
 ## Controls
 
 - **☰ button** (top-left) — hide/show the settings panel for an unobstructed view of the
