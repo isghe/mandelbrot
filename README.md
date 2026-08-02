@@ -7,7 +7,7 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 
 **Live demo:** https://isghe.github.io/mandelbrot/
 
-![Deep zoom example](example.png)
+![Deep zoom example](examples/example.png)
 
 - **Real-time WebGPU rendering** — the whole Mandelbrot/Julia iteration runs on the GPU,
   panning and zooming at interactive framerates.
@@ -20,7 +20,9 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 
   Example: https://isghe.github.io/mandelbrot/?x=-0.7445137502875607&y=0.16445045543801942&scale=0.007380653541488702
 
-  ![Spiral view reached via a shared URL](share-example.png)
+  ![Spiral view reached via a shared URL](examples/share-example.png)
+
+More notable views: [examples/examples.md](examples/examples.md)
 
 ## Running
 
