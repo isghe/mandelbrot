@@ -127,7 +127,7 @@ smooth toggles, the Back/Forward view history, and the grid/marker overlay check
 It launches Chromium with software rendering flags (SwiftShader) so WebGPU works in
 headless/CI environments without a real GPU.
 
-Pure-logic helpers (`geometry.js`, `precision.js`) also have a fast, browser-free unit
+Pure-logic helpers (`src/geometry.js`, `src/precision.js`) also have a fast, browser-free unit
 test suite using Node's built-in test runner:
 
 ```sh

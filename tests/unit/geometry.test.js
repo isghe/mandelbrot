@@ -11,7 +11,7 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
   }
 };
 
-const { domPoint, view, grid } = await import('../../geometry.js');
+const { domPoint, view, grid } = await import('../../src/geometry.js');
 
 function assertPoint(actual, expectedX, expectedY, msg) {
   assert.strictEqual(actual.x, expectedX, msg && `${msg} (x)`);
