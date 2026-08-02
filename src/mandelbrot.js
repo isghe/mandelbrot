@@ -106,13 +106,16 @@ class MandelbrotApp {
     this.gridOverlayChk = document.getElementById("gridOverlay");
     this.centerMarkerChk = document.getElementById("centerMarker");
     this.juliaMarkerChk = document.getElementById("juliaMarker");
-    this.gridOverlayChk.checked = !!this.gridOverlay;
-    this.centerMarkerChk.checked = !!this.centerMarker;
-    this.juliaMarkerChk.checked = !!this.juliaMarker;
-    this.juliaChk.checked = !!this.juliaMode;
+    const checkboxFields = [
+      ["gridOverlayChk", "gridOverlay"],
+      ["centerMarkerChk", "centerMarker"],
+      ["juliaMarkerChk", "juliaMarker"],
+      ["juliaChk", "juliaMode"],
+      ["progressiveChk", "progressiveMode"],
+      ["smoothColoringChk", "smoothColoring"],
+    ];
+    for (const [chk, field] of checkboxFields) this[chk].checked = !!this[field];
     this.paletteSel.value = this.paletteType;
-    this.progressiveChk.checked = !!this.progressiveMode;
-    this.smoothColoringChk.checked = !!this.smoothColoring;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
@@ -223,17 +226,13 @@ class MandelbrotApp {
       }
     };
 
-    restorePoint("center");
-    restoreNumber("scale");
-    restoreNumber("maxIter");
-    restoreNumber("juliaMode");
-    restorePoint("juliaC");
-    restoreNumber("paletteType");
-    restoreNumber("progressiveMode");
-    restoreNumber("smoothColoring");
-    restoreNumber("gridOverlay");
-    restoreNumber("centerMarker");
-    restoreNumber("juliaMarker");
+    const pointFields = ["center", "juliaC"];
+    const numberFields = [
+      "scale", "maxIter", "juliaMode", "paletteType", "progressiveMode",
+      "smoothColoring", "gridOverlay", "centerMarker", "juliaMarker",
+    ];
+    for (const field of pointFields) restorePoint(field);
+    for (const field of numberFields) restoreNumber(field);
 
     this.pivot = this.center;
 
@@ -493,12 +492,15 @@ class MandelbrotApp {
     // Overlay display preferences aren't part of view history (see the
     // comment on the on*Change handlers below), but Reset should still
     // restore them to their defaults along with everything else.
-    this.gridOverlay = 0;
-    this.gridOverlayChk.checked = false;
-    this.centerMarker = 0;
-    this.centerMarkerChk.checked = false;
-    this.juliaMarker = 0;
-    this.juliaMarkerChk.checked = false;
+    const overlayFields = [
+      ["gridOverlay", "gridOverlayChk"],
+      ["centerMarker", "centerMarkerChk"],
+      ["juliaMarker", "juliaMarkerChk"],
+    ];
+    for (const [field, chk] of overlayFields) {
+      this[field] = 0;
+      this[chk].checked = false;
+    }
     this.applySnapshot(this.initialState);
   };
 
