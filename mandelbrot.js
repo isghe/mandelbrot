@@ -1,5 +1,10 @@
-import { domPoint, view, grid } from './geometry.js';
+import { domPoint, view } from './geometry.js';
 import { split64 } from './precision.js';
+import { makePalette } from './palette.js';
+import { overlay } from './overlay.js';
+import { share } from './share.js';
+import { ViewHistory } from './history.js';
+import { createRenderer } from './renderer.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -43,13 +48,10 @@ class MandelbrotApp {
   selectStart = new DOMPointReadOnly(0, 0);
 
   // view history (Back / Forward)
-  viewHistory = [];
-  viewFuture = [];
+  history = new ViewHistory(MandelbrotApp.WHEEL_HISTORY_MS, () => this.updateHistoryButtons());
   dragStartSnapshot = null;
   pendingZoomSnapshot = null;
   pendingIterSnapshot = null;
-  pendingWheelSnapshot = null;
-  wheelHistoryTimer = null;
   saveSettingsTimer = null;
   shareBtnResetTimer = null;
 
@@ -154,7 +156,7 @@ class MandelbrotApp {
 
     this.setScale(this.scale);
     this.setMaxIter(this.maxIter);
-    this.palette256 = this.makePalette(this.paletteType);
+    this.palette256 = makePalette(this.paletteType);
 
     this.drawOverlay();
   }
@@ -179,19 +181,7 @@ class MandelbrotApp {
   }
 
   saveSettings() {
-    const data = {
-      center: { x: this.center.x, y: this.center.y },
-      scale: this.scale,
-      maxIter: this.maxIter,
-      juliaMode: this.juliaMode,
-      juliaC: { x: this.juliaC.x, y: this.juliaC.y },
-      paletteType: this.paletteType,
-      progressiveMode: this.progressiveMode,
-      smoothColoring: this.smoothColoring,
-      gridOverlay: this.gridOverlay,
-      centerMarker: this.centerMarker,
-      juliaMarker: this.juliaMarker,
-    };
+    const data = share.settingsData(this);
     try {
       localStorage.setItem(MandelbrotApp.SETTINGS_KEY, JSON.stringify(data));
     } catch {
@@ -214,74 +204,12 @@ class MandelbrotApp {
     this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
   };
 
-  // Only encodes fields that differ from the initial condition, so the
-  // "Reset to initial condition" state always maps to a bare URL and the
-  // address bar only ever names what's actually been changed.
   buildShareUrl() {
-    const init = this.initialState;
-    const params = new URLSearchParams();
-
-    if (this.center.x !== init.center.x || this.center.y !== init.center.y) {
-      params.set("x", this.center.x);
-      params.set("y", this.center.y);
-    }
-    if (this.scale !== init.scale) params.set("scale", this.scale);
-    if (this.maxIter !== init.maxIter) params.set("iter", this.maxIter);
-    if (this.juliaMode !== init.juliaMode) params.set("julia", this.juliaMode);
-    if (this.juliaC.x !== init.juliaC.x || this.juliaC.y !== init.juliaC.y) {
-      params.set("jx", this.juliaC.x);
-      params.set("jy", this.juliaC.y);
-    }
-    if (this.paletteType !== init.paletteType) params.set("palette", this.paletteType);
-    if (this.progressiveMode !== init.progressiveMode) params.set("progressive", this.progressiveMode);
-    if (this.smoothColoring !== init.smoothColoring) params.set("smooth", this.smoothColoring);
-    // Overlay display preferences aren't part of initialState (see the
-    // comment on the on*Change handlers below); Reset always zeroes them.
-    if (this.gridOverlay) params.set("grid", this.gridOverlay);
-    if (this.centerMarker) params.set("centerMark", this.centerMarker);
-    if (this.juliaMarker) params.set("juliaMark", this.juliaMarker);
-
-    const qs = params.toString();
-    return `${location.origin}${location.pathname}${qs ? "?" + qs : ""}`;
-  }
-
-  parseShareParams() {
-    const params = new URLSearchParams(location.search);
-    if ([...params.keys()].length === 0) return null;
-
-    const num = (name) => {
-      const raw = params.get(name);
-      if (raw === null || raw === "") return undefined;
-      const v = Number(raw);
-      return Number.isFinite(v) ? v : undefined;
-    };
-
-    const s = {};
-    const setIfPresent = (field, paramName) => {
-      const v = num(paramName);
-      if (v !== undefined) s[field] = v;
-    };
-
-    const x = num("x"), y = num("y");
-    if (x !== undefined && y !== undefined) s.center = { x, y };
-    const jx = num("jx"), jy = num("jy");
-    if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
-
-    setIfPresent("scale", "scale");
-    setIfPresent("maxIter", "iter");
-    setIfPresent("juliaMode", "julia");
-    setIfPresent("paletteType", "palette");
-    setIfPresent("progressiveMode", "progressive");
-    setIfPresent("smoothColoring", "smooth");
-    setIfPresent("gridOverlay", "grid");
-    setIfPresent("centerMarker", "centerMark");
-    setIfPresent("juliaMarker", "juliaMark");
-
-    return Object.keys(s).length > 0 ? s : null;
+    return share.buildShareUrl(this, this.initialState, location.origin, location.pathname);
   }
 
   restoreSettings() {
-    const shared = this.parseShareParams();
+    const shared = share.parseShareParams(location.search);
     const s = shared || this.loadSettings();
     if (!s) return;
 
@@ -313,29 +241,16 @@ class MandelbrotApp {
   }
 
   pushHistory(snapshot) {
-    if (this.wheelHistoryTimer) {
-      this.flushPendingWheelHistory();
-    }
-    this.viewHistory.push(snapshot);
-    this.viewFuture = [];
-    this.updateHistoryButtons();
+    this.history.push(snapshot);
   }
 
   flushPendingWheelHistory() {
-    if (this.wheelHistoryTimer) {
-      clearTimeout(this.wheelHistoryTimer);
-      this.wheelHistoryTimer = null;
-    }
-    if (this.pendingWheelSnapshot) {
-      const snap = this.pendingWheelSnapshot;
-      this.pendingWheelSnapshot = null;
-      this.pushHistory(snap);
-    }
+    this.history.flushPendingWheel();
   }
 
   updateHistoryButtons() {
-    this.backBtn.disabled = this.viewHistory.length === 0 && !this.pendingWheelSnapshot;
-    this.forwardBtn.disabled = this.viewFuture.length === 0;
+    this.backBtn.disabled = !this.history.canGoBack;
+    this.forwardBtn.disabled = !this.history.canGoForward;
   }
 
   applySnapshot(s) {
@@ -424,117 +339,12 @@ class MandelbrotApp {
     const ctx = this.overlayCtx;
     const w = this.overlayCssWidth;
     const h = this.overlayCssHeight;
+    const aspect = this.canvas.width / this.canvas.height;
     ctx.clearRect(0, 0, w, h);
-    if (this.gridOverlay) this.drawGrid(ctx, w, h);
-    if (this.centerMarker) this.drawCenterMarker(ctx, w, h);
-    if (this.juliaMarker) this.drawJuliaMarker(ctx, w, h);
+    if (this.gridOverlay) overlay.drawGrid(ctx, w, h, this.center, this.scale, aspect);
+    if (this.centerMarker) overlay.drawCenterMarker(ctx, w, h, this.center, this.scale, aspect);
+    if (this.juliaMarker) overlay.drawJuliaMarker(ctx, w, h, this.juliaC, this.center, this.scale, aspect);
   };
-
-  // Fractal-space point -> overlay pixel point (CSS px), for the current
-  // view. Thin wrapper pulling instance state around the pure
-  // view.fractalToPixel, so overlay drawing stays in DOMPoint terms until
-  // the final ctx.* calls, the only place scalars are unavoidable (Canvas 2D API).
-  toPixel(fractalPoint, w, h) {
-    const aspect = this.canvas.width / this.canvas.height;
-    return view.fractalToPixel(fractalPoint, this.center, this.scale, aspect, w, h);
-  }
-
-  drawGrid(ctx, w, h) {
-    const aspect = this.canvas.width / this.canvas.height;
-    const step = grid.niceGridStep(this.scale, 8);
-    const half = new DOMPointReadOnly((this.scale * aspect) / 2, this.scale / 2);
-    const min = domPoint.sub(this.center, half);
-    const max = domPoint.add(this.center, half);
-    const eps = step * 1e-9;
-
-    ctx.strokeStyle = "rgba(255,255,255,0.25)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (const x of grid.gridLines(min.x, max.x, step)) {
-      if (Math.abs(x) < eps) continue;
-      const p = this.toPixel(new DOMPointReadOnly(x, 0), w, h);
-      ctx.moveTo(p.x, 0);
-      ctx.lineTo(p.x, h);
-    }
-    for (const y of grid.gridLines(min.y, max.y, step)) {
-      if (Math.abs(y) < eps) continue;
-      const p = this.toPixel(new DOMPointReadOnly(0, y), w, h);
-      ctx.moveTo(0, p.y);
-      ctx.lineTo(w, p.y);
-    }
-    ctx.stroke();
-
-    ctx.strokeStyle = "rgba(255,255,255,0.6)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    if (min.x <= 0 && 0 <= max.x) {
-      const p = this.toPixel(new DOMPointReadOnly(0, 0), w, h);
-      ctx.moveTo(p.x, 0);
-      ctx.lineTo(p.x, h);
-    }
-    if (min.y <= 0 && 0 <= max.y) {
-      const p = this.toPixel(new DOMPointReadOnly(0, 0), w, h);
-      ctx.moveTo(0, p.y);
-      ctx.lineTo(w, p.y);
-    }
-    ctx.stroke();
-  }
-
-  // Position is always (w/2, h/2) since `center` is toFractal's anchor, but
-  // it's still routed through toPixel for symmetry with drawJuliaMarker and
-  // so it stays correct if that invariant ever changes.
-  drawCenterMarker(ctx, w, h) {
-    const p = this.toPixel(this.center, w, h);
-    const r = 6;
-
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    this.strokeCrosshair(ctx, p, r);
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "#ffffff";
-    this.strokeCrosshair(ctx, p, r);
-  }
-
-  strokeCrosshair(ctx, p, r) {
-    const { x: px, y: py } = p;
-    ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.moveTo(px - r - 4, py);
-    ctx.lineTo(px - r, py);
-    ctx.moveTo(px + r, py);
-    ctx.lineTo(px + r + 4, py);
-    ctx.moveTo(px, py - r - 4);
-    ctx.lineTo(px, py - r);
-    ctx.moveTo(px, py + r);
-    ctx.lineTo(px, py + r + 4);
-    ctx.stroke();
-  }
-
-  // Diamond marker, distinct in shape and color from the center crosshair
-  // so the two are never confused when both are visible.
-  drawJuliaMarker(ctx, w, h) {
-    const p = this.toPixel(this.juliaC, w, h);
-    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) return;
-    const r = 7;
-
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    this.strokeDiamond(ctx, p, r);
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "#ffee33";
-    this.strokeDiamond(ctx, p, r);
-  }
-
-  strokeDiamond(ctx, p, r) {
-    const { x: px, y: py } = p;
-    ctx.beginPath();
-    ctx.moveTo(px, py - r);
-    ctx.lineTo(px + r, py);
-    ctx.lineTo(px, py + r);
-    ctx.lineTo(px - r, py);
-    ctx.closePath();
-    ctx.stroke();
-  }
 
   showError(msg) {
     this.errorMessage.textContent = msg;
@@ -560,83 +370,18 @@ class MandelbrotApp {
   }
 
   async initGPU() {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
+    const renderer = await createRenderer(this.canvas, this.palette256, {
+      onDeviceLost: (info) => {
+        this.deviceLost = true;
+        this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
+      },
+      onUncapturedError: (message) => this.showError(`WebGPU error: ${message}`),
+    });
+    if (!renderer) {
       this.showError("No WebGPU adapter available.");
       return;
     }
-    this.device  = await adapter.requestDevice();
-
-    this.device.lost.then((info) => {
-      if (info.reason === "destroyed") return; // we tore it down ourselves
-      this.deviceLost = true;
-      this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
-    });
-    this.device.addEventListener("uncapturederror", (event) => {
-      this.showError(`WebGPU error: ${event.error.message}`);
-    });
-
-    this.context = this.canvas.getContext("webgpu");
-    if (!this.context) {
-      throw new Error("Unable to create the WebGPU canvas context.");
-    }
-    this.format  = navigator.gpu.getPreferredCanvasFormat();
-    this.context.configure({ device: this.device, format: this.format });
-
-    this.paletteTex = this.device.createTexture({
-      size:[256,1],
-      format:"rgba8unorm",
-      usage:GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
-    });
-    this.device.queue.writeTexture(
-      {texture:this.paletteTex},
-      this.palette256,
-      {bytesPerRow:256*4},
-      {width:256,height:1}
-    );
-    this.paletteSampler = this.device.createSampler({
-      magFilter:"linear", minFilter:"linear"
-    });
-
-    // WGSL (f32 + double-single center/julia)
-    const shaderResponse = await fetch("mandelbrot.wgsl", { cache: "no-cache" });
-    if (!shaderResponse.ok) {
-      throw new Error(`WGSL fetch failed: ${shaderResponse.status}`);
-    }
-    const shaderCode = await shaderResponse.text();
-    const module = this.device.createShaderModule({code:shaderCode});
-
-    const compilationInfo = await module.getCompilationInfo();
-    const shaderErrors = compilationInfo.messages.filter((message) => message.type === "error");
-    if (shaderErrors.length > 0) {
-      throw new Error(
-        shaderErrors.map((error) => `${error.lineNum}:${error.linePos} ${error.message}`).join("\n")
-      );
-    }
-
-    this.pipeline = this.device.createRenderPipeline({
-      layout:"auto",
-      vertex:{module,entryPoint:"vs_main"},
-      fragment:{module,entryPoint:"fs_main",targets:[{format:this.format}]},
-      primitive:{topology:"triangle-list"}
-    });
-
-    // Uniform buffer: 14 logical f32 fields + 2 padding floats, since WGSL
-    // rounds a uniform struct's size up to a 16-byte multiple (64 B here).
-    this.uniformBuffer = this.device.createBuffer({
-      size: 16 * 4,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-
-    this.bindGroup = this.device.createBindGroup({
-      layout:this.pipeline.getBindGroupLayout(0),
-      entries:[
-        {binding:0,resource:{buffer:this.uniformBuffer}},
-        {binding:1,resource:this.paletteSampler},
-        {binding:2,resource:this.paletteTex.createView()}
-      ]
-    });
-
+    this.renderer = renderer;
     this.scheduleRender();
   }
 
@@ -644,69 +389,11 @@ class MandelbrotApp {
     this.progressiveIter = 1;
   }
 
-  // 256-entry palette
-  makePalette(type) {
-    const arr = new Uint8Array(256 * 4);
-
-    const APPLE2 = [
-      [0,0,0],[255,255,255],[255,0,0],[0,255,0],
-      [0,0,255],[255,255,0],[255,0,255],[0,255,255],
-      [128,128,128],[255,128,0],[128,0,255],[0,128,255],
-      [128,255,0],[255,0,128],[0,255,128],[128,0,0]
-    ];
-
-    const VIRIDIS = [
-      [68,1,84],[71,44,122],[59,81,139],[44,113,142],
-      [33,144,141],[39,173,129],[92,200,99],[170,220,50],
-      [253,231,37]
-    ];
-
-    let P;
-    if (type === 4) P = APPLE2;
-    else if (type === 0) P = VIRIDIS;
-    else {
-      P = [];
-      for (let i=0;i<16;i++){
-        const t=i/15;
-        if (type===1) P.push([255*t,80*t,0]);          // Fire
-        else if (type===2) P.push([0,100*t,255*t]);   // Ocean
-        else P.push([                                   // Rainbow
-          (Math.sin(6.28318*t)+1)/2*255,
-          (Math.sin(6.28318*(t+0.33))+1)/2*255,
-          (Math.sin(6.28318*(t+0.66))+1)/2*255
-        ]);
-      }
-    }
-
-    for (let i=0;i<256;i++){
-      const t=i/255;
-      const p=t*(P.length-1);
-      const idx=Math.floor(p);
-      const f=p-idx;
-      const idx2=Math.min(idx+1,P.length-1);
-
-      const r=P[idx][0]*(1-f)+P[idx2][0]*f;
-      const g=P[idx][1]*(1-f)+P[idx2][1]*f;
-      const b=P[idx][2]*(1-f)+P[idx2][2]*f;
-
-      arr[i*4+0]=r;
-      arr[i*4+1]=g;
-      arr[i*4+2]=b;
-      arr[i*4+3]=255;
-    }
-    return arr;
-  }
-
   applyPalette(type) {
     this.paletteType = type;
-    this.palette256 = this.makePalette(type);
-    if (!this.device) return;
-    this.device.queue.writeTexture(
-      {texture:this.paletteTex},
-      this.palette256,
-      {bytesPerRow:256*4},
-      {width:256,height:1}
-    );
+    this.palette256 = makePalette(type);
+    if (!this.renderer) return;
+    this.renderer.writePalette(this.palette256);
   }
 
   // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
@@ -800,15 +487,10 @@ class MandelbrotApp {
   };
 
   onReset = () => {
-    if (!this.device) return;
-    clearTimeout(this.wheelHistoryTimer);
-    this.wheelHistoryTimer = null;
-    this.pendingWheelSnapshot = null;
+    if (!this.renderer) return;
     this.pendingIterSnapshot = null;
     this.pendingZoomSnapshot = null;
-    this.viewHistory = [];
-    this.viewFuture = [];
-    this.updateHistoryButtons();
+    this.history.reset();
     // Overlay display preferences aren't part of view history (see the
     // comment on the on*Change handlers below), but Reset should still
     // restore them to their defaults along with everything else.
@@ -822,23 +504,13 @@ class MandelbrotApp {
   };
 
   onBack = () => {
-    this.flushPendingWheelHistory();
-    if (this.viewHistory.length === 0) return;
-    const current = this.snapshotView();
-    const prev = this.viewHistory.pop();
-    this.viewFuture.push(current);
-    this.applySnapshot(prev);
-    this.updateHistoryButtons();
+    const prev = this.history.back(this.snapshotView());
+    if (prev) this.applySnapshot(prev);
   };
 
   onForward = () => {
-    this.flushPendingWheelHistory();
-    if (this.viewFuture.length === 0) return;
-    const current = this.snapshotView();
-    const next = this.viewFuture.pop();
-    this.viewHistory.push(current);
-    this.applySnapshot(next);
-    this.updateHistoryButtons();
+    const next = this.history.forward(this.snapshotView());
+    if (next) this.applySnapshot(next);
   };
 
   // PAN: pointerdown / pointermove / pointerup
@@ -965,12 +637,7 @@ class MandelbrotApp {
   // WHEEL → zoom centered on the pivot
   onWheel = (e) => {
     e.preventDefault();
-    if (!this.pendingWheelSnapshot) {
-      this.pendingWheelSnapshot = this.snapshotView();
-      this.updateHistoryButtons();
-    }
-    clearTimeout(this.wheelHistoryTimer);
-    this.wheelHistoryTimer = setTimeout(() => this.flushPendingWheelHistory(), MandelbrotApp.WHEEL_HISTORY_MS);
+    this.history.armWheel(() => this.snapshotView());
     const aspect = this.canvas.width / this.canvas.height;
     const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
 
@@ -1010,27 +677,10 @@ class MandelbrotApp {
       this.canvas.height,
       this.juliaMode,
       this.smoothColoring,
-      0, 0 // padding to 64 B (16 floats), see uniformBuffer comment in init()
+      0, 0 // padding to 64 B (16 floats), see renderer.js's uniformBuffer comment
     ]);
 
-    this.device.queue.writeBuffer(this.uniformBuffer,0,data);
-
-    const encoder=this.device.createCommandEncoder();
-    const pass=encoder.beginRenderPass({
-      colorAttachments:[{
-        view:this.context.getCurrentTexture().createView(),
-        loadOp:"clear",
-        storeOp:"store",
-        clearValue:{r:0,g:0,b:0,a:1}
-      }]
-    });
-
-    pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0,this.bindGroup);
-    pass.draw(3);
-    pass.end();
-
-    this.device.queue.submit([encoder.finish()]);
+    this.renderer.render(data);
   };
 }
 
