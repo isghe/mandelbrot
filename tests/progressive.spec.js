@@ -28,3 +28,27 @@ test('progressive mode ramp actually renders a frame at maxIter', async ({ page 
     return page.evaluate(() => window.app.lastDisplayIter);
   }, { timeout: 15000 }).toBe(64);
 });
+
+// Regression test for a bug introduced while fixing the above: renderOnce()'s
+// early-return guard (deviceLost/no renderer) used -Infinity as its sentinel,
+// which is always < maxIter — so with progressive mode on, scheduleRender()
+// kept re-arming itself every animation frame forever instead of stopping,
+// once the device was lost mid-ramp.
+test('device loss stops the progressive re-arm instead of looping every frame', async ({ page }) => {
+  const renderCount = await page.evaluate(async () => {
+    window.__renderCount = 0;
+    const orig = window.app.renderOnce;
+    window.app.renderOnce = () => { window.__renderCount++; return orig.call(window.app); };
+
+    window.app.progressiveMode = true;
+    window.app.deviceLost = true;
+    window.app.scheduleRender();
+
+    // ~30 animation frames' worth of wall time; a looping bug would keep
+    // incrementing __renderCount throughout this window.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return window.__renderCount;
+  });
+
+  expect(renderCount).toBe(1);
+});
