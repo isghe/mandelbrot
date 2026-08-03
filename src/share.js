@@ -109,8 +109,8 @@ function settingsData(state) {
 // discarded entirely rather than partially applied.
 function loadSettingsData(parsed) {
   if (!parsed || typeof parsed !== "object") return null;
-  const v = typeof parsed.v === "number" ? parsed.v : 1;
-  if (v > SCHEMA_VERSION) return null;
+  const v = parsed.v === undefined ? 1 : Number(parsed.v);
+  if (!Number.isFinite(v) || v > SCHEMA_VERSION) return null;
   // Hook for a future migration, e.g.: if (v === 1) parsed = migrateV1toV2(parsed);
   return parsed;
 }

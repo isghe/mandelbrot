@@ -212,6 +212,16 @@ test('loadSettingsData rejects an unknown future version', () => {
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 
+test('loadSettingsData rejects a future version given as a string, not treated as legacy', () => {
+  const future = { ...share.settingsData(baseState()), v: "2" };
+  assert.strictEqual(share.loadSettingsData(future), null);
+});
+
+test('loadSettingsData rejects a non-numeric v', () => {
+  const bad = { ...share.settingsData(baseState()), v: "not a number" };
+  assert.strictEqual(share.loadSettingsData(bad), null);
+});
+
 test('loadSettingsData returns null for null or non-object input', () => {
   assert.strictEqual(share.loadSettingsData(null), null);
   assert.strictEqual(share.loadSettingsData('not an object'), null);
