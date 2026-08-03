@@ -1,3 +1,8 @@
+// Bump when the shape of settingsData()/parseShareParams() output changes
+// in a way older code can't read. See loadSettingsData() and
+// parseShareParams() for the hook points where a migration would go.
+const SCHEMA_VERSION = 1;
+
 // Only encodes fields that differ from `initialState`, so the "Reset to
 // initial condition" state always maps to a bare URL and the address bar
 // only ever names what's actually been changed.
@@ -39,6 +44,14 @@ function parseShareParams(search) {
   const params = new URLSearchParams(search);
   if ([...params.keys()].length === 0) return null;
 
+  // Absent v means the legacy (pre-versioning) shape, which is schema
+  // version 1. An unrecognized future version is rejected outright rather
+  // than partially applied.
+  const vRaw = params.get("v");
+  const schemaVersion = vRaw === null || vRaw === "" ? 1 : Number(vRaw);
+  if (!Number.isFinite(schemaVersion) || schemaVersion > SCHEMA_VERSION) return null;
+  // Hook for a future migration of legacy param shapes.
+
   const num = (name) => {
     const raw = params.get(name);
     if (raw === null || raw === "") return undefined;
@@ -76,6 +89,7 @@ function parseShareParams(search) {
 // state -> plain JSON-serializable object, for localStorage persistence.
 function settingsData(state) {
   return {
+    v: SCHEMA_VERSION,
     center: { x: state.center.x, y: state.center.y },
     scale: state.scale,
     maxIter: state.maxIter,
@@ -90,4 +104,15 @@ function settingsData(state) {
   };
 }
 
-export const share = { buildShareUrl, parseShareParams, settingsData };
+// Decode side for localStorage: absent `v` means the legacy (pre-versioning)
+// shape, which is schema version 1. An unrecognized future version is
+// discarded entirely rather than partially applied.
+function loadSettingsData(parsed) {
+  if (!parsed || typeof parsed !== "object") return null;
+  const v = parsed.v === undefined ? 1 : Number(parsed.v);
+  if (!Number.isFinite(v) || v > SCHEMA_VERSION) return null;
+  // Hook for a future migration, e.g.: if (v === 1) parsed = migrateV1toV2(parsed);
+  return parsed;
+}
+
+export const share = { buildShareUrl, parseShareParams, settingsData, loadSettingsData, SCHEMA_VERSION };

@@ -196,7 +196,7 @@ class MandelbrotApp {
   loadSettings() {
     try {
       const raw = localStorage.getItem(MandelbrotApp.SETTINGS_KEY);
-      return raw ? JSON.parse(raw) : null;
+      return raw ? share.loadSettingsData(JSON.parse(raw)) : null;
     } catch {
       return null;
     }

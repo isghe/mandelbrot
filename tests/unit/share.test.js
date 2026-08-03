@@ -124,6 +124,26 @@ test('parseShareParams skips non-finite values', () => {
   assert.strictEqual(s, null);
 });
 
+test('parseShareParams treats absent v as legacy version 1', () => {
+  const s = share.parseShareParams('?scale=1.5');
+  assert.deepStrictEqual(s, { scale: 1.5 });
+});
+
+test('parseShareParams accepts v=1 explicitly', () => {
+  const s = share.parseShareParams('?v=1&scale=1.5');
+  assert.deepStrictEqual(s, { scale: 1.5 });
+});
+
+test('parseShareParams rejects an unknown future version', () => {
+  const s = share.parseShareParams('?v=2&scale=1.5');
+  assert.strictEqual(s, null);
+});
+
+test('parseShareParams treats a bare v with no other params as no state', () => {
+  const s = share.parseShareParams('?v=1');
+  assert.strictEqual(s, null);
+});
+
 test('buildShareUrl -> parseShareParams round-trips every changed field', () => {
   const state = baseState({
     center: { x: -1.25, y: 0.1 },
@@ -160,6 +180,7 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
   const state = baseState({ scale: 1.5, gridOverlay: 1 });
   const data = share.settingsData(state);
   assert.deepStrictEqual(data, {
+    v: 1,
     center: { x: -0.5, y: 0 },
     scale: 1.5,
     maxIter: 256,
@@ -173,4 +194,35 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
     juliaMarker: 0,
   });
   assert.strictEqual(JSON.stringify(data), JSON.stringify(JSON.parse(JSON.stringify(data))));
+});
+
+test('settingsData always stamps the current schema version', () => {
+  const data = share.settingsData(baseState());
+  assert.strictEqual(data.v, share.SCHEMA_VERSION);
+});
+
+test('loadSettingsData treats an object without v as legacy version 1', () => {
+  const legacy = share.settingsData(baseState());
+  delete legacy.v;
+  assert.deepStrictEqual(share.loadSettingsData(legacy), legacy);
+});
+
+test('loadSettingsData rejects an unknown future version', () => {
+  const future = { ...share.settingsData(baseState()), v: 2 };
+  assert.strictEqual(share.loadSettingsData(future), null);
+});
+
+test('loadSettingsData rejects a future version given as a string, not treated as legacy', () => {
+  const future = { ...share.settingsData(baseState()), v: "2" };
+  assert.strictEqual(share.loadSettingsData(future), null);
+});
+
+test('loadSettingsData rejects a non-numeric v', () => {
+  const bad = { ...share.settingsData(baseState()), v: "not a number" };
+  assert.strictEqual(share.loadSettingsData(bad), null);
+});
+
+test('loadSettingsData returns null for null or non-object input', () => {
+  assert.strictEqual(share.loadSettingsData(null), null);
+  assert.strictEqual(share.loadSettingsData('not an object'), null);
 });
