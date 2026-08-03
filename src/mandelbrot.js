@@ -1,10 +1,9 @@
-import { domPoint, view } from './geometry.js';
-import { split64 } from './precision.js';
 import { makePalette } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
-import { createRenderer } from './renderer.js';
+import { requestGPUDevice, attachCanvas } from './renderer.js';
+import { FractalPanel, buildUniformData } from './fractalPanel.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -16,10 +15,7 @@ class MandelbrotApp {
   static SETTINGS_SAVE_MS = 400;
 
   // State (JS = f64)
-  center = new DOMPointReadOnly(-0.5, 0.0);
-  scale   = 3.0;
   maxIter = 256;
-  juliaMode = 0;
   juliaC = new DOMPointReadOnly(-0.8, 0.156);
   paletteType = 4;
   smoothColoring = 0;
@@ -33,23 +29,30 @@ class MandelbrotApp {
   progressiveMode = 0;
   progressiveIter = 1;
 
-  // pivot for centered zoom
-  pivot = new DOMPointReadOnly(-0.5, 0.0);
-  pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+  // Panel visibility (display preferences, not view history — mirrors the
+  // overlay toggles above): the Mandelbrot panel and Julia panel are each
+  // independently shown/hidden. Both on = split screen; either alone =
+  // that panel full-screen; both off = a black screen. The Julia panel is
+  // created lazily the first time it's shown, then just hidden/shown by
+  // CSS afterward.
+  showMandelbrot = 1;
+  showJulia = 0;
 
-  // pan
-  isDragging = false;
-  hasDragged = false;
-  dragStart = new DOMPointReadOnly(0, 0);
-  startCenter = new DOMPointReadOnly(0, 0);
+  // The Julia panel's own independent pan/zoom, persisted separately from
+  // `juliaC` (the constant the Julia set is drawn for). Backing fields for
+  // the juliaPanelCenter/juliaPanelScale accessors below: null means "not
+  // restored, not yet dragged/zoomed" — createJuliaPanel() then falls back
+  // to centering on the current juliaC at the default scale, same as before
+  // this persistence existed.
+  _juliaPanelCenter = null;
+  _juliaPanelScale = null;
 
-  // selection area (Ctrl + drag)
-  isSelecting = false;
-  selectStart = new DOMPointReadOnly(0, 0);
+  // Set once the shared WebGPU device is lost; blocks further render
+  // attempts on both panels (the device, not the canvas, was lost).
+  deviceLost = false;
 
   // view history (Back / Forward)
   history = new ViewHistory(MandelbrotApp.WHEEL_HISTORY_MS, () => this.updateHistoryButtons());
-  dragStartSnapshot = null;
   pendingZoomSnapshot = null;
   pendingIterSnapshot = null;
   saveSettingsTimer = null;
@@ -58,16 +61,44 @@ class MandelbrotApp {
   // render scheduling
   rafPending = false;
 
-  // Set once the WebGPU device is lost; blocks further render attempts.
-  deviceLost = false;
+  // Per-canvas render/interaction state (center, scale, pivot, pan/selection,
+  // renderer, ...) lives on FractalPanel; these accessors keep the rest of
+  // this class working against `this.foo` unchanged while that state moves.
+  get canvas() { return this.mandelbrotPanel.canvas; }
+  get overlayCanvas() { return this.mandelbrotPanel.overlayCanvas; }
+  get overlayCtx() { return this.mandelbrotPanel.overlayCtx; }
+  get overlayCssWidth() { return this.mandelbrotPanel.overlayCssWidth; }
+  get overlayCssHeight() { return this.mandelbrotPanel.overlayCssHeight; }
+  get center() { return this.mandelbrotPanel.center; }
+  set center(v) { this.mandelbrotPanel.center = v; }
+  get scale() { return this.mandelbrotPanel.scale; }
+  set scale(v) { this.mandelbrotPanel.scale = v; }
+  get pivot() { return this.mandelbrotPanel.pivot; }
+  set pivot(v) { this.mandelbrotPanel.pivot = v; }
+  get pivotScreen() { return this.mandelbrotPanel.pivotScreen; }
+  set pivotScreen(v) { this.mandelbrotPanel.pivotScreen = v; }
+  get isDragging() { return this.mandelbrotPanel.isDragging; }
+  get renderer() { return this.mandelbrotPanel.renderer; }
+  set renderer(v) { this.mandelbrotPanel.renderer = v; }
+  // Reads/writes go straight to the live juliaPanel once it exists (the
+  // panel is never destroyed once created, just hidden by CSS — see
+  // createJuliaPanel), so this stays live for saveSettings()/buildShareUrl()
+  // even while the Julia panel is currently hidden.
+  get juliaPanelCenter() { return this.juliaPanel ? this.juliaPanel.center : (this._juliaPanelCenter ?? this.juliaC); }
+  set juliaPanelCenter(v) { if (this.juliaPanel) this.juliaPanel.center = v; else this._juliaPanelCenter = v; }
+  get juliaPanelScale() { return this.juliaPanel ? this.juliaPanel.scale : (this._juliaPanelScale ?? 3.0); }
+  set juliaPanelScale(v) { if (this.juliaPanel) this.juliaPanel.scale = v; else this._juliaPanelScale = v; }
 
   constructor(canvas) {
+    this.mandelbrotPanel = new FractalPanel(canvas, document.getElementById("overlay"));
+
     this.initialState = {
       center: this.center,
       scale: this.scale,
       maxIter: this.maxIter,
-      juliaMode: this.juliaMode,
       juliaC: this.juliaC,
+      juliaPanelCenter: this.juliaPanelCenter,
+      juliaPanelScale: this.juliaPanelScale,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
       smoothColoring: this.smoothColoring,
@@ -75,14 +106,8 @@ class MandelbrotApp {
 
     this.restoreSettings();
 
-    this.canvas = canvas;
-    this.resizeCanvas();
-
-    this.overlayCanvas = document.getElementById("overlay");
-    this.overlayCtx = this.overlayCanvas.getContext("2d");
-    this.resizeOverlayCanvas();
-
     this.selectionBox = document.getElementById("selectionBox");
+    this.noVizMessage = document.getElementById("noVizMessage");
     this.errorBox = document.getElementById("gpuError");
     this.errorMessage = document.getElementById("gpuErrorMessage");
     this.reloadBtn = document.getElementById("gpuReloadBtn");
@@ -100,7 +125,8 @@ class MandelbrotApp {
     this.zoomSlider.min = Math.log10(MandelbrotApp.MIN_SCALE);
     this.zoomSlider.max = Math.log10(MandelbrotApp.MAX_SCALE);
     this.paletteSel = document.getElementById("paletteType");
-    this.juliaChk   = document.getElementById("juliaMode");
+    this.showMandelbrotChk = document.getElementById("showMandelbrot");
+    this.showJuliaChk = document.getElementById("showJulia");
     this.progressiveChk = document.getElementById("progressiveMode");
     this.smoothColoringChk = document.getElementById("smoothColoring");
     this.gridOverlayChk = document.getElementById("gridOverlay");
@@ -109,12 +135,30 @@ class MandelbrotApp {
     const checkboxFields = [
       ["centerMarkerChk", "centerMarker"],
       ["gridOverlayChk", "gridOverlay"],
-      ["juliaChk", "juliaMode"],
       ["juliaMarkerChk", "juliaMarker"],
       ["progressiveChk", "progressiveMode"],
+      ["showJuliaChk", "showJulia"],
+      ["showMandelbrotChk", "showMandelbrot"],
       ["smoothColoringChk", "smoothColoring"],
     ];
     checkboxFields.forEach(([chk, field]) => { this[chk].checked = !!this[field]; });
+    // Apply the restored panel-visibility CSS classes *before* resizing
+    // anything below: resizeCanvas()/resizeOverlayCanvas() read the current
+    // CSS box size, so if dual-view's 50vw split isn't already in effect,
+    // a share URL/localStorage restore that starts in dual view would size
+    // both backing stores to the old (100vw) layout and stay stretched
+    // until the next window resize or panel toggle.
+    this.updatePanelVisibility();
+    // A shared/localStorage URL may have restored showJulia=1 before WebGPU
+    // finished initializing; create the panel now (attachCanvas happens
+    // later in initGPU() once the device is ready, same as onPanelVisibilityChange).
+    if (this.showJulia) this.createJuliaPanel();
+    // mandelbrotPanel was constructed at the very top of the constructor,
+    // before the CSS classes above were known — resize it now that they are.
+    if (this.showMandelbrot) {
+      this.resizeCanvas();
+      this.resizeOverlayCanvas();
+    }
     this.paletteSel.value = this.paletteType;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
@@ -136,7 +180,8 @@ class MandelbrotApp {
       }
     };
     this.paletteSel.onchange = this.onPaletteChange;
-    this.juliaChk.onchange   = this.onJuliaChange;
+    this.showMandelbrotChk.onchange = this.onPanelVisibilityChange;
+    this.showJuliaChk.onchange = this.onPanelVisibilityChange;
     this.progressiveChk.onchange = this.onProgressiveChange;
     this.smoothColoringChk.onchange = this.onSmoothColoringChange;
     this.gridOverlayChk.onchange = this.onGridOverlayChange;
@@ -165,7 +210,11 @@ class MandelbrotApp {
   }
 
   setScale(next) {
-    this.scale = Math.min(MandelbrotApp.MAX_SCALE, Math.max(MandelbrotApp.MIN_SCALE, next));
+    this.mandelbrotPanel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
+    this.syncZoomSliderUI();
+  }
+
+  syncZoomSliderUI() {
     this.zoomSlider.value = Math.log10(this.scale);
     this.zoomLabel.textContent = this.scale;
   }
@@ -175,7 +224,6 @@ class MandelbrotApp {
       center: this.center,
       scale: this.scale,
       maxIter: this.maxIter,
-      juliaMode: this.juliaMode,
       juliaC: this.juliaC,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
@@ -226,10 +274,11 @@ class MandelbrotApp {
       }
     };
 
-    const pointFields = ["center", "juliaC"];
+    const pointFields = ["center", "juliaC", "juliaPanelCenter"];
     const numberFields = [
-      "centerMarker", "gridOverlay", "juliaMarker", "juliaMode", "maxIter",
-      "paletteType", "progressiveMode", "scale", "smoothColoring",
+      "centerMarker", "gridOverlay", "juliaMarker", "juliaPanelScale", "maxIter",
+      "paletteType", "progressiveMode", "scale", "showJulia", "showMandelbrot",
+      "smoothColoring",
     ];
     pointFields.forEach(restorePoint);
     numberFields.forEach(restoreNumber);
@@ -259,8 +308,6 @@ class MandelbrotApp {
     this.setScale(s.scale);
     this.setMaxIter(s.maxIter);
 
-    this.juliaMode = s.juliaMode;
-    this.juliaChk.checked = !!s.juliaMode;
     this.juliaC = s.juliaC;
 
     this.applyPalette(s.paletteType);
@@ -283,35 +330,22 @@ class MandelbrotApp {
   }
 
   resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width * dpr));
-    const height = Math.max(1, Math.round(rect.height * dpr));
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width;
-      this.canvas.height = height;
-    }
+    this.mandelbrotPanel.resizeCanvas();
   }
 
-  // Keeps the overlay's backing store in sync with #gfx; the transform
-  // reset lets overlay draw calls be written in CSS pixels.
   resizeOverlayCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.overlayCanvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width * dpr));
-    const height = Math.max(1, Math.round(rect.height * dpr));
-    if (this.overlayCanvas.width !== width || this.overlayCanvas.height !== height) {
-      this.overlayCanvas.width = width;
-      this.overlayCanvas.height = height;
-    }
-    this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.overlayCssWidth = rect.width;
-    this.overlayCssHeight = rect.height;
+    this.mandelbrotPanel.resizeOverlayCanvas();
   }
 
   onResize = () => {
-    this.resizeCanvas();
-    this.resizeOverlayCanvas();
+    if (this.showMandelbrot) {
+      this.resizeCanvas();
+      this.resizeOverlayCanvas();
+    }
+    if (this.showJulia && this.juliaPanel) {
+      this.juliaPanel.resizeCanvas();
+      this.juliaPanel.resizeOverlayCanvas();
+    }
     this.scheduleRender();
   };
 
@@ -328,21 +362,30 @@ class MandelbrotApp {
       this.drawOverlay();
       const displayIter = this.renderOnce();
       this.scheduleSaveSettings();
-      if (this.progressiveMode && displayIter < this.maxIter && !this.isDragging) {
+      const anyDragging = this.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
+      if (this.progressiveMode && displayIter < this.maxIter && !anyDragging) {
         this.scheduleRender();
       }
     });
   };
 
-  drawOverlay = () => {
-    const ctx = this.overlayCtx;
-    const w = this.overlayCssWidth;
-    const h = this.overlayCssHeight;
-    const aspect = this.canvas.width / this.canvas.height;
+  // `showJuliaMarker` is false for the Julia panel itself: the marker
+  // points at where juliaC sits on the *Mandelbrot* plane, which is
+  // meaningless overlaid on the Julia panel's own view.
+  drawOverlayForPanel(panel, { showJuliaMarker }) {
+    const ctx = panel.overlayCtx;
+    const w = panel.overlayCssWidth;
+    const h = panel.overlayCssHeight;
+    const aspect = panel.canvas.width / panel.canvas.height;
     ctx.clearRect(0, 0, w, h);
-    if (this.gridOverlay) overlay.drawGrid(ctx, w, h, this.center, this.scale, aspect);
-    if (this.centerMarker) overlay.drawCenterMarker(ctx, w, h, this.center, this.scale, aspect);
-    if (this.juliaMarker) overlay.drawJuliaMarker(ctx, w, h, this.juliaC, this.center, this.scale, aspect);
+    if (this.gridOverlay) overlay.drawGrid(ctx, w, h, panel.center, panel.scale, aspect);
+    if (this.centerMarker) overlay.drawCenterMarker(ctx, w, h, panel.center, panel.scale, aspect);
+    if (showJuliaMarker && this.juliaMarker) overlay.drawJuliaMarker(ctx, w, h, this.juliaC, panel.center, panel.scale, aspect);
+  }
+
+  drawOverlay = () => {
+    if (this.showMandelbrot) this.drawOverlayForPanel(this.mandelbrotPanel, { showJuliaMarker: true });
+    if (this.showJulia && this.juliaPanel) this.drawOverlayForPanel(this.juliaPanel, { showJuliaMarker: false });
   };
 
   showError(msg) {
@@ -369,18 +412,23 @@ class MandelbrotApp {
   }
 
   async initGPU() {
-    const renderer = await createRenderer(this.canvas, this.palette256, {
+    this.gpuDevice = await requestGPUDevice({
       onDeviceLost: (info) => {
         this.deviceLost = true;
         this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
       },
       onUncapturedError: (message) => this.showError(`WebGPU error: ${message}`),
     });
-    if (!renderer) {
+    if (!this.gpuDevice) {
       this.showError("No WebGPU adapter available.");
       return;
     }
-    this.renderer = renderer;
+    this.renderer = await attachCanvas(this.gpuDevice, this.canvas, this.palette256);
+    // Dual view may have been toggled on before WebGPU finished
+    // initializing; attach the Julia panel now if it's still waiting.
+    if (this.juliaPanel && !this.juliaPanel.renderer) {
+      this.juliaPanel.renderer = await attachCanvas(this.gpuDevice, this.juliaPanel.canvas, this.palette256);
+    }
     this.scheduleRender();
   }
 
@@ -391,14 +439,13 @@ class MandelbrotApp {
   applyPalette(type) {
     this.paletteType = type;
     this.palette256 = makePalette(type);
-    if (!this.renderer) return;
-    this.renderer.writePalette(this.palette256);
+    if (this.renderer) this.renderer.writePalette(this.palette256);
+    if (this.juliaPanel?.renderer) this.juliaPanel.renderer.writePalette(this.palette256);
   }
 
   // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
   toFractal(normPoint, anchor) {
-    const aspect = this.canvas.width / this.canvas.height;
-    return view.normalizedToFractal(normPoint, anchor, this.scale, aspect);
+    return this.mandelbrotPanel.toFractal(normPoint, anchor);
   }
 
   onIterInput = () => {
@@ -420,12 +467,100 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
-  onJuliaChange = () => {
-    this.pushHistory(this.snapshotView());
-    this.juliaMode = this.juliaChk.checked ? 1 : 0;
-    this.resetProgressive();
+  // Panel visibility is a display preference, not view state (mirrors the
+  // overlay toggles below) — no pushHistory. The Julia panel is created
+  // lazily the first time it's shown and then kept alive (just hidden by
+  // CSS) so toggling back on doesn't need to re-attach WebGPU.
+  onPanelVisibilityChange = () => {
+    this.showMandelbrot = this.showMandelbrotChk.checked ? 1 : 0;
+    this.showJulia = this.showJuliaChk.checked ? 1 : 0;
+    this.updatePanelVisibility();
+    // The CSS width of a shown panel changes (100vw <-> 50vw) the instant
+    // its visibility changes; refresh its backing store now rather than
+    // waiting for the next window resize, or the image stays stretched.
+    if (this.showMandelbrot) {
+      this.resizeCanvas();
+      this.resizeOverlayCanvas();
+    }
+    if (this.showJulia && !this.juliaPanel) this.createJuliaPanel();
+    if (this.showJulia && this.juliaPanel) {
+      this.juliaPanel.resizeCanvas();
+      this.juliaPanel.resizeOverlayCanvas();
+    }
     this.scheduleRender();
   };
+
+  updatePanelVisibility() {
+    document.body.classList.toggle("dual-view", !!(this.showMandelbrot && this.showJulia));
+    document.getElementById("gfx").classList.toggle("panel-hidden", !this.showMandelbrot);
+    document.getElementById("overlay").classList.toggle("panel-hidden", !this.showMandelbrot);
+    document.getElementById("gfxJulia").classList.toggle("panel-hidden", !this.showJulia);
+    document.getElementById("overlayJulia").classList.toggle("panel-hidden", !this.showJulia);
+    // Generic over however many visualization modes eventually exist, not
+    // just these two: show the placeholder whenever none of them are on.
+    const anyVisible = !!this.showMandelbrot || !!this.showJulia;
+    this.noVizMessage.style.display = anyVisible ? "none" : "block";
+  }
+
+  createJuliaPanel() {
+    const panel = new FractalPanel(document.getElementById("gfxJulia"), document.getElementById("overlayJulia"));
+    // this.juliaPanel isn't assigned yet, so these getters read the
+    // restored/persisted pan+zoom (or fall back to centering on juliaC at
+    // the default scale, same as before this state was persisted).
+    panel.center = this.juliaPanelCenter;
+    panel.pivot = panel.center;
+    panel.scale = this.juliaPanelScale;
+    this.juliaPanel = panel;
+    this.attachJuliaPanelEvents(panel);
+    if (this.gpuDevice) {
+      attachCanvas(this.gpuDevice, panel.canvas, this.palette256)
+        .then((renderer) => {
+          panel.renderer = renderer;
+          this.scheduleRender();
+        })
+        .catch((e) => this.showError(`Failed to initialize the Julia panel: ${e.message}`));
+    }
+  }
+
+  // Wires the Julia panel's own pan/zoom/select gestures. No onGenuineClick
+  // hook: clicking inside the Julia panel only moves its own pivot/zoom
+  // anchor, it never sets juliaC (only a click on the Mandelbrot panel does
+  // that). Its pan/zoom also isn't pushed to the shared undo history —
+  // Back/Forward navigates the Mandelbrot view only.
+  attachJuliaPanelEvents(panel) {
+    const noHistory = () => {};
+    panel.canvas.addEventListener("pointerdown", (e) => {
+      panel.onPointerDown(e, { selectionBox: this.selectionBox, snapshotView: () => this.snapshotView() });
+    });
+    panel.canvas.addEventListener("pointermove", (e) => {
+      panel.onPointerMove(e, { selectionBox: this.selectionBox });
+    });
+    const onUp = (e) => {
+      panel.onPointerUp(e, {
+        selectionBox: this.selectionBox,
+        minScale: MandelbrotApp.MIN_SCALE,
+        maxScale: MandelbrotApp.MAX_SCALE,
+        snapshotView: () => this.snapshotView(),
+        pushHistory: noHistory,
+        resetProgressive: () => this.resetProgressive(),
+        scheduleRender: () => this.scheduleRender(),
+      });
+    };
+    panel.canvas.addEventListener("pointerup", onUp);
+    panel.canvas.addEventListener("pointercancel", onUp);
+    panel.canvas.addEventListener("pointerleave", () => {
+      panel.onPointerLeave({ selectionBox: this.selectionBox });
+    });
+    panel.canvas.addEventListener("wheel", (e) => {
+      panel.onWheel(e, {
+        minScale: MandelbrotApp.MIN_SCALE,
+        maxScale: MandelbrotApp.MAX_SCALE,
+        armWheelHistory: noHistory,
+        resetProgressive: () => this.resetProgressive(),
+        scheduleRender: () => this.scheduleRender(),
+      });
+    }, { passive: false });
+  }
 
   onProgressiveChange = () => {
     this.pushHistory(this.snapshotView());
@@ -501,7 +636,25 @@ class MandelbrotApp {
       this[field] = 0;
       this[chk].checked = false;
     });
+    // Panel visibility isn't part of view history either, but Reset should
+    // still restore the default single-Mandelbrot view.
+    this.showMandelbrot = 1;
+    this.showMandelbrotChk.checked = true;
+    this.showJulia = 0;
+    this.showJuliaChk.checked = false;
+    this.updatePanelVisibility();
+    this.resizeCanvas();
+    this.resizeOverlayCanvas();
     this.applySnapshot(this.initialState);
+    // The Julia panel's own pan/zoom is independent of the Mandelbrot view
+    // history (see attachJuliaPanelEvents), so applySnapshot() above doesn't
+    // touch it — reset it back to its initial center/scale here too.
+    this.juliaPanelCenter = this.initialState.juliaPanelCenter;
+    this.juliaPanelScale = this.initialState.juliaPanelScale;
+    if (this.juliaPanel) {
+      this.juliaPanel.pivot = this.juliaPanel.center;
+      this.juliaPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+    }
   };
 
   onBack = () => {
@@ -514,192 +667,89 @@ class MandelbrotApp {
     if (next) this.applySnapshot(next);
   };
 
-  // PAN: pointerdown / pointermove / pointerup
+  // PAN / CLICK / SELECT: delegated to FractalPanel, which owns the pointer
+  // math; hooks here supply the app-global side effects (history, render
+  // scheduling, UI sync) and what a genuine click on this panel should do.
   onPointerDown = (e) => {
-    this.canvas.setPointerCapture(e.pointerId);
-    if (e.ctrlKey) {
-      this.isSelecting = true;
-      this.dragStartSnapshot = this.snapshotView();
-      this.selectStart = new DOMPointReadOnly(e.clientX, e.clientY);
-      this.selectionBox.style.left = this.selectStart.x + "px";
-      this.selectionBox.style.top = this.selectStart.y + "px";
-      this.selectionBox.style.width = "0px";
-      this.selectionBox.style.height = "0px";
-      this.selectionBox.style.display = "block";
-      return;
-    }
-    this.isDragging = true;
-    this.hasDragged = false;
-    this.dragStartSnapshot = this.snapshotView();
-    const rect = this.canvas.getBoundingClientRect();
-    this.dragStart = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-    this.dragStartClient = new DOMPointReadOnly(e.clientX, e.clientY);
-    this.startCenter = this.center;
+    this.mandelbrotPanel.onPointerDown(e, {
+      selectionBox: this.selectionBox,
+      snapshotView: () => this.snapshotView(),
+    });
   };
 
   onPointerMove = (e) => {
-    if (this.isSelecting) {
-      const box = DOMRectReadOnly.fromRect({
-        x: Math.min(e.clientX, this.selectStart.x),
-        y: Math.min(e.clientY, this.selectStart.y),
-        width: Math.abs(e.clientX - this.selectStart.x),
-        height: Math.abs(e.clientY - this.selectStart.y),
-      });
-      this.selectionBox.style.left = box.x + "px";
-      this.selectionBox.style.top = box.y + "px";
-      this.selectionBox.style.width = box.width + "px";
-      this.selectionBox.style.height = box.height + "px";
-      return;
-    }
-    if (!this.isDragging) return;
-    this.hasDragged = true;
-    // Cheap CSS-transform preview while dragging: the real WebGPU render
-    // (expensive) only runs once, on pointerup, with the final center.
-    const dx = e.clientX - this.dragStartClient.x;
-    const dy = e.clientY - this.dragStartClient.y;
-    const preview = `translate(${dx}px, ${dy}px)`;
-    this.canvas.style.transform = preview;
-    this.overlayCanvas.style.transform = preview;
-  };
-
-  clearDragPreview = () => {
-    this.canvas.style.transform = "";
-    this.overlayCanvas.style.transform = "";
+    this.mandelbrotPanel.onPointerMove(e, { selectionBox: this.selectionBox });
   };
 
   onPointerUp = (e) => {
-    if (this.isSelecting) {
-      this.isSelecting = false;
-      this.selectionBox.style.display = "none";
-
-      const rect = this.canvas.getBoundingClientRect();
-      const screenSel = DOMRectReadOnly.fromRect({
-        x: Math.min(e.clientX, this.selectStart.x) - rect.left,
-        y: Math.min(e.clientY, this.selectStart.y) - rect.top,
-        width: Math.abs(e.clientX - this.selectStart.x),
-        height: Math.abs(e.clientY - this.selectStart.y),
-      });
-
-      // ignore selections that are too small (e.g. Ctrl+click without dragging)
-      if (screenSel.width < 3 || screenSel.height < 3) return;
-
-      const aspect = this.canvas.width / this.canvas.height;
-
-      const topLeftNorm = new DOMPointReadOnly(screenSel.left / rect.width, screenSel.top / rect.height);
-      const bottomRightNorm = new DOMPointReadOnly(screenSel.right / rect.width, screenSel.bottom / rect.height);
-      const f1 = this.toFractal(topLeftNorm, this.center);
-      const f2 = this.toFractal(bottomRightNorm, this.center);
-
-      this.center = domPoint.mid(f1, f2);
-
-      const selWidth  = Math.abs(f2.x - f1.x);
-      const selHeight = Math.abs(f1.y - f2.y);
-      this.setScale(Math.max(selHeight, selWidth / aspect));
-
-      this.pivot = this.center;
-      this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-
-      this.pushHistory(this.dragStartSnapshot);
-      this.resetProgressive();
-      this.scheduleRender();
-      return;
-    }
-
-    this.isDragging = false;
-
-    // Genuine CLICK (no dragging) → pivot (Y corrected: NDC vs canvas)
-    if (!this.hasDragged) {
-      const rect = this.canvas.getBoundingClientRect();
-      const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-
-      this.pivotScreen = mouse;
-      this.pivot = this.toFractal(mouse, this.center);
-
-      this.pushHistory(this.snapshotView());
-      this.juliaC = this.pivot;
-      // Only the Julia render actually depends on juliaC; in Mandelbrot
-      // mode this just moves the marker, so don't restart its progressive
-      // reveal over an unrelated, unchanged image.
-      if (this.juliaMode === 1) this.resetProgressive();
-      this.scheduleRender();
-      return;
-    }
-
-    // Drag finished: commit the CSS preview into the real center and
-    // trigger the one real render this drag gets.
-    this.clearDragPreview();
-    const rect = this.canvas.getBoundingClientRect();
-    const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-    const delta = domPoint.sub(mouse, this.dragStart);
-    const aspect = this.canvas.width / this.canvas.height;
-
-    this.center = view.pan(this.startCenter, delta, this.scale, aspect);
-    this.pivot = this.center;
-    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-
-    if (this.dragStartSnapshot) {
-      this.pushHistory(this.dragStartSnapshot);
-      this.dragStartSnapshot = null;
-    }
-    this.scheduleRender();
+    this.mandelbrotPanel.onPointerUp(e, {
+      selectionBox: this.selectionBox,
+      minScale: MandelbrotApp.MIN_SCALE,
+      maxScale: MandelbrotApp.MAX_SCALE,
+      snapshotView: () => this.snapshotView(),
+      pushHistory: (s) => this.pushHistory(s),
+      resetProgressive: () => this.resetProgressive(),
+      scheduleRender: () => this.scheduleRender(),
+      onScaleChange: () => this.syncZoomSliderUI(),
+      onGenuineClick: (fractalPoint) => {
+        this.juliaC = fractalPoint;
+        // Only the Julia panel's render actually depends on juliaC; if it's
+        // not shown this just moves the marker, so don't restart its
+        // progressive reveal over an unrelated, unchanged image.
+        if (this.showJulia && this.juliaPanel) this.resetProgressive();
+      },
+    });
   };
 
   onPointerLeave = () => {
-    if (this.isDragging) this.clearDragPreview();
-    this.isDragging = false;
-    if (this.isSelecting) {
-      this.isSelecting = false;
-      this.selectionBox.style.display = "none";
-    }
+    this.mandelbrotPanel.onPointerLeave({ selectionBox: this.selectionBox });
   };
 
   // WHEEL → zoom centered on the pivot
   onWheel = (e) => {
-    e.preventDefault();
-    this.history.armWheel(() => this.snapshotView());
-    const aspect = this.canvas.width / this.canvas.height;
-    const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
-
-    this.setScale(this.scale * zoomFactor);
-
-    // Keeps the fractal point under pivotScreen fixed at the new scale.
-    this.center = view.anchorFor(this.pivot, this.pivotScreen, this.scale, aspect);
-
-    this.resetProgressive();
-    this.scheduleRender();
+    this.mandelbrotPanel.onWheel(e, {
+      minScale: MandelbrotApp.MIN_SCALE,
+      maxScale: MandelbrotApp.MAX_SCALE,
+      armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
+      resetProgressive: () => this.resetProgressive(),
+      scheduleRender: () => this.scheduleRender(),
+      onScaleChange: () => this.syncZoomSliderUI(),
+    });
   };
+
+  // Renders one panel with the given juliaMode/displayIter (both panels
+  // share the same progressive ramp and iteration count; see renderOnce).
+  renderPanel(panel, juliaMode, displayIter) {
+    if (!panel.renderer) return;
+    const data = buildUniformData({
+      center: panel.center,
+      scale: panel.scale,
+      juliaC: this.juliaC,
+      displayIter,
+      canvasWidth: panel.canvas.width,
+      canvasHeight: panel.canvas.height,
+      juliaMode,
+      smoothColoring: this.smoothColoring,
+    });
+    panel.renderer.render(data);
+  }
 
   // RENDER
   renderOnce = () => {
     if (this.deviceLost || !this.renderer) return Infinity;
-    const [cx_hi, cx_lo] = split64(this.center.x);
-    const [cy_hi, cy_lo] = split64(this.center.y);
-    const [jx_hi, jx_lo] = split64(this.juliaC.x);
-    const [jy_hi, jy_lo] = split64(this.juliaC.y);
 
+    const anyDragging = this.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
     let displayIter = this.maxIter;
-    if (this.progressiveMode && !this.isDragging) {
+    if (this.progressiveMode && !anyDragging) {
       displayIter = Math.min(this.progressiveIter, this.maxIter);
       if (this.progressiveIter < this.maxIter) {
         this.progressiveIter = Math.min(this.maxIter, Math.ceil(this.progressiveIter * 1.08 + 1));
       }
     }
 
-    const data = new Float32Array([
-      this.scale,
-      cx_hi, cx_lo,
-      cy_hi, cy_lo,
-      jx_hi, jx_lo,
-      jy_hi, jy_lo,
-      displayIter,
-      this.canvas.width,
-      this.canvas.height,
-      this.juliaMode,
-      this.smoothColoring,
-      0, 0 // padding to 64 B (16 floats), see renderer.js's uniformBuffer comment
-    ]);
+    if (this.showMandelbrot) this.renderPanel(this.mandelbrotPanel, 0, displayIter);
+    if (this.showJulia && this.juliaPanel) this.renderPanel(this.juliaPanel, 1, displayIter);
 
-    this.renderer.render(data);
     // Exposed on the instance (rather than a local) so e2e tests can observe
     // the iteration count actually rendered, not just progressiveIter's
     // internal, already-incremented-for-next-frame value.

@@ -37,16 +37,54 @@ test('changing a setting persists it to localStorage', async ({ page }) => {
 
 test('reloading the page restores persisted settings', async ({ page }) => {
   await page.selectOption('#paletteType', '1');
-  await page.click('#juliaMode');
+  await page.click('#showJulia');
   await waitForPersisted(page, 'paletteType', 1);
-  await waitForPersisted(page, 'juliaMode', 1);
+  await waitForPersisted(page, 'showJulia', 1);
 
   await page.reload();
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
   await expect(page.locator('#paletteType')).toHaveValue('1');
-  await expect(page.locator('#juliaMode')).toBeChecked();
+  await expect(page.locator('#showJulia')).toBeChecked();
+});
+
+test('reloading the page restores the Julia panel\'s own dragged/zoomed position, not just juliaC', async ({ page }) => {
+  await page.click('#showJulia');
+  await page.waitForTimeout(200);
+
+  await page.mouse.move(900, 350); // over the Julia (right) panel
+  await page.mouse.wheel(0, -400);
+  await page.mouse.move(1000, 450);
+  await page.mouse.down();
+  await page.mouse.move(850, 300);
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+
+  const before = await page.evaluate(() => ({
+    center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
+    scale: window.app.juliaPanel.scale,
+  }));
+
+  // Wait for the *drag's* debounced save specifically, not just showJulia
+  // (already true since the earlier checkbox click) or juliaPanelScale
+  // (already reached its final value from the wheel-zoom, which lands
+  // before the drag) — otherwise the reload below can race ahead of the
+  // drag's own later settings save and only see pre-drag persisted state.
+  await expect.poll(async () => {
+    const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
+    return raw ? JSON.parse(raw).juliaPanelCenter?.x : null;
+  }).toBe(before.center.x);
+  await page.reload();
+  const gpuError = page.locator('#gpuError');
+  await expect(gpuError).toBeHidden();
+  await page.waitForTimeout(200);
+
+  const after = await page.evaluate(() => ({
+    center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
+    scale: window.app.juliaPanel.scale,
+  }));
+  expect(after).toEqual(before);
 });
 
 test('Reset returns to the original defaults, not the persisted state', async ({ page }) => {

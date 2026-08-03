@@ -1,13 +1,13 @@
-// Sets up the WebGPU device/pipeline/uniforms for the fractal render pass
-// and returns a small `{ device, render, writePalette }` handle. Returns
-// null if no adapter is available; throws on any other setup failure
-// (missing WebGPU canvas context, WGSL fetch/compile errors), for the
-// caller to catch and report.
+// Requests a WebGPU adapter/device, once per app. A single device can
+// configure any number of independent canvases (see attachCanvas), so this
+// is called once even when the app later drives two canvases (Mandelbrot +
+// Julia panels).
 //
 // `onDeviceLost`/`onUncapturedError` are wired up immediately after device
 // creation, before anything else that could throw, so they're live even if
 // a later setup step (e.g. shader compilation) fails.
-export async function createRenderer(canvas, palette256, { onDeviceLost, onUncapturedError }) {
+// Returns null if no adapter is available.
+export async function requestGPUDevice({ onDeviceLost, onUncapturedError }) {
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) return null;
   const device = await adapter.requestDevice();
@@ -20,6 +20,14 @@ export async function createRenderer(canvas, palette256, { onDeviceLost, onUncap
     onUncapturedError(event.error.message);
   });
 
+  return device;
+}
+
+// Sets up the pipeline/uniforms for one canvas's fractal render pass and
+// returns a small `{ render, writePalette }` handle. Throws on setup
+// failure (missing WebGPU canvas context, WGSL fetch/compile errors), for
+// the caller to catch and report.
+export async function attachCanvas(device, canvas, palette256) {
   const context = canvas.getContext("webgpu");
   if (!context) {
     throw new Error("Unable to create the WebGPU canvas context.");
@@ -105,5 +113,5 @@ export async function createRenderer(canvas, palette256, { onDeviceLost, onUncap
     device.queue.submit([encoder.finish()]);
   };
 
-  return { device, render, writePalette };
+  return { render, writePalette };
 }

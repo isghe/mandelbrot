@@ -93,7 +93,7 @@ test('pan can be undone and redone', async ({ page }) => {
   expect((await fractalShot(page)).equals(afterPan)).toBe(true);
 });
 
-test('wheel-zoom, palette, and Julia mode changes undo in order', async ({ page }) => {
+test('wheel-zoom, palette, and smooth coloring changes undo in order', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const box = await page.locator('#gfx').boundingBox();
   const cx = box.x + box.width / 2;
@@ -112,14 +112,14 @@ test('wheel-zoom, palette, and Julia mode changes undo in order', async ({ page 
   const afterPalette = await fractalShot(page);
   expect(afterPalette.equals(afterZoom)).toBe(false);
 
-  await page.check('#juliaMode');
+  await page.check('#smoothColoring');
   await page.waitForTimeout(200);
-  const afterJulia = await fractalShot(page);
-  expect(afterJulia.equals(afterPalette)).toBe(false);
+  const afterSmooth = await fractalShot(page);
+  expect(afterSmooth.equals(afterPalette)).toBe(false);
 
-  await backBtn.click(); // undo Julia
+  await backBtn.click(); // undo smooth coloring
   await page.waitForTimeout(200);
-  await expect(page.locator('#juliaMode')).not.toBeChecked();
+  await expect(page.locator('#smoothColoring')).not.toBeChecked();
   expect((await fractalShot(page)).equals(afterPalette)).toBe(true);
 
   await backBtn.click(); // undo palette
@@ -265,17 +265,17 @@ test('Reset mid-slider-drag discards the pending snapshot without a spurious pus
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
-test('clicking sets the Julia point and is undoable, even outside Julia mode', async ({ page }) => {
+test('clicking sets the Julia point and is undoable, even with the Julia panel hidden', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
 
-  // The Julia point only affects the rendered fractal in Julia mode, so show
-  // its overlay marker to get a visible signal of the click's effect while
-  // staying in Mandelbrot mode.
+  // The Julia point only affects the rendered fractal when the Julia panel
+  // is shown, so show its overlay marker instead to get a visible signal of
+  // the click's effect while the Julia panel stays hidden.
   await page.check('#juliaMarker');
   await page.waitForTimeout(200);
   const baseline = await fractalShot(page);
 
-  await expect(page.locator('#juliaMode')).not.toBeChecked();
+  await expect(page.locator('#showJulia')).not.toBeChecked();
   await page.mouse.click(600, 300); // plain click, no drag
   await page.waitForTimeout(200);
 
