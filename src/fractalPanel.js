@@ -49,9 +49,10 @@ export class FractalPanel {
   isSelecting = false;
   selectStart = new DOMPointReadOnly(0, 0);
 
+  // Per-canvas render handle from renderer.js's attachCanvas(); the WebGPU
+  // device itself is shared app-wide (see MandelbrotApp.deviceLost), so
+  // device loss isn't tracked per panel.
   renderer = null;
-  // Set once the WebGPU device is lost; blocks further render attempts.
-  deviceLost = false;
 
   constructor(canvas, overlayCanvas) {
     this.canvas = canvas;
