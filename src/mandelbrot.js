@@ -326,9 +326,9 @@ class MandelbrotApp {
       // Drawn before renderOnce() so the overlay still shows up even if
       // WebGPU init failed (renderOnce() is a no-op/throws in that case).
       this.drawOverlay();
-      this.renderOnce();
+      const displayIter = this.renderOnce();
       this.scheduleSaveSettings();
-      if (this.progressiveMode && this.progressiveIter < this.maxIter && !this.isDragging) {
+      if (this.progressiveMode && displayIter < this.maxIter && !this.isDragging) {
         this.scheduleRender();
       }
     });
@@ -671,7 +671,7 @@ class MandelbrotApp {
 
   // RENDER
   renderOnce = () => {
-    if (this.deviceLost || !this.renderer) return;
+    if (this.deviceLost || !this.renderer) return Infinity;
     const [cx_hi, cx_lo] = split64(this.center.x);
     const [cy_hi, cy_lo] = split64(this.center.y);
     const [jx_hi, jx_lo] = split64(this.juliaC.x);
@@ -700,6 +700,11 @@ class MandelbrotApp {
     ]);
 
     this.renderer.render(data);
+    // Exposed on the instance (rather than a local) so e2e tests can observe
+    // the iteration count actually rendered, not just progressiveIter's
+    // internal, already-incremented-for-next-frame value.
+    this.lastDisplayIter = displayIter;
+    return displayIter;
   };
 }
 
