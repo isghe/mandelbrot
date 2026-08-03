@@ -5,6 +5,7 @@ import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
 import { createRenderer } from './renderer.js';
+import { FractalPanel } from './fractalPanel.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -16,8 +17,6 @@ class MandelbrotApp {
   static SETTINGS_SAVE_MS = 400;
 
   // State (JS = f64)
-  center = new DOMPointReadOnly(-0.5, 0.0);
-  scale   = 3.0;
   maxIter = 256;
   juliaMode = 0;
   juliaC = new DOMPointReadOnly(-0.8, 0.156);
@@ -33,20 +32,6 @@ class MandelbrotApp {
   progressiveMode = 0;
   progressiveIter = 1;
 
-  // pivot for centered zoom
-  pivot = new DOMPointReadOnly(-0.5, 0.0);
-  pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-
-  // pan
-  isDragging = false;
-  hasDragged = false;
-  dragStart = new DOMPointReadOnly(0, 0);
-  startCenter = new DOMPointReadOnly(0, 0);
-
-  // selection area (Ctrl + drag)
-  isSelecting = false;
-  selectStart = new DOMPointReadOnly(0, 0);
-
   // view history (Back / Forward)
   history = new ViewHistory(MandelbrotApp.WHEEL_HISTORY_MS, () => this.updateHistoryButtons());
   dragStartSnapshot = null;
@@ -58,10 +43,44 @@ class MandelbrotApp {
   // render scheduling
   rafPending = false;
 
-  // Set once the WebGPU device is lost; blocks further render attempts.
-  deviceLost = false;
+  // Per-canvas render/interaction state (center, scale, pivot, pan/selection,
+  // renderer, ...) lives on FractalPanel; these accessors keep the rest of
+  // this class working against `this.foo` unchanged while that state moves.
+  get canvas() { return this.mandelbrotPanel.canvas; }
+  get overlayCanvas() { return this.mandelbrotPanel.overlayCanvas; }
+  get overlayCtx() { return this.mandelbrotPanel.overlayCtx; }
+  get overlayCssWidth() { return this.mandelbrotPanel.overlayCssWidth; }
+  get overlayCssHeight() { return this.mandelbrotPanel.overlayCssHeight; }
+  get center() { return this.mandelbrotPanel.center; }
+  set center(v) { this.mandelbrotPanel.center = v; }
+  get scale() { return this.mandelbrotPanel.scale; }
+  set scale(v) { this.mandelbrotPanel.scale = v; }
+  get pivot() { return this.mandelbrotPanel.pivot; }
+  set pivot(v) { this.mandelbrotPanel.pivot = v; }
+  get pivotScreen() { return this.mandelbrotPanel.pivotScreen; }
+  set pivotScreen(v) { this.mandelbrotPanel.pivotScreen = v; }
+  get isDragging() { return this.mandelbrotPanel.isDragging; }
+  set isDragging(v) { this.mandelbrotPanel.isDragging = v; }
+  get hasDragged() { return this.mandelbrotPanel.hasDragged; }
+  set hasDragged(v) { this.mandelbrotPanel.hasDragged = v; }
+  get dragStart() { return this.mandelbrotPanel.dragStart; }
+  set dragStart(v) { this.mandelbrotPanel.dragStart = v; }
+  get dragStartClient() { return this.mandelbrotPanel.dragStartClient; }
+  set dragStartClient(v) { this.mandelbrotPanel.dragStartClient = v; }
+  get startCenter() { return this.mandelbrotPanel.startCenter; }
+  set startCenter(v) { this.mandelbrotPanel.startCenter = v; }
+  get isSelecting() { return this.mandelbrotPanel.isSelecting; }
+  set isSelecting(v) { this.mandelbrotPanel.isSelecting = v; }
+  get selectStart() { return this.mandelbrotPanel.selectStart; }
+  set selectStart(v) { this.mandelbrotPanel.selectStart = v; }
+  get renderer() { return this.mandelbrotPanel.renderer; }
+  set renderer(v) { this.mandelbrotPanel.renderer = v; }
+  get deviceLost() { return this.mandelbrotPanel.deviceLost; }
+  set deviceLost(v) { this.mandelbrotPanel.deviceLost = v; }
 
   constructor(canvas) {
+    this.mandelbrotPanel = new FractalPanel(canvas, document.getElementById("overlay"));
+
     this.initialState = {
       center: this.center,
       scale: this.scale,
@@ -74,13 +93,6 @@ class MandelbrotApp {
     };
 
     this.restoreSettings();
-
-    this.canvas = canvas;
-    this.resizeCanvas();
-
-    this.overlayCanvas = document.getElementById("overlay");
-    this.overlayCtx = this.overlayCanvas.getContext("2d");
-    this.resizeOverlayCanvas();
 
     this.selectionBox = document.getElementById("selectionBox");
     this.errorBox = document.getElementById("gpuError");
@@ -283,30 +295,11 @@ class MandelbrotApp {
   }
 
   resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width * dpr));
-    const height = Math.max(1, Math.round(rect.height * dpr));
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width;
-      this.canvas.height = height;
-    }
+    this.mandelbrotPanel.resizeCanvas();
   }
 
-  // Keeps the overlay's backing store in sync with #gfx; the transform
-  // reset lets overlay draw calls be written in CSS pixels.
   resizeOverlayCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.overlayCanvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width * dpr));
-    const height = Math.max(1, Math.round(rect.height * dpr));
-    if (this.overlayCanvas.width !== width || this.overlayCanvas.height !== height) {
-      this.overlayCanvas.width = width;
-      this.overlayCanvas.height = height;
-    }
-    this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.overlayCssWidth = rect.width;
-    this.overlayCssHeight = rect.height;
+    this.mandelbrotPanel.resizeOverlayCanvas();
   }
 
   onResize = () => {
@@ -397,8 +390,7 @@ class MandelbrotApp {
 
   // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
   toFractal(normPoint, anchor) {
-    const aspect = this.canvas.width / this.canvas.height;
-    return view.normalizedToFractal(normPoint, anchor, this.scale, aspect);
+    return this.mandelbrotPanel.toFractal(normPoint, anchor);
   }
 
   onIterInput = () => {
