@@ -35,6 +35,12 @@ test('progressive mode ramp actually renders a frame at maxIter', async ({ page 
 // kept re-arming itself every animation frame forever instead of stopping,
 // once the device was lost mid-ramp.
 test('device loss stops the progressive re-arm instead of looping every frame', async ({ page }) => {
+  // initGPU() itself calls scheduleRender() once, right after its own async
+  // WebGPU setup resolves — asserting a render *count* before that startup
+  // call has landed races it, and can count that unrelated call as a bogus
+  // second progressive re-arm. Wait for it to settle first.
+  await page.waitForFunction(() => window.app.renderer != null);
+
   const renderCount = await page.evaluate(async () => {
     window.__renderCount = 0;
     const orig = window.app.renderOnce;
