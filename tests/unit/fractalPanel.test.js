@@ -12,7 +12,8 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
 
 globalThis.window ??= { devicePixelRatio: 1 };
 
-const { FractalPanel } = await import('../../src/fractalPanel.js');
+const { FractalPanel, buildUniformData } = await import('../../src/fractalPanel.js');
+const { split64 } = await import('../../src/precision.js');
 
 // Minimal HTMLCanvasElement stand-in: a plain object with the handful of
 // properties/methods FractalPanel actually touches (width/height,
@@ -88,6 +89,40 @@ test('toFractal delegates to view.normalizedToFractal with the panel aspect rati
 
   assert.strictEqual(actual.x, expected.x);
   assert.strictEqual(actual.y, expected.y);
+});
+
+test('buildUniformData packs a 16-float array in the WGSL Params layout', () => {
+  const center = new DOMPointReadOnly(-0.5, 0.25);
+  const juliaC = new DOMPointReadOnly(-0.8, 0.156);
+  const data = buildUniformData({
+    center,
+    scale: 2.5,
+    juliaC,
+    displayIter: 128,
+    canvasWidth: 800,
+    canvasHeight: 600,
+    juliaMode: 1,
+    smoothColoring: 0,
+  });
+
+  assert.strictEqual(data.length, 16, 'padded to 64 bytes (16 floats)');
+  assert.strictEqual(data[0], 2.5, 'scale');
+
+  // split64's `lo` is an f64 remainder; Float32Array storage rounds it to
+  // f32, so compare against the same rounding rather than the raw split64
+  // output.
+  const asF32Pair = ([hi, lo]) => [Math.fround(hi), Math.fround(lo)];
+  assert.deepStrictEqual([...data.slice(1, 3)], asF32Pair(split64(center.x)), 'center.x hi/lo');
+  assert.deepStrictEqual([...data.slice(3, 5)], asF32Pair(split64(center.y)), 'center.y hi/lo');
+  assert.deepStrictEqual([...data.slice(5, 7)], asF32Pair(split64(juliaC.x)), 'juliaC.x hi/lo');
+  assert.deepStrictEqual([...data.slice(7, 9)], asF32Pair(split64(juliaC.y)), 'juliaC.y hi/lo');
+
+  assert.strictEqual(data[9], 128, 'displayIter');
+  assert.strictEqual(data[10], 800, 'canvasWidth');
+  assert.strictEqual(data[11], 600, 'canvasHeight');
+  assert.strictEqual(data[12], 1, 'juliaMode flag');
+  assert.strictEqual(data[13], 0, 'smoothColoring flag');
+  assert.deepStrictEqual([...data.slice(14, 16)], [0, 0], 'trailing padding');
 });
 
 test('default field values match the app defaults FractalPanel replaced', () => {

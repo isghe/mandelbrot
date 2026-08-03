@@ -1,4 +1,30 @@
 import { view } from './geometry.js';
+import { split64 } from './precision.js';
+
+// Packs render state into the 16-float layout of the WGSL `Params` uniform
+// (see renderer.js's uniformBuffer comment for the byte layout/padding).
+export function buildUniformData({
+  center, scale, juliaC, displayIter, canvasWidth, canvasHeight, juliaMode, smoothColoring,
+}) {
+  const [cx_hi, cx_lo] = split64(center.x);
+  const [cy_hi, cy_lo] = split64(center.y);
+  const [jx_hi, jx_lo] = split64(juliaC.x);
+  const [jy_hi, jy_lo] = split64(juliaC.y);
+
+  return new Float32Array([
+    scale,
+    cx_hi, cx_lo,
+    cy_hi, cy_lo,
+    jx_hi, jx_lo,
+    jy_hi, jy_lo,
+    displayIter,
+    canvasWidth,
+    canvasHeight,
+    juliaMode,
+    smoothColoring,
+    0, 0 // padding to 64 B (16 floats), see renderer.js's uniformBuffer comment
+  ]);
+}
 
 // Per-canvas render/interaction state: one Mandelbrot canvas today, a second
 // independent Julia canvas later. Shared/app-global state (juliaC, maxIter,

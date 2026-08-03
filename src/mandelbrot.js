@@ -1,11 +1,10 @@
 import { domPoint, view } from './geometry.js';
-import { split64 } from './precision.js';
 import { makePalette } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
 import { createRenderer } from './renderer.js';
-import { FractalPanel } from './fractalPanel.js';
+import { FractalPanel, buildUniformData } from './fractalPanel.js';
 
 class MandelbrotApp {
   static MIN_SCALE = 1e-14;
@@ -664,10 +663,6 @@ class MandelbrotApp {
   // RENDER
   renderOnce = () => {
     if (this.deviceLost || !this.renderer) return Infinity;
-    const [cx_hi, cx_lo] = split64(this.center.x);
-    const [cy_hi, cy_lo] = split64(this.center.y);
-    const [jx_hi, jx_lo] = split64(this.juliaC.x);
-    const [jy_hi, jy_lo] = split64(this.juliaC.y);
 
     let displayIter = this.maxIter;
     if (this.progressiveMode && !this.isDragging) {
@@ -677,19 +672,16 @@ class MandelbrotApp {
       }
     }
 
-    const data = new Float32Array([
-      this.scale,
-      cx_hi, cx_lo,
-      cy_hi, cy_lo,
-      jx_hi, jx_lo,
-      jy_hi, jy_lo,
+    const data = buildUniformData({
+      center: this.center,
+      scale: this.scale,
+      juliaC: this.juliaC,
       displayIter,
-      this.canvas.width,
-      this.canvas.height,
-      this.juliaMode,
-      this.smoothColoring,
-      0, 0 // padding to 64 B (16 floats), see renderer.js's uniformBuffer comment
-    ]);
+      canvasWidth: this.canvas.width,
+      canvasHeight: this.canvas.height,
+      juliaMode: this.juliaMode,
+      smoothColoring: this.smoothColoring,
+    });
 
     this.renderer.render(data);
     // Exposed on the instance (rather than a local) so e2e tests can observe
