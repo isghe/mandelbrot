@@ -443,6 +443,15 @@ class MandelbrotApp {
   onDualViewChange = () => {
     this.dualView = this.dualViewChk.checked ? 1 : 0;
     document.body.classList.toggle("dual-view", !!this.dualView);
+    // The CSS width of #gfx/#overlay changes (100vw <-> 50vw) the instant the
+    // class toggles; refresh both panels' backing stores now rather than
+    // waiting for the next window resize, or the image stays stretched.
+    this.resizeCanvas();
+    this.resizeOverlayCanvas();
+    if (this.juliaPanel) {
+      this.juliaPanel.resizeCanvas();
+      this.juliaPanel.resizeOverlayCanvas();
+    }
     if (this.dualView && !this.juliaPanel) {
       const panel = new FractalPanel(document.getElementById("gfxJulia"), document.getElementById("overlayJulia"));
       panel.center = this.juliaC;
@@ -450,10 +459,12 @@ class MandelbrotApp {
       this.juliaPanel = panel;
       this.attachJuliaPanelEvents(panel);
       if (this.gpuDevice) {
-        attachCanvas(this.gpuDevice, panel.canvas, this.palette256).then((renderer) => {
-          panel.renderer = renderer;
-          this.scheduleRender();
-        });
+        attachCanvas(this.gpuDevice, panel.canvas, this.palette256)
+          .then((renderer) => {
+            panel.renderer = renderer;
+            this.scheduleRender();
+          })
+          .catch((e) => this.showError(`Failed to initialize the Julia panel: ${e.message}`));
       }
     }
     this.scheduleRender();
