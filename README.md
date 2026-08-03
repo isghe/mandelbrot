@@ -99,16 +99,17 @@ clear that state before dialing the iteration count back up more gradually.
   at both the low and deep-zoom ends of their range); palette is also adjustable via the
   UI panel.
 - **Copy URL** button — copy a link to the clipboard that reproduces the current view,
-  iterations, palette, Julia constant, progressive mode, smooth coloring, grid/marker
-  overlay checkboxes, and Mandelbrot/Julia panel visibility. Only fields that differ from
-  the app's built-in defaults are encoded, so the address bar also updates live as you
-  interact and collapses back to a bare URL after **Reset to initial condition**.
+  iterations, palette, Julia constant, the Julia panel's own independent pan/zoom,
+  progressive mode, smooth coloring, grid/marker overlay checkboxes, and Mandelbrot/Julia
+  panel visibility. Only fields that differ from the app's built-in defaults are encoded,
+  so the address bar also updates live as you interact and collapses back to a bare URL
+  after **Reset to initial condition**.
 
-All of the above (view, iterations, palette, Julia constant, progressive mode, smooth
-coloring, the grid/marker overlay checkboxes, and Mandelbrot/Julia panel visibility) is
-persisted to `localStorage` and restored on the next page load, so the app reopens where
-you left it. Settings-panel visibility (the ☰ toggle / **H** key) is a session-only
-preference and is not persisted.
+All of the above (view, iterations, palette, Julia constant, the Julia panel's own
+pan/zoom, progressive mode, smooth coloring, the grid/marker overlay checkboxes, and
+Mandelbrot/Julia panel visibility) is persisted to `localStorage` and restored on the
+next page load, so the app reopens where you left it. Settings-panel visibility (the ☰
+toggle / **H** key) is a session-only preference and is not persisted.
 
 Opening a URL with share parameters (`?x=...&y=...&scale=...`, etc.) always takes
 precedence over `localStorage`: any field present in the URL is applied, and any field
