@@ -1,4 +1,4 @@
-import { view } from './geometry.js';
+import { domPoint, view } from './geometry.js';
 import { split64 } from './precision.js';
 
 // Packs render state into the 16-float layout of the WGSL `Params` uniform
@@ -43,6 +43,7 @@ export class FractalPanel {
   dragStart = new DOMPointReadOnly(0, 0);
   dragStartClient = new DOMPointReadOnly(0, 0);
   startCenter = new DOMPointReadOnly(0, 0);
+  dragStartSnapshot = null;
 
   // selection area (Ctrl + drag)
   isSelecting = false;
@@ -92,5 +93,170 @@ export class FractalPanel {
   toFractal(normPoint, anchor) {
     const aspect = this.canvas.width / this.canvas.height;
     return view.normalizedToFractal(normPoint, anchor, this.scale, aspect);
+  }
+
+  setScale(next, minScale, maxScale) {
+    this.scale = Math.min(maxScale, Math.max(minScale, next));
+    return this.scale;
+  }
+
+  // PAN: pointerdown / pointermove / pointerup. `hooks` carries the
+  // app-global side effects a single canvas can't own by itself (a shared
+  // selection-box element, view history, render scheduling, and what a
+  // genuine click on *this* panel should do — e.g. only the Mandelbrot
+  // panel sets juliaC from it).
+  onPointerDown(e, { selectionBox, snapshotView }) {
+    this.canvas.setPointerCapture(e.pointerId);
+    if (e.ctrlKey) {
+      this.isSelecting = true;
+      this.dragStartSnapshot = snapshotView();
+      this.selectStart = new DOMPointReadOnly(e.clientX, e.clientY);
+      selectionBox.style.left = this.selectStart.x + "px";
+      selectionBox.style.top = this.selectStart.y + "px";
+      selectionBox.style.width = "0px";
+      selectionBox.style.height = "0px";
+      selectionBox.style.display = "block";
+      return;
+    }
+    this.isDragging = true;
+    this.hasDragged = false;
+    this.dragStartSnapshot = snapshotView();
+    const rect = this.canvas.getBoundingClientRect();
+    this.dragStart = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+    this.dragStartClient = new DOMPointReadOnly(e.clientX, e.clientY);
+    this.startCenter = this.center;
+  }
+
+  onPointerMove(e, { selectionBox }) {
+    if (this.isSelecting) {
+      const box = DOMRectReadOnly.fromRect({
+        x: Math.min(e.clientX, this.selectStart.x),
+        y: Math.min(e.clientY, this.selectStart.y),
+        width: Math.abs(e.clientX - this.selectStart.x),
+        height: Math.abs(e.clientY - this.selectStart.y),
+      });
+      selectionBox.style.left = box.x + "px";
+      selectionBox.style.top = box.y + "px";
+      selectionBox.style.width = box.width + "px";
+      selectionBox.style.height = box.height + "px";
+      return;
+    }
+    if (!this.isDragging) return;
+    this.hasDragged = true;
+    // Cheap CSS-transform preview while dragging: the real WebGPU render
+    // (expensive) only runs once, on pointerup, with the final center.
+    const dx = e.clientX - this.dragStartClient.x;
+    const dy = e.clientY - this.dragStartClient.y;
+    const preview = `translate(${dx}px, ${dy}px)`;
+    this.canvas.style.transform = preview;
+    this.overlayCanvas.style.transform = preview;
+  }
+
+  clearDragPreview() {
+    this.canvas.style.transform = "";
+    this.overlayCanvas.style.transform = "";
+  }
+
+  onPointerUp(e, {
+    selectionBox, minScale, maxScale, snapshotView, pushHistory,
+    resetProgressive, scheduleRender, onGenuineClick, onScaleChange,
+  }) {
+    if (this.isSelecting) {
+      this.isSelecting = false;
+      selectionBox.style.display = "none";
+
+      const rect = this.canvas.getBoundingClientRect();
+      const screenSel = DOMRectReadOnly.fromRect({
+        x: Math.min(e.clientX, this.selectStart.x) - rect.left,
+        y: Math.min(e.clientY, this.selectStart.y) - rect.top,
+        width: Math.abs(e.clientX - this.selectStart.x),
+        height: Math.abs(e.clientY - this.selectStart.y),
+      });
+
+      // ignore selections that are too small (e.g. Ctrl+click without dragging)
+      if (screenSel.width < 3 || screenSel.height < 3) return;
+
+      const aspect = this.canvas.width / this.canvas.height;
+
+      const topLeftNorm = new DOMPointReadOnly(screenSel.left / rect.width, screenSel.top / rect.height);
+      const bottomRightNorm = new DOMPointReadOnly(screenSel.right / rect.width, screenSel.bottom / rect.height);
+      const f1 = this.toFractal(topLeftNorm, this.center);
+      const f2 = this.toFractal(bottomRightNorm, this.center);
+
+      this.center = domPoint.mid(f1, f2);
+
+      const selWidth  = Math.abs(f2.x - f1.x);
+      const selHeight = Math.abs(f1.y - f2.y);
+      this.setScale(Math.max(selHeight, selWidth / aspect), minScale, maxScale);
+      onScaleChange?.(this.scale);
+
+      this.pivot = this.center;
+      this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+
+      pushHistory(this.dragStartSnapshot);
+      resetProgressive();
+      scheduleRender();
+      return;
+    }
+
+    this.isDragging = false;
+
+    // Genuine CLICK (no dragging) → pivot (Y corrected: NDC vs canvas)
+    if (!this.hasDragged) {
+      const rect = this.canvas.getBoundingClientRect();
+      const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+
+      this.pivotScreen = mouse;
+      this.pivot = this.toFractal(mouse, this.center);
+
+      pushHistory(snapshotView());
+      onGenuineClick?.(this.pivot);
+      scheduleRender();
+      return;
+    }
+
+    // Drag finished: commit the CSS preview into the real center and
+    // trigger the one real render this drag gets.
+    this.clearDragPreview();
+    const rect = this.canvas.getBoundingClientRect();
+    const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+    const delta = domPoint.sub(mouse, this.dragStart);
+    const aspect = this.canvas.width / this.canvas.height;
+
+    this.center = view.pan(this.startCenter, delta, this.scale, aspect);
+    this.pivot = this.center;
+    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+
+    if (this.dragStartSnapshot) {
+      pushHistory(this.dragStartSnapshot);
+      this.dragStartSnapshot = null;
+    }
+    scheduleRender();
+  }
+
+  onPointerLeave({ selectionBox }) {
+    if (this.isDragging) this.clearDragPreview();
+    this.isDragging = false;
+    if (this.isSelecting) {
+      this.isSelecting = false;
+      selectionBox.style.display = "none";
+    }
+  }
+
+  // WHEEL → zoom centered on the pivot
+  onWheel(e, { minScale, maxScale, armWheelHistory, resetProgressive, scheduleRender, onScaleChange }) {
+    e.preventDefault();
+    armWheelHistory();
+    const aspect = this.canvas.width / this.canvas.height;
+    const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
+
+    this.setScale(this.scale * zoomFactor, minScale, maxScale);
+    onScaleChange?.(this.scale);
+
+    // Keeps the fractal point under pivotScreen fixed at the new scale.
+    this.center = view.anchorFor(this.pivot, this.pivotScreen, this.scale, aspect);
+
+    resetProgressive();
+    scheduleRender();
   }
 }

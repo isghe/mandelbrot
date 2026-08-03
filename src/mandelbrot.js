@@ -1,4 +1,3 @@
-import { domPoint, view } from './geometry.js';
 import { makePalette } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
@@ -33,7 +32,6 @@ class MandelbrotApp {
 
   // view history (Back / Forward)
   history = new ViewHistory(MandelbrotApp.WHEEL_HISTORY_MS, () => this.updateHistoryButtons());
-  dragStartSnapshot = null;
   pendingZoomSnapshot = null;
   pendingIterSnapshot = null;
   saveSettingsTimer = null;
@@ -59,19 +57,6 @@ class MandelbrotApp {
   get pivotScreen() { return this.mandelbrotPanel.pivotScreen; }
   set pivotScreen(v) { this.mandelbrotPanel.pivotScreen = v; }
   get isDragging() { return this.mandelbrotPanel.isDragging; }
-  set isDragging(v) { this.mandelbrotPanel.isDragging = v; }
-  get hasDragged() { return this.mandelbrotPanel.hasDragged; }
-  set hasDragged(v) { this.mandelbrotPanel.hasDragged = v; }
-  get dragStart() { return this.mandelbrotPanel.dragStart; }
-  set dragStart(v) { this.mandelbrotPanel.dragStart = v; }
-  get dragStartClient() { return this.mandelbrotPanel.dragStartClient; }
-  set dragStartClient(v) { this.mandelbrotPanel.dragStartClient = v; }
-  get startCenter() { return this.mandelbrotPanel.startCenter; }
-  set startCenter(v) { this.mandelbrotPanel.startCenter = v; }
-  get isSelecting() { return this.mandelbrotPanel.isSelecting; }
-  set isSelecting(v) { this.mandelbrotPanel.isSelecting = v; }
-  get selectStart() { return this.mandelbrotPanel.selectStart; }
-  set selectStart(v) { this.mandelbrotPanel.selectStart = v; }
   get renderer() { return this.mandelbrotPanel.renderer; }
   set renderer(v) { this.mandelbrotPanel.renderer = v; }
   get deviceLost() { return this.mandelbrotPanel.deviceLost; }
@@ -176,7 +161,11 @@ class MandelbrotApp {
   }
 
   setScale(next) {
-    this.scale = Math.min(MandelbrotApp.MAX_SCALE, Math.max(MandelbrotApp.MIN_SCALE, next));
+    this.mandelbrotPanel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
+    this.syncZoomSliderUI();
+  }
+
+  syncZoomSliderUI() {
     this.zoomSlider.value = Math.log10(this.scale);
     this.zoomLabel.textContent = this.scale;
   }
@@ -505,159 +494,54 @@ class MandelbrotApp {
     if (next) this.applySnapshot(next);
   };
 
-  // PAN: pointerdown / pointermove / pointerup
+  // PAN / CLICK / SELECT: delegated to FractalPanel, which owns the pointer
+  // math; hooks here supply the app-global side effects (history, render
+  // scheduling, UI sync) and what a genuine click on this panel should do.
   onPointerDown = (e) => {
-    this.canvas.setPointerCapture(e.pointerId);
-    if (e.ctrlKey) {
-      this.isSelecting = true;
-      this.dragStartSnapshot = this.snapshotView();
-      this.selectStart = new DOMPointReadOnly(e.clientX, e.clientY);
-      this.selectionBox.style.left = this.selectStart.x + "px";
-      this.selectionBox.style.top = this.selectStart.y + "px";
-      this.selectionBox.style.width = "0px";
-      this.selectionBox.style.height = "0px";
-      this.selectionBox.style.display = "block";
-      return;
-    }
-    this.isDragging = true;
-    this.hasDragged = false;
-    this.dragStartSnapshot = this.snapshotView();
-    const rect = this.canvas.getBoundingClientRect();
-    this.dragStart = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-    this.dragStartClient = new DOMPointReadOnly(e.clientX, e.clientY);
-    this.startCenter = this.center;
+    this.mandelbrotPanel.onPointerDown(e, {
+      selectionBox: this.selectionBox,
+      snapshotView: () => this.snapshotView(),
+    });
   };
 
   onPointerMove = (e) => {
-    if (this.isSelecting) {
-      const box = DOMRectReadOnly.fromRect({
-        x: Math.min(e.clientX, this.selectStart.x),
-        y: Math.min(e.clientY, this.selectStart.y),
-        width: Math.abs(e.clientX - this.selectStart.x),
-        height: Math.abs(e.clientY - this.selectStart.y),
-      });
-      this.selectionBox.style.left = box.x + "px";
-      this.selectionBox.style.top = box.y + "px";
-      this.selectionBox.style.width = box.width + "px";
-      this.selectionBox.style.height = box.height + "px";
-      return;
-    }
-    if (!this.isDragging) return;
-    this.hasDragged = true;
-    // Cheap CSS-transform preview while dragging: the real WebGPU render
-    // (expensive) only runs once, on pointerup, with the final center.
-    const dx = e.clientX - this.dragStartClient.x;
-    const dy = e.clientY - this.dragStartClient.y;
-    const preview = `translate(${dx}px, ${dy}px)`;
-    this.canvas.style.transform = preview;
-    this.overlayCanvas.style.transform = preview;
-  };
-
-  clearDragPreview = () => {
-    this.canvas.style.transform = "";
-    this.overlayCanvas.style.transform = "";
+    this.mandelbrotPanel.onPointerMove(e, { selectionBox: this.selectionBox });
   };
 
   onPointerUp = (e) => {
-    if (this.isSelecting) {
-      this.isSelecting = false;
-      this.selectionBox.style.display = "none";
-
-      const rect = this.canvas.getBoundingClientRect();
-      const screenSel = DOMRectReadOnly.fromRect({
-        x: Math.min(e.clientX, this.selectStart.x) - rect.left,
-        y: Math.min(e.clientY, this.selectStart.y) - rect.top,
-        width: Math.abs(e.clientX - this.selectStart.x),
-        height: Math.abs(e.clientY - this.selectStart.y),
-      });
-
-      // ignore selections that are too small (e.g. Ctrl+click without dragging)
-      if (screenSel.width < 3 || screenSel.height < 3) return;
-
-      const aspect = this.canvas.width / this.canvas.height;
-
-      const topLeftNorm = new DOMPointReadOnly(screenSel.left / rect.width, screenSel.top / rect.height);
-      const bottomRightNorm = new DOMPointReadOnly(screenSel.right / rect.width, screenSel.bottom / rect.height);
-      const f1 = this.toFractal(topLeftNorm, this.center);
-      const f2 = this.toFractal(bottomRightNorm, this.center);
-
-      this.center = domPoint.mid(f1, f2);
-
-      const selWidth  = Math.abs(f2.x - f1.x);
-      const selHeight = Math.abs(f1.y - f2.y);
-      this.setScale(Math.max(selHeight, selWidth / aspect));
-
-      this.pivot = this.center;
-      this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-
-      this.pushHistory(this.dragStartSnapshot);
-      this.resetProgressive();
-      this.scheduleRender();
-      return;
-    }
-
-    this.isDragging = false;
-
-    // Genuine CLICK (no dragging) → pivot (Y corrected: NDC vs canvas)
-    if (!this.hasDragged) {
-      const rect = this.canvas.getBoundingClientRect();
-      const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-
-      this.pivotScreen = mouse;
-      this.pivot = this.toFractal(mouse, this.center);
-
-      this.pushHistory(this.snapshotView());
-      this.juliaC = this.pivot;
-      // Only the Julia render actually depends on juliaC; in Mandelbrot
-      // mode this just moves the marker, so don't restart its progressive
-      // reveal over an unrelated, unchanged image.
-      if (this.juliaMode === 1) this.resetProgressive();
-      this.scheduleRender();
-      return;
-    }
-
-    // Drag finished: commit the CSS preview into the real center and
-    // trigger the one real render this drag gets.
-    this.clearDragPreview();
-    const rect = this.canvas.getBoundingClientRect();
-    const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-    const delta = domPoint.sub(mouse, this.dragStart);
-    const aspect = this.canvas.width / this.canvas.height;
-
-    this.center = view.pan(this.startCenter, delta, this.scale, aspect);
-    this.pivot = this.center;
-    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-
-    if (this.dragStartSnapshot) {
-      this.pushHistory(this.dragStartSnapshot);
-      this.dragStartSnapshot = null;
-    }
-    this.scheduleRender();
+    this.mandelbrotPanel.onPointerUp(e, {
+      selectionBox: this.selectionBox,
+      minScale: MandelbrotApp.MIN_SCALE,
+      maxScale: MandelbrotApp.MAX_SCALE,
+      snapshotView: () => this.snapshotView(),
+      pushHistory: (s) => this.pushHistory(s),
+      resetProgressive: () => this.resetProgressive(),
+      scheduleRender: () => this.scheduleRender(),
+      onScaleChange: () => this.syncZoomSliderUI(),
+      onGenuineClick: (fractalPoint) => {
+        this.juliaC = fractalPoint;
+        // Only the Julia render actually depends on juliaC; in Mandelbrot
+        // mode this just moves the marker, so don't restart its progressive
+        // reveal over an unrelated, unchanged image.
+        if (this.juliaMode === 1) this.resetProgressive();
+      },
+    });
   };
 
   onPointerLeave = () => {
-    if (this.isDragging) this.clearDragPreview();
-    this.isDragging = false;
-    if (this.isSelecting) {
-      this.isSelecting = false;
-      this.selectionBox.style.display = "none";
-    }
+    this.mandelbrotPanel.onPointerLeave({ selectionBox: this.selectionBox });
   };
 
   // WHEEL → zoom centered on the pivot
   onWheel = (e) => {
-    e.preventDefault();
-    this.history.armWheel(() => this.snapshotView());
-    const aspect = this.canvas.width / this.canvas.height;
-    const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
-
-    this.setScale(this.scale * zoomFactor);
-
-    // Keeps the fractal point under pivotScreen fixed at the new scale.
-    this.center = view.anchorFor(this.pivot, this.pivotScreen, this.scale, aspect);
-
-    this.resetProgressive();
-    this.scheduleRender();
+    this.mandelbrotPanel.onWheel(e, {
+      minScale: MandelbrotApp.MIN_SCALE,
+      maxScale: MandelbrotApp.MAX_SCALE,
+      armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
+      resetProgressive: () => this.resetProgressive(),
+      scheduleRender: () => this.scheduleRender(),
+      onScaleChange: () => this.syncZoomSliderUI(),
+    });
   };
 
   // RENDER
