@@ -124,6 +124,26 @@ test('parseShareParams skips non-finite values', () => {
   assert.strictEqual(s, null);
 });
 
+test('parseShareParams treats absent v as legacy version 1', () => {
+  const s = share.parseShareParams('?scale=1.5');
+  assert.deepStrictEqual(s, { scale: 1.5 });
+});
+
+test('parseShareParams accepts v=1 explicitly', () => {
+  const s = share.parseShareParams('?v=1&scale=1.5');
+  assert.deepStrictEqual(s, { scale: 1.5 });
+});
+
+test('parseShareParams rejects an unknown future version', () => {
+  const s = share.parseShareParams('?v=2&scale=1.5');
+  assert.strictEqual(s, null);
+});
+
+test('parseShareParams treats a bare v with no other params as no state', () => {
+  const s = share.parseShareParams('?v=1');
+  assert.strictEqual(s, null);
+});
+
 test('buildShareUrl -> parseShareParams round-trips every changed field', () => {
   const state = baseState({
     center: { x: -1.25, y: 0.1 },

@@ -44,6 +44,14 @@ function parseShareParams(search) {
   const params = new URLSearchParams(search);
   if ([...params.keys()].length === 0) return null;
 
+  // Absent v means the legacy (pre-versioning) shape, which is schema
+  // version 1. An unrecognized future version is rejected outright rather
+  // than partially applied.
+  const vRaw = params.get("v");
+  const schemaVersion = vRaw === null || vRaw === "" ? 1 : Number(vRaw);
+  if (!Number.isFinite(schemaVersion) || schemaVersion > SCHEMA_VERSION) return null;
+  // Hook for a future migration of legacy param shapes.
+
   const num = (name) => {
     const raw = params.get(name);
     if (raw === null || raw === "") return undefined;
