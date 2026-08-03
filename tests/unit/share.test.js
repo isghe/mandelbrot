@@ -160,6 +160,7 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
   const state = baseState({ scale: 1.5, gridOverlay: 1 });
   const data = share.settingsData(state);
   assert.deepStrictEqual(data, {
+    v: 1,
     center: { x: -0.5, y: 0 },
     scale: 1.5,
     maxIter: 256,
@@ -173,4 +174,25 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
     juliaMarker: 0,
   });
   assert.strictEqual(JSON.stringify(data), JSON.stringify(JSON.parse(JSON.stringify(data))));
+});
+
+test('settingsData always stamps the current schema version', () => {
+  const data = share.settingsData(baseState());
+  assert.strictEqual(data.v, share.SCHEMA_VERSION);
+});
+
+test('loadSettingsData treats an object without v as legacy version 1', () => {
+  const legacy = share.settingsData(baseState());
+  delete legacy.v;
+  assert.deepStrictEqual(share.loadSettingsData(legacy), legacy);
+});
+
+test('loadSettingsData rejects an unknown future version', () => {
+  const future = { ...share.settingsData(baseState()), v: 2 };
+  assert.strictEqual(share.loadSettingsData(future), null);
+});
+
+test('loadSettingsData returns null for null or non-object input', () => {
+  assert.strictEqual(share.loadSettingsData(null), null);
+  assert.strictEqual(share.loadSettingsData('not an object'), null);
 });
