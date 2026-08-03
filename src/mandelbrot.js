@@ -2,7 +2,7 @@ import { makePalette } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
-import { createRenderer } from './renderer.js';
+import { requestGPUDevice, attachCanvas } from './renderer.js';
 import { FractalPanel, buildUniformData } from './fractalPanel.js';
 
 class MandelbrotApp {
@@ -350,18 +350,18 @@ class MandelbrotApp {
   }
 
   async initGPU() {
-    const renderer = await createRenderer(this.canvas, this.palette256, {
+    this.gpuDevice = await requestGPUDevice({
       onDeviceLost: (info) => {
         this.deviceLost = true;
         this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
       },
       onUncapturedError: (message) => this.showError(`WebGPU error: ${message}`),
     });
-    if (!renderer) {
+    if (!this.gpuDevice) {
       this.showError("No WebGPU adapter available.");
       return;
     }
-    this.renderer = renderer;
+    this.renderer = await attachCanvas(this.gpuDevice, this.canvas, this.palette256);
     this.scheduleRender();
   }
 
