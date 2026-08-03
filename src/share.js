@@ -12,16 +12,19 @@ function buildShareUrl(state, initialState, origin, pathname) {
     params.set("x", state.center.x);
     params.set("y", state.center.y);
   }
-  setIfChanged("scale", state.scale, init.scale);
-  setIfChanged("iter", state.maxIter, init.maxIter);
-  setIfChanged("julia", state.juliaMode, init.juliaMode);
   if (state.juliaC.x !== init.juliaC.x || state.juliaC.y !== init.juliaC.y) {
     params.set("jx", state.juliaC.x);
     params.set("jy", state.juliaC.y);
   }
-  setIfChanged("palette", state.paletteType, init.paletteType);
-  setIfChanged("progressive", state.progressiveMode, init.progressiveMode);
-  setIfChanged("smooth", state.smoothColoring, init.smoothColoring);
+  const changedFields = [
+    ["iter", "maxIter"],
+    ["julia", "juliaMode"],
+    ["palette", "paletteType"],
+    ["progressive", "progressiveMode"],
+    ["scale", "scale"],
+    ["smooth", "smoothColoring"],
+  ];
+  changedFields.forEach(([name, field]) => setIfChanged(name, state[field], init[field]));
   // Overlay display preferences aren't part of initialState (see the
   // comment on mandelbrot.js's on*Change handlers); Reset always zeroes them.
   if (state.gridOverlay) params.set("grid", state.gridOverlay);
@@ -54,15 +57,18 @@ function parseShareParams(search) {
   const jx = num("jx"), jy = num("jy");
   if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
 
-  setIfPresent("scale", "scale");
-  setIfPresent("maxIter", "iter");
-  setIfPresent("juliaMode", "julia");
-  setIfPresent("paletteType", "palette");
-  setIfPresent("progressiveMode", "progressive");
-  setIfPresent("smoothColoring", "smooth");
-  setIfPresent("gridOverlay", "grid");
-  setIfPresent("centerMarker", "centerMark");
-  setIfPresent("juliaMarker", "juliaMark");
+  const presentFields = [
+    ["centerMarker", "centerMark"],
+    ["gridOverlay", "grid"],
+    ["juliaMarker", "juliaMark"],
+    ["juliaMode", "julia"],
+    ["maxIter", "iter"],
+    ["paletteType", "palette"],
+    ["progressiveMode", "progressive"],
+    ["scale", "scale"],
+    ["smoothColoring", "smooth"],
+  ];
+  presentFields.forEach(([field, paramName]) => setIfPresent(field, paramName));
 
   return Object.keys(s).length > 0 ? s : null;
 }
