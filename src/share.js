@@ -1,7 +1,12 @@
 // Bump when the shape of settingsData()/parseShareParams() output changes
 // in a way older code can't read. See loadSettingsData() and
 // parseShareParams() for the hook points where a migration would go.
-const SCHEMA_VERSION = 1;
+//
+// v2: `juliaMode` (an exclusive full-screen Julia flag) was replaced by two
+// independent panel-visibility flags, `showMandelbrot`/`showJulia`. See the
+// v<2 migration branches below for how legacy `julia=1` URLs/localStorage
+// map onto the new shape.
+const SCHEMA_VERSION = 2;
 
 // Only encodes fields that differ from `initialState`, so the "Reset to
 // initial condition" state always maps to a bare URL and the address bar
@@ -23,18 +28,27 @@ function buildShareUrl(state, initialState, origin, pathname) {
   }
   const changedFields = [
     ["iter", "maxIter"],
-    ["julia", "juliaMode"],
     ["palette", "paletteType"],
     ["progressive", "progressiveMode"],
     ["scale", "scale"],
     ["smooth", "smoothColoring"],
   ];
   changedFields.forEach(([name, field]) => setIfChanged(name, state[field], init[field]));
-  // Overlay display preferences aren't part of initialState (see the
-  // comment on mandelbrot.js's on*Change handlers); Reset always zeroes them.
+  // Overlay/panel display preferences aren't part of initialState (see the
+  // comment on mandelbrot.js's on*Change handlers); Reset always zeroes them
+  // (showMandelbrot back to its default of 1, the rest back to 0).
   if (state.gridOverlay) params.set("grid", state.gridOverlay);
   if (state.centerMarker) params.set("centerMark", state.centerMarker);
   if (state.juliaMarker) params.set("juliaMark", state.juliaMarker);
+  if (!state.showMandelbrot) params.set("mandelbrot", 0);
+  if (state.showJulia) params.set("julia", state.showJulia);
+
+  // `julia`'s meaning changed in v2 (see SCHEMA_VERSION comment above), so
+  // any URL that actually encodes state must be stamped with the current
+  // version — otherwise parseShareParams would default absent `v` to the
+  // legacy (v1) interpretation and misread it. A bare (all-defaults) URL
+  // has nothing to misread, so it stays unstamped.
+  if (params.toString()) params.set("v", SCHEMA_VERSION);
 
   const qs = params.toString();
   return `${origin}${pathname}${qs ? "?" + qs : ""}`;
@@ -74,7 +88,6 @@ function parseShareParams(search) {
     ["centerMarker", "centerMark"],
     ["gridOverlay", "grid"],
     ["juliaMarker", "juliaMark"],
-    ["juliaMode", "julia"],
     ["maxIter", "iter"],
     ["paletteType", "palette"],
     ["progressiveMode", "progressive"],
@@ -82,6 +95,19 @@ function parseShareParams(search) {
     ["smoothColoring", "smooth"],
   ];
   presentFields.forEach(([field, paramName]) => setIfPresent(field, paramName));
+
+  if (schemaVersion < 2) {
+    // Legacy `julia=1` meant an exclusive full-screen Julia render; map it
+    // onto the new independent Mandelbrot/Julia visibility flags.
+    const legacyJulia = num("julia");
+    if (legacyJulia !== undefined) {
+      s.showJulia = legacyJulia ? 1 : 0;
+      s.showMandelbrot = legacyJulia ? 0 : 1;
+    }
+  } else {
+    setIfPresent("showMandelbrot", "mandelbrot");
+    setIfPresent("showJulia", "julia");
+  }
 
   return Object.keys(s).length > 0 ? s : null;
 }
@@ -93,7 +119,8 @@ function settingsData(state) {
     center: { x: state.center.x, y: state.center.y },
     scale: state.scale,
     maxIter: state.maxIter,
-    juliaMode: state.juliaMode,
+    showMandelbrot: state.showMandelbrot,
+    showJulia: state.showJulia,
     juliaC: { x: state.juliaC.x, y: state.juliaC.y },
     paletteType: state.paletteType,
     progressiveMode: state.progressiveMode,
@@ -111,7 +138,16 @@ function loadSettingsData(parsed) {
   if (!parsed || typeof parsed !== "object") return null;
   const v = parsed.v === undefined ? 1 : Number(parsed.v);
   if (!Number.isFinite(v) || v > SCHEMA_VERSION) return null;
-  // Hook for a future migration, e.g.: if (v === 1) parsed = migrateV1toV2(parsed);
+  if (v < 2) {
+    // Legacy `juliaMode` meant an exclusive full-screen Julia render; map it
+    // onto the new independent Mandelbrot/Julia visibility flags.
+    const legacyJuliaMode = parsed.juliaMode;
+    return {
+      ...parsed,
+      showJulia: legacyJuliaMode ? 1 : 0,
+      showMandelbrot: legacyJuliaMode ? 0 : 1,
+    };
+  }
   return parsed;
 }
 

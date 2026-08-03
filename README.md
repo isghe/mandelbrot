@@ -13,8 +13,8 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
   panning and zooming at interactive framerates.
 - **Deep zoom** via double-single precision arithmetic in the shader, pushing past the
   ~1e-7 wall of native `f32` down to ~1e-13/1e-14.
-- **Interactive Julia mode** — click anywhere on the Mandelbrot set to preview and pin the
-  corresponding Julia set.
+- **Interactive Julia panel** — click anywhere on the Mandelbrot set to pin the
+  corresponding Julia set; show it side by side with the Mandelbrot set, or on its own.
 - **Shareable view URLs** — copy a link that reproduces the exact view, iterations,
   palette, and mode you're looking at.
 
@@ -69,8 +69,10 @@ clear that state before dialing the iteration count back up more gradually.
   (regardless of mode, so it can be picked while still viewing the Mandelbrot set).
 - **Scroll wheel** — zoom in/out, centered on the last pivot point.
 - **Ctrl+drag** — draw a selection rectangle; releasing recenters and zooms to fit it.
-- **Julia mode** checkbox — switch between the Mandelbrot set and the Julia set for the
-  current pivot-selected constant.
+- **Mandelbrot** / **Julia** checkboxes — independently show/hide each panel. Both on
+  shows them side by side, each with its own independent pan/zoom; either alone shows
+  that panel full-screen; both off is a black screen. The Julia panel always renders the
+  set for the current pivot-selected constant.
 - **Progressive mode** checkbox — reveal the fractal iteration by iteration instead of
   jumping straight to full quality.
 - **Smooth coloring** checkbox (off by default) — continuous escape-time coloring instead
@@ -82,27 +84,31 @@ clear that state before dialing the iteration count back up more gradually.
 - **Show Julia point marker** checkbox (off by default) — overlay a diamond at the current
   Julia constant, in either mode.
 - **Back / Forward** buttons — step through the view history (center, zoom, iterations,
-  palette, Julia mode/constant, progressive mode, smooth coloring). Continuous wheel-zoom
-  and slider drags each count as a single history step. The grid/marker checkboxes above
-  are display preferences, not view state, and are not part of this history.
+  palette, Julia constant, progressive mode, smooth coloring). Continuous wheel-zoom
+  and slider drags each count as a single history step. The grid/marker checkboxes and the
+  Mandelbrot/Julia panel-visibility checkboxes above are display preferences, not view
+  state, and are not part of this history — panning/zooming the Julia panel independently
+  is likewise not undoable.
 - **Reset to initial condition** button — restore the default view, iterations, palette,
-  Julia mode/constant, progressive mode, smooth coloring, and the grid/marker overlay
-  checkboxes (unchecked, even though they're not part of the Back/Forward history). Also
-  clears the Back/Forward history. Note this also overwrites the persisted settings below
-  with these defaults, once the next render fires.
+  Julia constant, progressive mode, smooth coloring, the grid/marker overlay checkboxes
+  (unchecked), and panel visibility (Mandelbrot shown, Julia hidden) — even though none of
+  these are part of the Back/Forward history. Also clears the Back/Forward history. Note
+  this also overwrites the persisted settings below with these defaults, once the next
+  render fires.
 - Iteration count and zoom level are adjustable via log-scale sliders (for precise control
   at both the low and deep-zoom ends of their range); palette is also adjustable via the
   UI panel.
 - **Copy URL** button — copy a link to the clipboard that reproduces the current view,
-  iterations, palette, Julia mode/constant, progressive mode, smooth coloring, and
-  grid/marker overlay checkboxes. Only fields that differ from the app's built-in defaults
-  are encoded, so the address bar also updates live as you interact and collapses back to a
-  bare URL after **Reset to initial condition**.
+  iterations, palette, Julia constant, progressive mode, smooth coloring, grid/marker
+  overlay checkboxes, and Mandelbrot/Julia panel visibility. Only fields that differ from
+  the app's built-in defaults are encoded, so the address bar also updates live as you
+  interact and collapses back to a bare URL after **Reset to initial condition**.
 
-All of the above (view, iterations, palette, Julia mode/constant, progressive mode, smooth
-coloring, and the grid/marker overlay checkboxes) is persisted to `localStorage` and restored
-on the next page load, so the app reopens where you left it. Settings-panel visibility (the
-☰ toggle / **H** key) is a session-only preference and is not persisted.
+All of the above (view, iterations, palette, Julia constant, progressive mode, smooth
+coloring, the grid/marker overlay checkboxes, and Mandelbrot/Julia panel visibility) is
+persisted to `localStorage` and restored on the next page load, so the app reopens where
+you left it. Settings-panel visibility (the ☰ toggle / **H** key) is a session-only
+preference and is not persisted.
 
 Opening a URL with share parameters (`?x=...&y=...&scale=...`, etc.) always takes
 precedence over `localStorage`: any field present in the URL is applied, and any field

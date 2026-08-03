@@ -1,17 +1,20 @@
 body { margin:0; overflow:hidden; background:#000; }
-#gfx { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; }
-#overlay { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; pointer-events:none; }
-#gfxJulia, #overlayJulia { display:none; }
+#gfx, #overlay, #gfxJulia, #overlayJulia { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; }
+#overlay, #overlayJulia { pointer-events:none; }
 
-/* Dual view: Mandelbrot on the left half, Julia on the right half. */
+/* Each panel is independently shown/hidden (toggled in JS from the
+   Mandelbrot/Julia checkboxes); if both are hidden, the screen is black.
+   !important: this override must beat the #gfx/#overlay/#gfxJulia/#overlayJulia
+   ID selector above, which a same-specificity class selector cannot do —
+   a hidden-but-undisplayed canvas would otherwise still sit on top and
+   silently swallow pointer events meant for the visible one underneath. */
+.panel-hidden { display:none !important; }
+
+/* When both panels are visible: Mandelbrot on the left half, Julia on the
+   right half. When only one is visible it keeps the full 100vw/100vh from
+   the rule above. */
 body.dual-view #gfx, body.dual-view #overlay { width:50vw; }
-body.dual-view #gfxJulia {
-  display:block; position:fixed; top:0; left:50vw; width:50vw; height:100vh;
-}
-body.dual-view #overlayJulia {
-  display:block; position:fixed; top:0; left:50vw; width:50vw; height:100vh;
-  pointer-events:none;
-}
+body.dual-view #gfxJulia, body.dual-view #overlayJulia { left:50vw; width:50vw; }
 #uiToggleBtn {
   position:fixed; top:10px; left:10px; z-index:2;
   width:36px; height:36px;
@@ -44,6 +47,12 @@ label { display:block; margin-top:6px; }
   color:#f88; font-family:sans-serif; text-align:center;
 }
 #gpuReloadBtn { margin-top:12px; }
+
+#noVizMessage {
+  display:none;
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  color:#666; font-family:sans-serif; font-size:1.1em;
+}
 
 #repoLink {
   position:fixed; bottom:10px; left:50%; transform:translateX(-50%); z-index:2;

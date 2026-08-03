@@ -88,8 +88,8 @@ test('center marker checkbox toggles visible pixels and round-trips to baseline'
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
-test('Julia marker checkbox toggles visible pixels outside Julia mode too', async ({ page }) => {
-  await expect(page.locator('#juliaMode')).not.toBeChecked();
+test('Julia marker checkbox toggles visible pixels with the Julia panel hidden too', async ({ page }) => {
+  await expect(page.locator('#showJulia')).not.toBeChecked();
   const baseline = await fractalShot(page);
 
   await page.check('#juliaMarker');

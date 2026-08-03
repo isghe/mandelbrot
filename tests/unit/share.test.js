@@ -6,7 +6,6 @@ const initialState = {
   center: { x: -0.5, y: 0 },
   scale: 3.0,
   maxIter: 256,
-  juliaMode: 0,
   juliaC: { x: -0.8, y: 0.156 },
   paletteType: 4,
   progressiveMode: 0,
@@ -21,6 +20,8 @@ function baseState(overrides = {}) {
     gridOverlay: 0,
     centerMarker: 0,
     juliaMarker: 0,
+    showMandelbrot: 1,
+    showJulia: 0,
     ...overrides,
   };
 }
@@ -83,6 +84,30 @@ test('buildShareUrl omits falsy overlay display flags', () => {
   assert.strictEqual(params.has('juliaMark'), false);
 });
 
+test('buildShareUrl encodes julia=1 when the Julia panel is shown, omitting it by default', () => {
+  const shown = share.buildShareUrl(baseState({ showJulia: 1 }), initialState, 'https://example.com', '/');
+  assert.strictEqual(new URL(shown).searchParams.get('julia'), '1');
+
+  const hidden = share.buildShareUrl(baseState(), initialState, 'https://example.com', '/');
+  assert.strictEqual(new URL(hidden).searchParams.has('julia'), false);
+});
+
+test('buildShareUrl encodes mandelbrot=0 when the Mandelbrot panel is hidden, omitting it by default', () => {
+  const hidden = share.buildShareUrl(baseState({ showMandelbrot: 0 }), initialState, 'https://example.com', '/');
+  assert.strictEqual(new URL(hidden).searchParams.get('mandelbrot'), '0');
+
+  const shown = share.buildShareUrl(baseState(), initialState, 'https://example.com', '/');
+  assert.strictEqual(new URL(shown).searchParams.has('mandelbrot'), false);
+});
+
+test('buildShareUrl stamps v=2 on any URL that encodes state, not on a bare URL', () => {
+  const bare = share.buildShareUrl(baseState(), initialState, 'https://example.com', '/');
+  assert.strictEqual(new URL(bare).searchParams.has('v'), false);
+
+  const changed = share.buildShareUrl(baseState({ scale: 1.5 }), initialState, 'https://example.com', '/');
+  assert.strictEqual(new URL(changed).searchParams.get('v'), String(share.SCHEMA_VERSION));
+});
+
 test('parseShareParams returns null for an empty search string', () => {
   assert.strictEqual(share.parseShareParams(''), null);
   assert.strictEqual(share.parseShareParams('?'), null);
@@ -99,11 +124,12 @@ test('parseShareParams parses juliaC only when both jx and jy are present', () =
   assert.deepStrictEqual(s.juliaC, { x: -0.3, y: 0.9 });
 });
 
-test('parseShareParams maps scalar params to their field names', () => {
-  const s = share.parseShareParams('?iter=999&julia=1&palette=2&progressive=1&smooth=1&grid=1&centerMark=1&juliaMark=1&scale=1.5');
+test('parseShareParams (v2) maps scalar params to their field names', () => {
+  const s = share.parseShareParams('?v=2&iter=999&mandelbrot=0&julia=1&palette=2&progressive=1&smooth=1&grid=1&centerMark=1&juliaMark=1&scale=1.5');
   assert.deepStrictEqual(s, {
     maxIter: 999,
-    juliaMode: 1,
+    showMandelbrot: 0,
+    showJulia: 1,
     paletteType: 2,
     progressiveMode: 1,
     smoothColoring: 1,
@@ -112,6 +138,22 @@ test('parseShareParams maps scalar params to their field names', () => {
     juliaMarker: 1,
     scale: 1.5,
   });
+});
+
+test('parseShareParams (legacy v1) maps julia=1 to the exclusive-Julia visibility combo', () => {
+  const s = share.parseShareParams('?julia=1&scale=1.5');
+  assert.strictEqual(s.showJulia, 1);
+  assert.strictEqual(s.showMandelbrot, 0);
+});
+
+test('parseShareParams (legacy v1) maps julia=0 (or absent) to Mandelbrot-only', () => {
+  const explicit = share.parseShareParams('?julia=0&scale=1.5');
+  assert.strictEqual(explicit.showJulia, 0);
+  assert.strictEqual(explicit.showMandelbrot, 1);
+
+  const absent = share.parseShareParams('?scale=1.5');
+  assert.strictEqual(absent.showJulia, undefined);
+  assert.strictEqual(absent.showMandelbrot, undefined);
 });
 
 test('parseShareParams treats a present-but-empty param as absent, not zero', () => {
@@ -129,13 +171,13 @@ test('parseShareParams treats absent v as legacy version 1', () => {
   assert.deepStrictEqual(s, { scale: 1.5 });
 });
 
-test('parseShareParams accepts v=1 explicitly', () => {
-  const s = share.parseShareParams('?v=1&scale=1.5');
-  assert.deepStrictEqual(s, { scale: 1.5 });
+test('parseShareParams accepts v=1 explicitly (legacy julia semantics)', () => {
+  const s = share.parseShareParams('?v=1&scale=1.5&julia=1');
+  assert.deepStrictEqual(s, { scale: 1.5, showJulia: 1, showMandelbrot: 0 });
 });
 
 test('parseShareParams rejects an unknown future version', () => {
-  const s = share.parseShareParams('?v=2&scale=1.5');
+  const s = share.parseShareParams('?v=3&scale=1.5');
   assert.strictEqual(s, null);
 });
 
@@ -149,7 +191,6 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
     center: { x: -1.25, y: 0.1 },
     scale: 1.5,
     maxIter: 999,
-    juliaMode: 1,
     juliaC: { x: -0.3, y: 0.9 },
     paletteType: 2,
     progressiveMode: 1,
@@ -157,6 +198,8 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
     gridOverlay: 1,
     centerMarker: 1,
     juliaMarker: 1,
+    showMandelbrot: 0,
+    showJulia: 1,
   });
   const url = share.buildShareUrl(state, initialState, 'https://example.com', '/');
   const parsed = share.parseShareParams(new URL(url).search);
@@ -165,7 +208,6 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
     center: { x: -1.25, y: 0.1 },
     scale: 1.5,
     maxIter: 999,
-    juliaMode: 1,
     juliaC: { x: -0.3, y: 0.9 },
     paletteType: 2,
     progressiveMode: 1,
@@ -173,6 +215,8 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
     gridOverlay: 1,
     centerMarker: 1,
     juliaMarker: 1,
+    showMandelbrot: 0,
+    showJulia: 1,
   });
 });
 
@@ -180,11 +224,12 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
   const state = baseState({ scale: 1.5, gridOverlay: 1 });
   const data = share.settingsData(state);
   assert.deepStrictEqual(data, {
-    v: 1,
+    v: 2,
     center: { x: -0.5, y: 0 },
     scale: 1.5,
     maxIter: 256,
-    juliaMode: 0,
+    showMandelbrot: 1,
+    showJulia: 0,
     juliaC: { x: -0.8, y: 0.156 },
     paletteType: 4,
     progressiveMode: 0,
@@ -202,18 +247,32 @@ test('settingsData always stamps the current schema version', () => {
 });
 
 test('loadSettingsData treats an object without v as legacy version 1', () => {
-  const legacy = share.settingsData(baseState());
+  const legacy = { ...share.settingsData(baseState()), juliaMode: 0 };
   delete legacy.v;
-  assert.deepStrictEqual(share.loadSettingsData(legacy), legacy);
+  delete legacy.showMandelbrot;
+  delete legacy.showJulia;
+  const loaded = share.loadSettingsData(legacy);
+  assert.strictEqual(loaded.showJulia, 0);
+  assert.strictEqual(loaded.showMandelbrot, 1);
+});
+
+test('loadSettingsData (legacy v1) maps a truthy juliaMode to the exclusive-Julia visibility combo', () => {
+  const legacy = { ...share.settingsData(baseState()), juliaMode: 1 };
+  delete legacy.v;
+  delete legacy.showMandelbrot;
+  delete legacy.showJulia;
+  const loaded = share.loadSettingsData(legacy);
+  assert.strictEqual(loaded.showJulia, 1);
+  assert.strictEqual(loaded.showMandelbrot, 0);
 });
 
 test('loadSettingsData rejects an unknown future version', () => {
-  const future = { ...share.settingsData(baseState()), v: 2 };
+  const future = { ...share.settingsData(baseState()), v: 3 };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 
 test('loadSettingsData rejects a future version given as a string, not treated as legacy', () => {
-  const future = { ...share.settingsData(baseState()), v: "2" };
+  const future = { ...share.settingsData(baseState()), v: "3" };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 

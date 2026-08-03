@@ -24,7 +24,7 @@ test('Copy URL puts a URL with only the changed settings on the clipboard', asyn
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await page.selectOption('#paletteType', '1');
-  await page.click('#juliaMode');
+  await page.click('#showJulia');
   await page.click('#gridOverlay');
   await page.click('#shareBtn');
 
@@ -54,7 +54,7 @@ test('the address bar URL updates live as settings change, omitting untouched fi
 
 test('Reset clears every parameter back to a bare URL', async ({ page }) => {
   await page.selectOption('#paletteType', '1');
-  await page.click('#juliaMode');
+  await page.click('#showJulia');
   await page.click('#gridOverlay');
   await expect.poll(() => new URL(page.url()).searchParams.get('palette')).toBe('1');
 
@@ -64,7 +64,7 @@ test('Reset clears every parameter back to a bare URL', async ({ page }) => {
 
 test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device lost)', async ({ page }) => {
   await page.selectOption('#paletteType', '1');
-  await page.click('#juliaMode');
+  await page.click('#showJulia');
   await expect.poll(() => new URL(page.url()).searchParams.get('palette')).toBe('1');
 
   // Simulate the post-device-lost/no-adapter state: app alive, no renderer.
@@ -73,7 +73,7 @@ test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device l
   await page.click('#resetBtn');
   await expect.poll(() => new URL(page.url()).search).toBe('');
   await expect(page.locator('#paletteType')).toHaveValue('4');
-  await expect(page.locator('#juliaMode')).not.toBeChecked();
+  await expect(page.locator('#showJulia')).not.toBeChecked();
 });
 
 test('opening a share URL overrides both defaults and localStorage', async ({ page }) => {
@@ -83,13 +83,17 @@ test('opening a share URL overrides both defaults and localStorage', async ({ pa
     return raw ? JSON.parse(raw).paletteType : null;
   }).toBe(2);
 
+  // No `v=` param: this is a legacy (pre-v2) share URL, where `julia=1` meant
+  // an exclusive full-screen Julia render — see share.js's SCHEMA_VERSION
+  // migration. It should map onto showJulia=1/showMandelbrot=0.
   await page.goto('/index.html?x=-1.25&y=0.1&scale=0.5&iter=512&julia=1&jx=-0.7&jy=0.25&palette=3&progressive=0&smooth=1&grid=1&centerMark=0&juliaMark=0');
 
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
   await expect(page.locator('#paletteType')).toHaveValue('3');
-  await expect(page.locator('#juliaMode')).toBeChecked();
+  await expect(page.locator('#showJulia')).toBeChecked();
+  await expect(page.locator('#showMandelbrot')).not.toBeChecked();
   await expect(page.locator('#smoothColoring')).toBeChecked();
   await expect(page.locator('#gridOverlay')).toBeChecked();
   await expect(page.locator('#iterLabel')).toHaveText('512');
@@ -129,14 +133,18 @@ test('a param present but empty (e.g. ?iter=) is treated as absent, not zero', a
 });
 
 const DEFAULTS = {
-  maxIter: 256, juliaMode: 0, paletteType: 4, progressiveMode: 0, smoothColoring: 0,
+  maxIter: 256, showMandelbrot: 1, showJulia: 0, paletteType: 4, progressiveMode: 0, smoothColoring: 0,
   gridOverlay: 0, centerMarker: 0, juliaMarker: 0,
   center: { x: -0.5, y: 0 }, juliaC: { x: -0.8, y: 0.156 }, scale: 3,
 };
 
 const SINGLE_PARAM_CASES = [
   ['iter=999', 'maxIter', 999],
-  ['julia=1', 'juliaMode', 1],
+  // v2 required: a bare `julia=1` (no `v=`) is the legacy exclusive-Julia
+  // shape, which changes showJulia AND showMandelbrot together (covered by
+  // its own dedicated test below) — not a single-field case.
+  ['v=2&julia=1', 'showJulia', 1],
+  ['v=2&mandelbrot=0', 'showMandelbrot', 0],
   ['palette=2', 'paletteType', 2],
   ['progressive=1', 'progressiveMode', 1],
   ['smooth=1', 'smoothColoring', 1],
@@ -156,7 +164,8 @@ for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
 
     const state = await page.evaluate(() => ({
       maxIter: window.app.maxIter,
-      juliaMode: window.app.juliaMode,
+      showMandelbrot: window.app.showMandelbrot,
+      showJulia: window.app.showJulia,
       paletteType: window.app.paletteType,
       progressiveMode: window.app.progressiveMode,
       smoothColoring: window.app.smoothColoring,
@@ -175,6 +184,18 @@ for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
     }
   });
 }
+
+test('a legacy (pre-v2) share URL with "julia=1" and no "v=" maps to exclusive Julia (showJulia=1, showMandelbrot=0)', async ({ page }) => {
+  await page.goto('/index.html?julia=1');
+  const gpuError = page.locator('#gpuError');
+  await expect(gpuError).toBeHidden();
+
+  const state = await page.evaluate(() => ({
+    showJulia: window.app.showJulia,
+    showMandelbrot: window.app.showMandelbrot,
+  }));
+  expect(state).toEqual({ showJulia: 1, showMandelbrot: 0 });
+});
 
 test('opening a share URL persists the shared settings to localStorage', async ({ page }) => {
   await page.goto('/index.html?x=-1.25&y=0.1&scale=0.5&iter=512&julia=1&jx=-0.7&jy=0.25&palette=3&progressive=0&smooth=1&grid=1&centerMark=0&juliaMark=0');

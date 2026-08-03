@@ -16,7 +16,6 @@ class MandelbrotApp {
 
   // State (JS = f64)
   maxIter = 256;
-  juliaMode = 0;
   juliaC = new DOMPointReadOnly(-0.8, 0.156);
   paletteType = 4;
   smoothColoring = 0;
@@ -30,11 +29,14 @@ class MandelbrotApp {
   progressiveMode = 0;
   progressiveIter = 1;
 
-  // Split screen showing Mandelbrot + Julia side by side (juliaPanel is
-  // created lazily on first activation). Independent of the `juliaMode`
-  // checkbox, which controls only the Mandelbrot canvas's own exclusive
-  // full-screen render.
-  dualView = 0;
+  // Panel visibility (display preferences, not view history — mirrors the
+  // overlay toggles above): the Mandelbrot panel and Julia panel are each
+  // independently shown/hidden. Both on = split screen; either alone =
+  // that panel full-screen; both off = a black screen. The Julia panel is
+  // created lazily the first time it's shown, then just hidden/shown by
+  // CSS afterward.
+  showMandelbrot = 1;
+  showJulia = 0;
 
   // Set once the shared WebGPU device is lost; blocks further render
   // attempts on both panels (the device, not the canvas, was lost).
@@ -77,7 +79,6 @@ class MandelbrotApp {
       center: this.center,
       scale: this.scale,
       maxIter: this.maxIter,
-      juliaMode: this.juliaMode,
       juliaC: this.juliaC,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
@@ -87,6 +88,7 @@ class MandelbrotApp {
     this.restoreSettings();
 
     this.selectionBox = document.getElementById("selectionBox");
+    this.noVizMessage = document.getElementById("noVizMessage");
     this.errorBox = document.getElementById("gpuError");
     this.errorMessage = document.getElementById("gpuErrorMessage");
     this.reloadBtn = document.getElementById("gpuReloadBtn");
@@ -104,9 +106,8 @@ class MandelbrotApp {
     this.zoomSlider.min = Math.log10(MandelbrotApp.MIN_SCALE);
     this.zoomSlider.max = Math.log10(MandelbrotApp.MAX_SCALE);
     this.paletteSel = document.getElementById("paletteType");
-    this.juliaChk   = document.getElementById("juliaMode");
-    this.dualViewChk = document.getElementById("dualViewMode");
-    this.dualViewChk.checked = !!this.dualView;
+    this.showMandelbrotChk = document.getElementById("showMandelbrot");
+    this.showJuliaChk = document.getElementById("showJulia");
     this.progressiveChk = document.getElementById("progressiveMode");
     this.smoothColoringChk = document.getElementById("smoothColoring");
     this.gridOverlayChk = document.getElementById("gridOverlay");
@@ -115,12 +116,18 @@ class MandelbrotApp {
     const checkboxFields = [
       ["centerMarkerChk", "centerMarker"],
       ["gridOverlayChk", "gridOverlay"],
-      ["juliaChk", "juliaMode"],
       ["juliaMarkerChk", "juliaMarker"],
       ["progressiveChk", "progressiveMode"],
+      ["showJuliaChk", "showJulia"],
+      ["showMandelbrotChk", "showMandelbrot"],
       ["smoothColoringChk", "smoothColoring"],
     ];
     checkboxFields.forEach(([chk, field]) => { this[chk].checked = !!this[field]; });
+    // A shared/localStorage URL may have restored showJulia=1 before WebGPU
+    // finished initializing; create the panel now (attachCanvas happens
+    // later in initGPU() once the device is ready, same as onPanelVisibilityChange).
+    if (this.showJulia) this.createJuliaPanel();
+    this.updatePanelVisibility();
     this.paletteSel.value = this.paletteType;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
@@ -142,8 +149,8 @@ class MandelbrotApp {
       }
     };
     this.paletteSel.onchange = this.onPaletteChange;
-    this.juliaChk.onchange   = this.onJuliaChange;
-    this.dualViewChk.onchange = this.onDualViewChange;
+    this.showMandelbrotChk.onchange = this.onPanelVisibilityChange;
+    this.showJuliaChk.onchange = this.onPanelVisibilityChange;
     this.progressiveChk.onchange = this.onProgressiveChange;
     this.smoothColoringChk.onchange = this.onSmoothColoringChange;
     this.gridOverlayChk.onchange = this.onGridOverlayChange;
@@ -186,7 +193,6 @@ class MandelbrotApp {
       center: this.center,
       scale: this.scale,
       maxIter: this.maxIter,
-      juliaMode: this.juliaMode,
       juliaC: this.juliaC,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
@@ -239,8 +245,9 @@ class MandelbrotApp {
 
     const pointFields = ["center", "juliaC"];
     const numberFields = [
-      "centerMarker", "gridOverlay", "juliaMarker", "juliaMode", "maxIter",
-      "paletteType", "progressiveMode", "scale", "smoothColoring",
+      "centerMarker", "gridOverlay", "juliaMarker", "maxIter",
+      "paletteType", "progressiveMode", "scale", "showJulia", "showMandelbrot",
+      "smoothColoring",
     ];
     pointFields.forEach(restorePoint);
     numberFields.forEach(restoreNumber);
@@ -270,8 +277,6 @@ class MandelbrotApp {
     this.setScale(s.scale);
     this.setMaxIter(s.maxIter);
 
-    this.juliaMode = s.juliaMode;
-    this.juliaChk.checked = !!s.juliaMode;
     this.juliaC = s.juliaC;
 
     this.applyPalette(s.paletteType);
@@ -302,9 +307,11 @@ class MandelbrotApp {
   }
 
   onResize = () => {
-    this.resizeCanvas();
-    this.resizeOverlayCanvas();
-    if (this.dualView && this.juliaPanel) {
+    if (this.showMandelbrot) {
+      this.resizeCanvas();
+      this.resizeOverlayCanvas();
+    }
+    if (this.showJulia && this.juliaPanel) {
       this.juliaPanel.resizeCanvas();
       this.juliaPanel.resizeOverlayCanvas();
     }
@@ -324,7 +331,7 @@ class MandelbrotApp {
       this.drawOverlay();
       const displayIter = this.renderOnce();
       this.scheduleSaveSettings();
-      const anyDragging = this.isDragging || !!(this.dualView && this.juliaPanel?.isDragging);
+      const anyDragging = this.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
       if (this.progressiveMode && displayIter < this.maxIter && !anyDragging) {
         this.scheduleRender();
       }
@@ -346,8 +353,8 @@ class MandelbrotApp {
   }
 
   drawOverlay = () => {
-    this.drawOverlayForPanel(this.mandelbrotPanel, { showJuliaMarker: true });
-    if (this.dualView && this.juliaPanel) this.drawOverlayForPanel(this.juliaPanel, { showJuliaMarker: false });
+    if (this.showMandelbrot) this.drawOverlayForPanel(this.mandelbrotPanel, { showJuliaMarker: true });
+    if (this.showJulia && this.juliaPanel) this.drawOverlayForPanel(this.juliaPanel, { showJuliaMarker: false });
   };
 
   showError(msg) {
@@ -429,46 +436,56 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
-  onJuliaChange = () => {
-    this.pushHistory(this.snapshotView());
-    this.juliaMode = this.juliaChk.checked ? 1 : 0;
-    this.resetProgressive();
-    this.scheduleRender();
-  };
-
-  // Dual view is a display preference, not view state (mirrors the overlay
-  // toggles below) — no pushHistory. The Julia panel is created lazily on
-  // first activation and then kept alive (just hidden by CSS) so toggling
-  // back on doesn't need to re-attach WebGPU.
-  onDualViewChange = () => {
-    this.dualView = this.dualViewChk.checked ? 1 : 0;
-    document.body.classList.toggle("dual-view", !!this.dualView);
-    // The CSS width of #gfx/#overlay changes (100vw <-> 50vw) the instant the
-    // class toggles; refresh both panels' backing stores now rather than
+  // Panel visibility is a display preference, not view state (mirrors the
+  // overlay toggles below) — no pushHistory. The Julia panel is created
+  // lazily the first time it's shown and then kept alive (just hidden by
+  // CSS) so toggling back on doesn't need to re-attach WebGPU.
+  onPanelVisibilityChange = () => {
+    this.showMandelbrot = this.showMandelbrotChk.checked ? 1 : 0;
+    this.showJulia = this.showJuliaChk.checked ? 1 : 0;
+    this.updatePanelVisibility();
+    // The CSS width of a shown panel changes (100vw <-> 50vw) the instant
+    // its visibility changes; refresh its backing store now rather than
     // waiting for the next window resize, or the image stays stretched.
-    this.resizeCanvas();
-    this.resizeOverlayCanvas();
-    if (this.juliaPanel) {
+    if (this.showMandelbrot) {
+      this.resizeCanvas();
+      this.resizeOverlayCanvas();
+    }
+    if (this.showJulia && !this.juliaPanel) this.createJuliaPanel();
+    if (this.showJulia && this.juliaPanel) {
       this.juliaPanel.resizeCanvas();
       this.juliaPanel.resizeOverlayCanvas();
     }
-    if (this.dualView && !this.juliaPanel) {
-      const panel = new FractalPanel(document.getElementById("gfxJulia"), document.getElementById("overlayJulia"));
-      panel.center = this.juliaC;
-      panel.pivot = this.juliaC;
-      this.juliaPanel = panel;
-      this.attachJuliaPanelEvents(panel);
-      if (this.gpuDevice) {
-        attachCanvas(this.gpuDevice, panel.canvas, this.palette256)
-          .then((renderer) => {
-            panel.renderer = renderer;
-            this.scheduleRender();
-          })
-          .catch((e) => this.showError(`Failed to initialize the Julia panel: ${e.message}`));
-      }
-    }
     this.scheduleRender();
   };
+
+  updatePanelVisibility() {
+    document.body.classList.toggle("dual-view", !!(this.showMandelbrot && this.showJulia));
+    document.getElementById("gfx").classList.toggle("panel-hidden", !this.showMandelbrot);
+    document.getElementById("overlay").classList.toggle("panel-hidden", !this.showMandelbrot);
+    document.getElementById("gfxJulia").classList.toggle("panel-hidden", !this.showJulia);
+    document.getElementById("overlayJulia").classList.toggle("panel-hidden", !this.showJulia);
+    // Generic over however many visualization modes eventually exist, not
+    // just these two: show the placeholder whenever none of them are on.
+    const anyVisible = !!this.showMandelbrot || !!this.showJulia;
+    this.noVizMessage.style.display = anyVisible ? "none" : "block";
+  }
+
+  createJuliaPanel() {
+    const panel = new FractalPanel(document.getElementById("gfxJulia"), document.getElementById("overlayJulia"));
+    panel.center = this.juliaC;
+    panel.pivot = this.juliaC;
+    this.juliaPanel = panel;
+    this.attachJuliaPanelEvents(panel);
+    if (this.gpuDevice) {
+      attachCanvas(this.gpuDevice, panel.canvas, this.palette256)
+        .then((renderer) => {
+          panel.renderer = renderer;
+          this.scheduleRender();
+        })
+        .catch((e) => this.showError(`Failed to initialize the Julia panel: ${e.message}`));
+    }
+  }
 
   // Wires the Julia panel's own pan/zoom/select gestures. No onGenuineClick
   // hook: clicking inside the Julia panel only moves its own pivot/zoom
@@ -584,6 +601,15 @@ class MandelbrotApp {
       this[field] = 0;
       this[chk].checked = false;
     });
+    // Panel visibility isn't part of view history either, but Reset should
+    // still restore the default single-Mandelbrot view.
+    this.showMandelbrot = 1;
+    this.showMandelbrotChk.checked = true;
+    this.showJulia = 0;
+    this.showJuliaChk.checked = false;
+    this.updatePanelVisibility();
+    this.resizeCanvas();
+    this.resizeOverlayCanvas();
     this.applySnapshot(this.initialState);
   };
 
@@ -623,11 +649,10 @@ class MandelbrotApp {
       onScaleChange: () => this.syncZoomSliderUI(),
       onGenuineClick: (fractalPoint) => {
         this.juliaC = fractalPoint;
-        // Only a Julia render actually depends on juliaC: the exclusive
-        // full-screen Julia mode, or the Julia panel in dual view. Plain
-        // Mandelbrot mode with dual view off just moves the marker, so
-        // don't restart its progressive reveal over an unchanged image.
-        if (this.juliaMode === 1 || (this.dualView && this.juliaPanel)) this.resetProgressive();
+        // Only the Julia panel's render actually depends on juliaC; if it's
+        // not shown this just moves the marker, so don't restart its
+        // progressive reveal over an unrelated, unchanged image.
+        if (this.showJulia && this.juliaPanel) this.resetProgressive();
       },
     });
   };
@@ -669,7 +694,7 @@ class MandelbrotApp {
   renderOnce = () => {
     if (this.deviceLost || !this.renderer) return Infinity;
 
-    const anyDragging = this.isDragging || !!(this.dualView && this.juliaPanel?.isDragging);
+    const anyDragging = this.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
     let displayIter = this.maxIter;
     if (this.progressiveMode && !anyDragging) {
       displayIter = Math.min(this.progressiveIter, this.maxIter);
@@ -678,8 +703,8 @@ class MandelbrotApp {
       }
     }
 
-    this.renderPanel(this.mandelbrotPanel, this.juliaMode, displayIter);
-    if (this.dualView && this.juliaPanel) this.renderPanel(this.juliaPanel, 1, displayIter);
+    if (this.showMandelbrot) this.renderPanel(this.mandelbrotPanel, 0, displayIter);
+    if (this.showJulia && this.juliaPanel) this.renderPanel(this.juliaPanel, 1, displayIter);
 
     // Exposed on the instance (rather than a local) so e2e tests can observe
     // the iteration count actually rendered, not just progressiveIter's

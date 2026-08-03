@@ -16,6 +16,7 @@
 <canvas id="overlay"></canvas>
 <canvas id="gfxJulia"></canvas>
 <canvas id="overlayJulia"></canvas>
+<div id="noVizMessage">No visualization mode selected</div>
 <div id="selectionBox"></div>
 <div id="gpuError">
   <div id="gpuErrorMessage"></div>
@@ -42,9 +43,9 @@
     <option value="4" selected>Apple II</option>
   </select>
 
-  <label><input type="checkbox" id="juliaMode"> Julia mode</label>
+  <label><input type="checkbox" id="showMandelbrot" checked> Mandelbrot</label>
 
-  <label><input type="checkbox" id="dualViewMode"> Dual view (Mandelbrot + Julia side by side)</label>
+  <label><input type="checkbox" id="showJulia"> Julia</label>
 
   <label><input type="checkbox" id="progressiveMode"> Progressive mode</label>
 

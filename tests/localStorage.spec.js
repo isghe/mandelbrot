@@ -37,16 +37,16 @@ test('changing a setting persists it to localStorage', async ({ page }) => {
 
 test('reloading the page restores persisted settings', async ({ page }) => {
   await page.selectOption('#paletteType', '1');
-  await page.click('#juliaMode');
+  await page.click('#showJulia');
   await waitForPersisted(page, 'paletteType', 1);
-  await waitForPersisted(page, 'juliaMode', 1);
+  await waitForPersisted(page, 'showJulia', 1);
 
   await page.reload();
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
   await expect(page.locator('#paletteType')).toHaveValue('1');
-  await expect(page.locator('#juliaMode')).toBeChecked();
+  await expect(page.locator('#showJulia')).toBeChecked();
 });
 
 test('Reset returns to the original defaults, not the persisted state', async ({ page }) => {
