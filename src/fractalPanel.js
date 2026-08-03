@@ -151,11 +151,19 @@ export class FractalPanel {
     const preview = `translate(${dx}px, ${dy}px)`;
     this.canvas.style.transform = preview;
     this.overlayCanvas.style.transform = preview;
+    // In dual view, this preview can slide past this panel's own half into
+    // the other panel's — drop below the baseline z-index (see style.css)
+    // for the duration of the drag so whichever panel is moving always
+    // slides *under* the stationary one, not over it.
+    this.canvas.style.zIndex = "0";
+    this.overlayCanvas.style.zIndex = "0";
   }
 
   clearDragPreview() {
     this.canvas.style.transform = "";
     this.overlayCanvas.style.transform = "";
+    this.canvas.style.zIndex = "";
+    this.overlayCanvas.style.zIndex = "";
   }
 
   onPointerUp(e, {

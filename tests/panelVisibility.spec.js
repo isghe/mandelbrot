@@ -121,3 +121,27 @@ test('Reset restores the default Mandelbrot-only view', async ({ page }) => {
   await expect(page.locator('#gfx')).toBeVisible();
   await expect(page.locator('#gfxJulia')).toBeHidden();
 });
+
+// Regression test: loading straight into dual view via a share URL used to
+// leave both canvases' backing stores sized for the pre-restore, full-width
+// layout (resizeCanvas() ran before the dual-view CSS class was applied),
+// stretching the image until the next window resize or panel toggle.
+test('loading directly into dual view via a share URL sizes both backing stores to the 50/50 split immediately', async ({ page }) => {
+  await page.setViewportSize(VIEWPORT);
+  await page.goto('/index.html?v=2&julia=1');
+
+  const gpuError = page.locator('#gpuError');
+  await expect(gpuError).toBeHidden();
+
+  const sizes = await page.evaluate(() => ({
+    gfxCssWidth: document.getElementById('gfx').getBoundingClientRect().width,
+    gfxBackingWidth: document.getElementById('gfx').width,
+    juliaCssWidth: document.getElementById('gfxJulia').getBoundingClientRect().width,
+    juliaBackingWidth: document.getElementById('gfxJulia').width,
+  }));
+
+  const dpr = await page.evaluate(() => window.devicePixelRatio);
+  expect(sizes.gfxBackingWidth).toBe(Math.round(sizes.gfxCssWidth * dpr));
+  expect(sizes.juliaBackingWidth).toBe(Math.round(sizes.juliaCssWidth * dpr));
+  expect(sizes.gfxCssWidth).toBe(VIEWPORT.width / 2);
+});

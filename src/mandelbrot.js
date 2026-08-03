@@ -123,11 +123,23 @@ class MandelbrotApp {
       ["smoothColoringChk", "smoothColoring"],
     ];
     checkboxFields.forEach(([chk, field]) => { this[chk].checked = !!this[field]; });
+    // Apply the restored panel-visibility CSS classes *before* resizing
+    // anything below: resizeCanvas()/resizeOverlayCanvas() read the current
+    // CSS box size, so if dual-view's 50vw split isn't already in effect,
+    // a share URL/localStorage restore that starts in dual view would size
+    // both backing stores to the old (100vw) layout and stay stretched
+    // until the next window resize or panel toggle.
+    this.updatePanelVisibility();
     // A shared/localStorage URL may have restored showJulia=1 before WebGPU
     // finished initializing; create the panel now (attachCanvas happens
     // later in initGPU() once the device is ready, same as onPanelVisibilityChange).
     if (this.showJulia) this.createJuliaPanel();
-    this.updatePanelVisibility();
+    // mandelbrotPanel was constructed at the very top of the constructor,
+    // before the CSS classes above were known — resize it now that they are.
+    if (this.showMandelbrot) {
+      this.resizeCanvas();
+      this.resizeOverlayCanvas();
+    }
     this.paletteSel.value = this.paletteType;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");

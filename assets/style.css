@@ -1,5 +1,10 @@
 body { margin:0; overflow:hidden; background:#000; }
-#gfx, #overlay, #gfxJulia, #overlayJulia { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; }
+/* z-index:1 baseline (tied between both panels): FractalPanel's drag
+   preview (fractalPanel.js's clearDragPreview/onPointerMove) temporarily
+   drops a panel's own z-index to 0 for the duration of a drag, so whichever
+   panel is actively being dragged always slides *under* the stationary one
+   in dual view, regardless of which side it's on or DOM order. */
+#gfx, #overlay, #gfxJulia, #overlayJulia { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; z-index:1; }
 #overlay, #overlayJulia { pointer-events:none; }
 
 /* Each panel is independently shown/hidden (toggled in JS from the
@@ -21,8 +26,12 @@ body.dual-view #gfxJulia, body.dual-view #overlayJulia { left:50vw; width:50vw; 
   background:#0008; color:white; border:none; border-radius:8px;
   font-size:1.1em; cursor:pointer;
 }
+/* z-index:2 on all of the below: #gfx picks up z-index:1 in dual view (see
+   above), which would otherwise put these behind it — position+z-index
+   siblings stack by z-index regardless of DOM order, so without an
+   explicit value here these default to z-index:auto (~0) and lose to it. */
 #ui {
-  position:fixed; top:56px; left:10px;
+  position:fixed; top:56px; left:10px; z-index:2;
   background:#0008; padding:10px; border-radius:8px;
   color:white; font-family:sans-serif;
 }
@@ -32,7 +41,7 @@ label { display:block; margin-top:6px; }
 .hint { font-size:0.8em; opacity:0.7; margin-top:10px; max-width:200px; }
 
 #selectionBox {
-  position:fixed;
+  position:fixed; z-index:2;
   display:none;
   border:1px dashed #0f0;
   background:rgba(0,255,0,0.15);
@@ -41,7 +50,7 @@ label { display:block; margin-top:6px; }
 
 #gpuError {
   display:none;
-  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:2;
   max-width:480px; padding:16px 20px;
   background:#200; border:1px solid #900; border-radius:8px;
   color:#f88; font-family:sans-serif; text-align:center;
@@ -50,7 +59,7 @@ label { display:block; margin-top:6px; }
 
 #noVizMessage {
   display:none;
-  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:2;
   color:#666; font-family:sans-serif; font-size:1.1em;
 }
 
