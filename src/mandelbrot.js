@@ -38,6 +38,15 @@ class MandelbrotApp {
   showMandelbrot = 1;
   showJulia = 0;
 
+  // The Julia panel's own independent pan/zoom, persisted separately from
+  // `juliaC` (the constant the Julia set is drawn for). Backing fields for
+  // the juliaPanelCenter/juliaPanelScale accessors below: null means "not
+  // restored, not yet dragged/zoomed" — createJuliaPanel() then falls back
+  // to centering on the current juliaC at the default scale, same as before
+  // this persistence existed.
+  _juliaPanelCenter = null;
+  _juliaPanelScale = null;
+
   // Set once the shared WebGPU device is lost; blocks further render
   // attempts on both panels (the device, not the canvas, was lost).
   deviceLost = false;
@@ -71,6 +80,14 @@ class MandelbrotApp {
   get isDragging() { return this.mandelbrotPanel.isDragging; }
   get renderer() { return this.mandelbrotPanel.renderer; }
   set renderer(v) { this.mandelbrotPanel.renderer = v; }
+  // Reads/writes go straight to the live juliaPanel once it exists (the
+  // panel is never destroyed once created, just hidden by CSS — see
+  // createJuliaPanel), so this stays live for saveSettings()/buildShareUrl()
+  // even while the Julia panel is currently hidden.
+  get juliaPanelCenter() { return this.juliaPanel ? this.juliaPanel.center : (this._juliaPanelCenter ?? this.juliaC); }
+  set juliaPanelCenter(v) { if (this.juliaPanel) this.juliaPanel.center = v; else this._juliaPanelCenter = v; }
+  get juliaPanelScale() { return this.juliaPanel ? this.juliaPanel.scale : (this._juliaPanelScale ?? 3.0); }
+  set juliaPanelScale(v) { if (this.juliaPanel) this.juliaPanel.scale = v; else this._juliaPanelScale = v; }
 
   constructor(canvas) {
     this.mandelbrotPanel = new FractalPanel(canvas, document.getElementById("overlay"));
@@ -80,6 +97,8 @@ class MandelbrotApp {
       scale: this.scale,
       maxIter: this.maxIter,
       juliaC: this.juliaC,
+      juliaPanelCenter: this.juliaPanelCenter,
+      juliaPanelScale: this.juliaPanelScale,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
       smoothColoring: this.smoothColoring,
@@ -255,9 +274,9 @@ class MandelbrotApp {
       }
     };
 
-    const pointFields = ["center", "juliaC"];
+    const pointFields = ["center", "juliaC", "juliaPanelCenter"];
     const numberFields = [
-      "centerMarker", "gridOverlay", "juliaMarker", "maxIter",
+      "centerMarker", "gridOverlay", "juliaMarker", "juliaPanelScale", "maxIter",
       "paletteType", "progressiveMode", "scale", "showJulia", "showMandelbrot",
       "smoothColoring",
     ];
@@ -485,8 +504,12 @@ class MandelbrotApp {
 
   createJuliaPanel() {
     const panel = new FractalPanel(document.getElementById("gfxJulia"), document.getElementById("overlayJulia"));
-    panel.center = this.juliaC;
-    panel.pivot = this.juliaC;
+    // this.juliaPanel isn't assigned yet, so these getters read the
+    // restored/persisted pan+zoom (or fall back to centering on juliaC at
+    // the default scale, same as before this state was persisted).
+    panel.center = this.juliaPanelCenter;
+    panel.pivot = panel.center;
+    panel.scale = this.juliaPanelScale;
     this.juliaPanel = panel;
     this.attachJuliaPanelEvents(panel);
     if (this.gpuDevice) {
@@ -623,6 +646,15 @@ class MandelbrotApp {
     this.resizeCanvas();
     this.resizeOverlayCanvas();
     this.applySnapshot(this.initialState);
+    // The Julia panel's own pan/zoom is independent of the Mandelbrot view
+    // history (see attachJuliaPanelEvents), so applySnapshot() above doesn't
+    // touch it — reset it back to its initial center/scale here too.
+    this.juliaPanelCenter = this.initialState.juliaPanelCenter;
+    this.juliaPanelScale = this.initialState.juliaPanelScale;
+    if (this.juliaPanel) {
+      this.juliaPanel.pivot = this.juliaPanel.center;
+      this.juliaPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+    }
   };
 
   onBack = () => {

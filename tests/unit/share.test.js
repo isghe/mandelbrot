@@ -7,6 +7,8 @@ const initialState = {
   scale: 3.0,
   maxIter: 256,
   juliaC: { x: -0.8, y: 0.156 },
+  juliaPanelCenter: { x: -0.8, y: 0.156 },
+  juliaPanelScale: 3.0,
   paletteType: 4,
   progressiveMode: 0,
   smoothColoring: 0,
@@ -17,6 +19,7 @@ function baseState(overrides = {}) {
     ...initialState,
     center: { ...initialState.center },
     juliaC: { ...initialState.juliaC },
+    juliaPanelCenter: { ...initialState.juliaPanelCenter },
     gridOverlay: 0,
     centerMarker: 0,
     juliaMarker: 0,
@@ -122,6 +125,24 @@ test('parseShareParams parses center only when both x and y are present', () => 
 test('parseShareParams parses juliaC only when both jx and jy are present', () => {
   const s = share.parseShareParams('?jx=-0.3&jy=0.9');
   assert.deepStrictEqual(s.juliaC, { x: -0.3, y: 0.9 });
+});
+
+test('parseShareParams parses juliaPanelCenter only when both jpx and jpy are present', () => {
+  const s = share.parseShareParams('?jpx=0.1&jpy=-0.2');
+  assert.deepStrictEqual(s.juliaPanelCenter, { x: 0.1, y: -0.2 });
+});
+
+test('buildShareUrl encodes the Julia panel\'s own pan/zoom (jpx/jpy/jscale) when it differs, and round-trips', () => {
+  const state = baseState({ juliaPanelCenter: { x: 0.1, y: -0.2 }, juliaPanelScale: 1.5 });
+  const url = share.buildShareUrl(state, initialState, 'https://example.com', '/');
+  const search = new URL(url).search;
+  assert.match(search, /jpx=0\.1/);
+  assert.match(search, /jpy=-0\.2/);
+  assert.match(search, /jscale=1\.5/);
+
+  const parsed = share.parseShareParams(search);
+  assert.deepStrictEqual(parsed.juliaPanelCenter, { x: 0.1, y: -0.2 });
+  assert.strictEqual(parsed.juliaPanelScale, 1.5);
 });
 
 test('parseShareParams (v2) maps scalar params to their field names', () => {
@@ -231,6 +252,8 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
     showMandelbrot: 1,
     showJulia: 0,
     juliaC: { x: -0.8, y: 0.156 },
+    juliaPanelCenter: { x: -0.8, y: 0.156 },
+    juliaPanelScale: 3.0,
     paletteType: 4,
     progressiveMode: 0,
     smoothColoring: 0,

@@ -49,6 +49,36 @@ test('reloading the page restores persisted settings', async ({ page }) => {
   await expect(page.locator('#showJulia')).toBeChecked();
 });
 
+test('reloading the page restores the Julia panel\'s own dragged/zoomed position, not just juliaC', async ({ page }) => {
+  await page.click('#showJulia');
+  await page.waitForTimeout(200);
+
+  await page.mouse.move(900, 350); // over the Julia (right) panel
+  await page.mouse.wheel(0, -400);
+  await page.mouse.move(1000, 450);
+  await page.mouse.down();
+  await page.mouse.move(850, 300);
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+
+  const before = await page.evaluate(() => ({
+    center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
+    scale: window.app.juliaPanel.scale,
+  }));
+
+  await waitForPersisted(page, 'showJulia', 1);
+  await page.reload();
+  const gpuError = page.locator('#gpuError');
+  await expect(gpuError).toBeHidden();
+  await page.waitForTimeout(200);
+
+  const after = await page.evaluate(() => ({
+    center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
+    scale: window.app.juliaPanel.scale,
+  }));
+  expect(after).toEqual(before);
+});
+
 test('Reset returns to the original defaults, not the persisted state', async ({ page }) => {
   await page.selectOption('#paletteType', '1');
   await waitForPersisted(page, 'paletteType', 1);

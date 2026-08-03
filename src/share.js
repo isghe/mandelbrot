@@ -26,8 +26,13 @@ function buildShareUrl(state, initialState, origin, pathname) {
     params.set("jx", state.juliaC.x);
     params.set("jy", state.juliaC.y);
   }
+  if (state.juliaPanelCenter.x !== init.juliaPanelCenter.x || state.juliaPanelCenter.y !== init.juliaPanelCenter.y) {
+    params.set("jpx", state.juliaPanelCenter.x);
+    params.set("jpy", state.juliaPanelCenter.y);
+  }
   const changedFields = [
     ["iter", "maxIter"],
+    ["jscale", "juliaPanelScale"],
     ["palette", "paletteType"],
     ["progressive", "progressiveMode"],
     ["scale", "scale"],
@@ -83,11 +88,14 @@ function parseShareParams(search) {
   if (x !== undefined && y !== undefined) s.center = { x, y };
   const jx = num("jx"), jy = num("jy");
   if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
+  const jpx = num("jpx"), jpy = num("jpy");
+  if (jpx !== undefined && jpy !== undefined) s.juliaPanelCenter = { x: jpx, y: jpy };
 
   const presentFields = [
     ["centerMarker", "centerMark"],
     ["gridOverlay", "grid"],
     ["juliaMarker", "juliaMark"],
+    ["juliaPanelScale", "jscale"],
     ["maxIter", "iter"],
     ["paletteType", "palette"],
     ["progressiveMode", "progressive"],
@@ -122,6 +130,8 @@ function settingsData(state) {
     showMandelbrot: state.showMandelbrot,
     showJulia: state.showJulia,
     juliaC: { x: state.juliaC.x, y: state.juliaC.y },
+    juliaPanelCenter: { x: state.juliaPanelCenter.x, y: state.juliaPanelCenter.y },
+    juliaPanelScale: state.juliaPanelScale,
     paletteType: state.paletteType,
     progressiveMode: state.progressiveMode,
     smoothColoring: state.smoothColoring,

@@ -122,6 +122,42 @@ test('Reset restores the default Mandelbrot-only view', async ({ page }) => {
   await expect(page.locator('#gfxJulia')).toBeHidden();
 });
 
+// Regression test: the Julia panel's own pan/zoom is independent of the
+// Mandelbrot view history, so Reset used to leave it wherever the user had
+// last dragged/zoomed it instead of restoring its initial center/scale.
+test('Reset also restores the Julia panel\'s own pan/zoom to its initial state', async ({ page }) => {
+  await page.check('#showJulia');
+  await page.waitForTimeout(200);
+
+  const initial = await page.evaluate(() => ({
+    center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
+    scale: window.app.juliaPanel.scale,
+  }));
+
+  await page.mouse.move(900, 350); // over the Julia (right) panel
+  await page.mouse.wheel(0, -400);
+  await page.mouse.move(1000, 450);
+  await page.mouse.down();
+  await page.mouse.move(850, 300);
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+
+  const moved = await page.evaluate(() => ({
+    center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
+    scale: window.app.juliaPanel.scale,
+  }));
+  expect(moved).not.toEqual(initial);
+
+  await page.click('#resetBtn');
+  await page.waitForTimeout(200);
+
+  const afterReset = await page.evaluate(() => ({
+    center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
+    scale: window.app.juliaPanel.scale,
+  }));
+  expect(afterReset).toEqual(initial);
+});
+
 // Regression test: loading straight into dual view via a share URL used to
 // leave both canvases' backing stores sized for the pre-restore, full-width
 // layout (resizeCanvas() ran before the dual-view CSS class was applied),
