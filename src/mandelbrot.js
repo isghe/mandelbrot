@@ -671,7 +671,7 @@ class MandelbrotApp {
 
   // RENDER
   renderOnce = () => {
-    if (this.deviceLost || !this.renderer) return -Infinity;
+    if (this.deviceLost || !this.renderer) return Infinity;
     const [cx_hi, cx_lo] = split64(this.center.x);
     const [cy_hi, cy_lo] = split64(this.center.y);
     const [jx_hi, jx_lo] = split64(this.juliaC.x);
