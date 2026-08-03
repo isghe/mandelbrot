@@ -1,6 +1,17 @@
 body { margin:0; overflow:hidden; background:#000; }
 #gfx { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; }
 #overlay { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; pointer-events:none; }
+#gfxJulia, #overlayJulia { display:none; }
+
+/* Dual view: Mandelbrot on the left half, Julia on the right half. */
+body.dual-view #gfx, body.dual-view #overlay { width:50vw; }
+body.dual-view #gfxJulia {
+  display:block; position:fixed; top:0; left:50vw; width:50vw; height:100vh;
+}
+body.dual-view #overlayJulia {
+  display:block; position:fixed; top:0; left:50vw; width:50vw; height:100vh;
+  pointer-events:none;
+}
 #uiToggleBtn {
   position:fixed; top:10px; left:10px; z-index:2;
   width:36px; height:36px;
