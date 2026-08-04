@@ -205,7 +205,7 @@ test('parseShareParams accepts v=1 explicitly (legacy julia semantics, old "scal
 });
 
 test('parseShareParams rejects an unknown future version', () => {
-  const s = share.parseShareParams('?v=4&mscale=1.5');
+  const s = share.parseShareParams('?v=5&mscale=1.5');
   assert.strictEqual(s, null);
 });
 
@@ -252,15 +252,13 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
   const state = baseState({ mandelbrotPanelScale: 1.5, gridOverlay: 1 });
   const data = share.settingsData(state);
   assert.deepStrictEqual(data, {
-    v: 3,
-    mandelbrotPanelCenter: { x: -0.5, y: 0 },
-    mandelbrotPanelScale: 1.5,
+    v: 4,
+    mandelbrotPanel: { center: { x: -0.5, y: 0 }, scale: 1.5 },
     maxIter: 256,
     showMandelbrot: 1,
     showJulia: 0,
     juliaSeed: { x: -0.8, y: 0.156 },
-    juliaPanelCenter: { x: -0.8, y: 0.156 },
-    juliaPanelScale: 3.0,
+    juliaPanel: { center: { x: -0.8, y: 0.156 }, scale: 3.0 },
     paletteType: 4,
     progressiveMode: 0,
     smoothColoring: 0,
@@ -314,13 +312,24 @@ test('loadSettingsData (legacy v2) migrates center/scale/juliaC to the renamed f
   assert.strictEqual(loaded.juliaC, undefined);
 });
 
+test('loadSettingsData (v4) flattens mandelbrotPanel/juliaPanel back into the pre-v4 field names', () => {
+  const stored = share.settingsData(baseState({ mandelbrotPanelScale: 1.5 }));
+  const loaded = share.loadSettingsData(stored);
+  assert.deepStrictEqual(loaded.mandelbrotPanelCenter, { x: -0.5, y: 0 });
+  assert.strictEqual(loaded.mandelbrotPanelScale, 1.5);
+  assert.deepStrictEqual(loaded.juliaPanelCenter, { x: -0.8, y: 0.156 });
+  assert.strictEqual(loaded.juliaPanelScale, 3.0);
+  assert.strictEqual(loaded.mandelbrotPanel, undefined);
+  assert.strictEqual(loaded.juliaPanel, undefined);
+});
+
 test('loadSettingsData rejects an unknown future version', () => {
-  const future = { ...share.settingsData(baseState()), v: 4 };
+  const future = { ...share.settingsData(baseState()), v: 5 };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 
 test('loadSettingsData rejects a future version given as a string, not treated as legacy', () => {
-  const future = { ...share.settingsData(baseState()), v: "4" };
+  const future = { ...share.settingsData(baseState()), v: "5" };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 
