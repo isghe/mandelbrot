@@ -39,7 +39,7 @@ test('device loss stops the progressive re-arm instead of looping every frame', 
   // WebGPU setup resolves — asserting a render *count* before that startup
   // call has landed races it, and can count that unrelated call as a bogus
   // second progressive re-arm. Wait for it to settle first.
-  await page.waitForFunction(() => window.app.renderer != null);
+  await page.waitForFunction(() => window.app.mandelbrotPanel.renderer != null);
 
   const renderCount = await page.evaluate(async () => {
     window.__renderCount = 0;

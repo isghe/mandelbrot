@@ -68,7 +68,7 @@ test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device l
   await expect.poll(() => new URL(page.url()).searchParams.get('palette')).toBe('1');
 
   // Simulate the post-device-lost/no-adapter state: app alive, no renderer.
-  await page.evaluate(() => { window.app.renderer = undefined; });
+  await page.evaluate(() => { window.app.mandelbrotPanel.renderer = undefined; });
 
   await page.click('#resetBtn');
   await expect.poll(() => new URL(page.url()).search).toBe('');
@@ -172,9 +172,9 @@ for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
       gridOverlay: window.app.gridOverlay,
       centerMarker: window.app.centerMarker,
       juliaMarker: window.app.juliaMarker,
-      center: { x: window.app.center.x, y: window.app.center.y },
+      center: { x: window.app.mandelbrotPanel.center.x, y: window.app.mandelbrotPanel.center.y },
       juliaC: { x: window.app.juliaC.x, y: window.app.juliaC.y },
-      scale: window.app.scale,
+      scale: window.app.mandelbrotPanel.scale,
     }));
 
     expect(state[field]).toEqual(expected);

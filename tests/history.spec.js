@@ -300,7 +300,7 @@ test('wheel-zoom after panning centers on the new position, not the stale pivot'
   await page.mouse.up();
   await page.waitForTimeout(200);
 
-  const centerAfterPan = await page.evaluate(() => ({ x: window.app.center.x, y: window.app.center.y }));
+  const centerAfterPan = await page.evaluate(() => ({ x: window.app.mandelbrotPanel.center.x, y: window.app.mandelbrotPanel.center.y }));
 
   // Zoom with the cursor exactly at the screen center: a correctly tracked
   // pivot keeps the center fixed (only scale changes). Before the fix, the
@@ -310,7 +310,7 @@ test('wheel-zoom after panning centers on the new position, not the stale pivot'
   await page.mouse.wheel(0, -200);
   await page.waitForTimeout(400);
 
-  const centerAfterZoom = await page.evaluate(() => ({ x: window.app.center.x, y: window.app.center.y }));
+  const centerAfterZoom = await page.evaluate(() => ({ x: window.app.mandelbrotPanel.center.x, y: window.app.mandelbrotPanel.center.y }));
 
   expect(centerAfterZoom.x).toBeCloseTo(centerAfterPan.x, 4);
   expect(centerAfterZoom.y).toBeCloseTo(centerAfterPan.y, 4);

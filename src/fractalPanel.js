@@ -30,8 +30,13 @@ export function buildUniformData({
 // independent Julia canvas later. Shared/app-global state (juliaC, maxIter,
 // palette, ...) stays on MandelbrotApp and is passed into panel methods.
 export class FractalPanel {
+  // Shared with MandelbrotApp's juliaPanelScale fallback, so the Julia
+  // panel's default zoom (before any pan/zoom is persisted) doesn't drift
+  // out of sync with a duplicated literal.
+  static DEFAULT_SCALE = 3.0;
+
   center = new DOMPointReadOnly(-0.5, 0.0);
-  scale = 3.0;
+  scale = FractalPanel.DEFAULT_SCALE;
 
   // pivot for centered zoom
   pivot = new DOMPointReadOnly(-0.5, 0.0);
