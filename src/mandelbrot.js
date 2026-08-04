@@ -345,10 +345,9 @@ class MandelbrotApp {
     };
   }
 
-  // share.js still expects the pre-Mossa-3 flat shape (schema v4 — see
-  // Mossa 4 for when this changes); this assembles that flat shape directly
-  // from the panels rather than delegating to snapshotView(), whose shape
-  // has since diverged for the undo-history/Reset use case above.
+  // share.js expects this flat shape (schema v5), distinct from
+  // snapshotView()'s nested Tier 1 shape used for undo-history/Reset — see
+  // flattenSnapshotForShare() below for the bridge between the two.
   shareState() {
     return {
       mandelbrotPanelCenter: this.mandelbrotPanel.center,
@@ -357,11 +356,17 @@ class MandelbrotApp {
       paletteType: this.mandelbrotPanel.paletteType,
       progressiveMode: this.mandelbrotPanel.progressiveMode,
       smoothColoring: this.mandelbrotPanel.smoothColoring,
+      gridOverlay: this.mandelbrotPanel.gridOverlay,
+      centerMarker: this.mandelbrotPanel.centerMarker,
       juliaSeed: this.juliaSeed,
       juliaPanelCenter: this.juliaPanelCenter,
       juliaPanelScale: this.juliaPanelScale,
-      gridOverlay: this.mandelbrotPanel.gridOverlay,
-      centerMarker: this.mandelbrotPanel.centerMarker,
+      juliaPanelMaxIter: this.juliaPanelMaxIter,
+      juliaPanelPaletteType: this.juliaPanelPaletteType,
+      juliaPanelProgressiveMode: this.juliaPanelProgressiveMode,
+      juliaPanelSmoothColoring: this.juliaPanelSmoothColoring,
+      juliaPanelGridOverlay: this.juliaPanelGridOverlay,
+      juliaPanelCenterMarker: this.juliaPanelCenterMarker,
       juliaMarker: this.juliaMarker,
       showMandelbrot: this.showMandelbrot,
       showJulia: this.showJulia,
@@ -432,7 +437,10 @@ class MandelbrotApp {
   // produces — this.initialState is snapshotView()'s nested Tier 1 shape
   // (for applySnapshot/Reset), so it needs flattening here, same as
   // shareState() flattens the *live* panels instead of delegating to
-  // snapshotView() directly.
+  // snapshotView() directly. Only Tier 1 fields are needed (gridOverlay/
+  // centerMarker are Tier 2, not part of snapshotView()'s shape, and
+  // buildShareUrl includes them unconditionally rather than diffing them —
+  // see shareState()'s call site in buildShareUrl()).
   flattenSnapshotForShare(s) {
     return {
       mandelbrotPanelCenter: s.mandelbrotPanel.center,
@@ -444,6 +452,10 @@ class MandelbrotApp {
       juliaSeed: s.juliaSeed,
       juliaPanelCenter: s.juliaPanel.center,
       juliaPanelScale: s.juliaPanel.scale,
+      juliaPanelMaxIter: s.juliaPanel.maxIter,
+      juliaPanelPaletteType: s.juliaPanel.paletteType,
+      juliaPanelProgressiveMode: s.juliaPanel.progressiveMode,
+      juliaPanelSmoothColoring: s.juliaPanel.smoothColoring,
     };
   }
 
@@ -479,7 +491,14 @@ class MandelbrotApp {
     if (typeof s.mandelbrotPanelScale === "number") this.mandelbrotPanel.scale = s.mandelbrotPanelScale;
 
     const pointFields = ["juliaSeed", "juliaPanelCenter"];
-    const numberFields = ["juliaMarker", "juliaPanelScale", "showJulia", "showMandelbrot"];
+    // juliaPanelX names double as MandelbrotApp accessor names (see the
+    // getters/setters above the constructor) — this[field] = s[field]
+    // below routes straight through to the live panel or its backing field.
+    const numberFields = [
+      "juliaMarker", "juliaPanelScale", "showJulia", "showMandelbrot",
+      "juliaPanelMaxIter", "juliaPanelPaletteType", "juliaPanelProgressiveMode",
+      "juliaPanelSmoothColoring", "juliaPanelGridOverlay", "juliaPanelCenterMarker",
+    ];
     const panelNumberFields = [
       "centerMarker", "gridOverlay", "maxIter", "paletteType", "progressiveMode", "smoothColoring",
     ];

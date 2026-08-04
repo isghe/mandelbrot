@@ -80,7 +80,7 @@ test('opening a share URL overrides both defaults and localStorage', async ({ pa
   await page.selectOption('#paletteType', '2');
   await expect.poll(async () => {
     const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
-    return raw ? JSON.parse(raw).paletteType : null;
+    return raw ? JSON.parse(raw).mandelbrotPanel.paletteType : null;
   }).toBe(2);
 
   // No `v=` param: this is a legacy (pre-v2) share URL, where `julia=1` meant
@@ -202,14 +202,14 @@ test('opening a share URL persists the shared settings to localStorage', async (
 
   await expect.poll(async () => {
     const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
-    return raw ? JSON.parse(raw).paletteType : null;
+    return raw ? JSON.parse(raw).mandelbrotPanel.paletteType : null;
   }).toBe(3);
 
   const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
   const data = JSON.parse(raw);
   expect(data.mandelbrotPanel.center).toEqual({ x: -1.25, y: 0.1 });
   expect(data.mandelbrotPanel.scale).toBe(0.5);
-  expect(data.maxIter).toBe(512);
+  expect(data.mandelbrotPanel.maxIter).toBe(512);
 });
 
 // Every other test in this file that touches mx/my/sx/sy/mscale gets there by
@@ -217,7 +217,7 @@ test('opening a share URL persists the shared settings to localStorage', async (
 // a real pan/zoom/click through the browser and check the *fresh* encoding.
 // This is that missing case: a genuine user interaction should produce a
 // current-schema (v3) URL, not just accept legacy input.
-test('a real pan, zoom, and click-to-set-seed stamp v=4 while keeping v3 param names (mx/my/mscale/sx/sy)', async ({ page }) => {
+test('a real pan, zoom, and click-to-set-seed stamp v=5 while keeping v3 param names (mx/my/mscale/sx/sy)', async ({ page }) => {
   const cx = 900, cy = 400; // well clear of the #ui panel (see panelVisibility.spec.js)
 
   await page.mouse.move(cx, cy);
@@ -239,7 +239,7 @@ test('a real pan, zoom, and click-to-set-seed stamp v=4 while keeping v3 param n
   const url = new URL(page.url());
   // SCHEMA_VERSION lives in share.js, not exposed on window.app; bumping it
   // means updating this literal too.
-  expect(url.searchParams.get('v')).toBe('4');
+  expect(url.searchParams.get('v')).toBe('5');
   expect(url.searchParams.get('my')).not.toBeNull();
   expect(url.searchParams.get('mscale')).not.toBeNull();
   expect(url.searchParams.get('sx')).not.toBeNull();
