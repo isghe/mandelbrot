@@ -52,6 +52,16 @@ class MandelbrotApp {
   // this persistence existed.
   _juliaPanelCenter = null;
   _juliaPanelScale = null;
+  // Same "not yet restored / not yet created" backing-field pattern as
+  // center/scale above, extended to Julia's own quality/look fields (Tier 1)
+  // and grid/center-marker overlay preferences (Tier 2) — see the accessors
+  // right below.
+  _juliaPanelMaxIter = null;
+  _juliaPanelPaletteType = null;
+  _juliaPanelSmoothColoring = null;
+  _juliaPanelProgressiveMode = null;
+  _juliaPanelGridOverlay = null;
+  _juliaPanelCenterMarker = null;
 
   // Set once the shared WebGPU device is lost; blocks further render
   // attempts on both panels (the device, not the canvas, was lost).
@@ -61,6 +71,8 @@ class MandelbrotApp {
   history = new ViewHistory(MandelbrotApp.WHEEL_HISTORY_MS, () => this.updateHistoryButtons());
   pendingZoomSnapshot = null;
   pendingIterSnapshot = null;
+  pendingZoomSnapshotJulia = null;
+  pendingIterSnapshotJulia = null;
   saveSettingsTimer = null;
   shareBtnResetTimer = null;
 
@@ -74,22 +86,58 @@ class MandelbrotApp {
   get juliaPanelCenter() { return this.juliaPanel ? this.juliaPanel.center : (this._juliaPanelCenter ?? this.juliaSeed); }
   set juliaPanelCenter(v) { if (this.juliaPanel) this.juliaPanel.center = v; else this._juliaPanelCenter = v; }
   get juliaPanelScale() { return this.juliaPanel ? this.juliaPanel.scale : (this._juliaPanelScale ?? FractalPanel.DEFAULT_SCALE); }
-  set juliaPanelScale(v) { if (this.juliaPanel) this.juliaPanel.scale = v; else this._juliaPanelScale = v; }
+  set juliaPanelScale(v) {
+    if (this.juliaPanel) { this.juliaPanel.scale = v; this.syncJuliaZoomSliderUI(); }
+    else this._juliaPanelScale = v;
+  }
+
+  // Same transparent live-panel-or-backing-field pattern as center/scale
+  // above, for the rest of Julia's own quality/look (Tier 1) and grid/center
+  // overlay preferences (Tier 2). The setters route through the real
+  // side-effecting update (UI sync, and for palette the GPU texture write)
+  // when the panel exists, so restoring these via applySnapshot/
+  // restoreDisplayPrefs can't leave the UI showing a stale value.
+  get juliaPanelMaxIter() { return this.juliaPanel ? this.juliaPanel.maxIter : (this._juliaPanelMaxIter ?? FractalPanel.DEFAULT_MAX_ITER); }
+  set juliaPanelMaxIter(v) { if (this.juliaPanel) this.setJuliaMaxIter(v); else this._juliaPanelMaxIter = v; }
+
+  get juliaPanelPaletteType() { return this.juliaPanel ? this.juliaPanel.paletteType : (this._juliaPanelPaletteType ?? FractalPanel.DEFAULT_PALETTE_TYPE); }
+  set juliaPanelPaletteType(v) {
+    if (this.juliaPanel) { this.applyJuliaPalette(v); this.paletteSelJulia.value = v; }
+    else this._juliaPanelPaletteType = v;
+  }
+
+  get juliaPanelSmoothColoring() { return this.juliaPanel ? this.juliaPanel.smoothColoring : (this._juliaPanelSmoothColoring ?? FractalPanel.DEFAULT_SMOOTH_COLORING); }
+  set juliaPanelSmoothColoring(v) {
+    if (this.juliaPanel) { this.juliaPanel.smoothColoring = v; this.smoothColoringChkJulia.checked = !!v; }
+    else this._juliaPanelSmoothColoring = v;
+  }
+
+  get juliaPanelProgressiveMode() { return this.juliaPanel ? this.juliaPanel.progressiveMode : (this._juliaPanelProgressiveMode ?? FractalPanel.DEFAULT_PROGRESSIVE_MODE); }
+  set juliaPanelProgressiveMode(v) {
+    if (this.juliaPanel) { this.juliaPanel.progressiveMode = v; this.progressiveChkJulia.checked = !!v; }
+    else this._juliaPanelProgressiveMode = v;
+  }
+
+  get juliaPanelGridOverlay() { return this.juliaPanel ? this.juliaPanel.gridOverlay : (this._juliaPanelGridOverlay ?? FractalPanel.DEFAULT_GRID_OVERLAY); }
+  set juliaPanelGridOverlay(v) {
+    if (this.juliaPanel) { this.juliaPanel.gridOverlay = v; this.gridOverlayChkJulia.checked = !!v; }
+    else this._juliaPanelGridOverlay = v;
+  }
+
+  get juliaPanelCenterMarker() { return this.juliaPanel ? this.juliaPanel.centerMarker : (this._juliaPanelCenterMarker ?? FractalPanel.DEFAULT_CENTER_MARKER); }
+  set juliaPanelCenterMarker(v) {
+    if (this.juliaPanel) { this.juliaPanel.centerMarker = v; this.centerMarkerChkJulia.checked = !!v; }
+    else this._juliaPanelCenterMarker = v;
+  }
 
   constructor(canvas) {
     this.mandelbrotPanel = new FractalPanel(canvas, document.getElementById("overlay"));
 
-    this.initialState = {
-      mandelbrotPanelCenter: this.mandelbrotPanel.center,
-      mandelbrotPanelScale: this.mandelbrotPanel.scale,
-      maxIter: this.mandelbrotPanel.maxIter,
-      juliaSeed: this.juliaSeed,
-      juliaPanelCenter: this.juliaPanelCenter,
-      juliaPanelScale: this.juliaPanelScale,
-      paletteType: this.mandelbrotPanel.paletteType,
-      progressiveMode: this.mandelbrotPanel.progressiveMode,
-      smoothColoring: this.mandelbrotPanel.smoothColoring,
-    };
+    // Captured via snapshotView() itself: at this point juliaPanel doesn't
+    // exist yet and every backing field is still null, so the getters it
+    // reads fall back to the same built-in defaults this would otherwise
+    // hand-duplicate.
+    this.initialState = this.snapshotView();
     // Tier 2 ("display preferences"): captured pre-restore too, same as
     // initialState above, so Reset always goes back to the app's built-in
     // defaults rather than whatever was last persisted.
@@ -201,10 +249,22 @@ class MandelbrotApp {
     this.centerMarkerChk.onchange = this.onCenterMarkerChange;
     this.juliaMarkerChk.onchange = this.onJuliaMarkerChange;
 
-    // Julia's own controls: direct mutation + render, no history bookkeeping
-    // (Julia's own view/quality isn't in undo history yet — see Mossa 3).
+    // Julia's own controls — symmetric with Mandelbrot's above, including
+    // the same debounce-on-release pattern for the sliders.
     this.iterSliderJulia.oninput = this.onJuliaIterInput;
+    this.iterSliderJulia.onchange = () => {
+      if (this.pendingIterSnapshotJulia) {
+        this.pushHistory(this.pendingIterSnapshotJulia);
+        this.pendingIterSnapshotJulia = null;
+      }
+    };
     this.zoomSliderJulia.oninput = this.onJuliaZoomInput;
+    this.zoomSliderJulia.onchange = () => {
+      if (this.pendingZoomSnapshotJulia) {
+        this.pushHistory(this.pendingZoomSnapshotJulia);
+        this.pendingZoomSnapshotJulia = null;
+      }
+    };
     this.paletteSelJulia.onchange = this.onJuliaPaletteChange;
     this.progressiveChkJulia.onchange = this.onJuliaProgressiveChange;
     this.smoothColoringChkJulia.onchange = this.onJuliaSmoothColoringChange;
@@ -259,24 +319,45 @@ class MandelbrotApp {
     this.zoomLabelJulia.textContent = this.juliaPanel.scale;
   }
 
+  // Tier 1 ("navigable view", undo/redo): both panels' own view+quality,
+  // symmetric — History A, see the plan doc. juliaSeed isn't a canvas's own
+  // view (it's the Julia-family constant), so it stays a separate top-level
+  // field rather than living inside either panel's sub-object.
   snapshotView() {
+    return {
+      mandelbrotPanel: {
+        center: this.mandelbrotPanel.center,
+        scale: this.mandelbrotPanel.scale,
+        maxIter: this.mandelbrotPanel.maxIter,
+        paletteType: this.mandelbrotPanel.paletteType,
+        smoothColoring: this.mandelbrotPanel.smoothColoring,
+        progressiveMode: this.mandelbrotPanel.progressiveMode,
+      },
+      juliaPanel: {
+        center: this.juliaPanelCenter,
+        scale: this.juliaPanelScale,
+        maxIter: this.juliaPanelMaxIter,
+        paletteType: this.juliaPanelPaletteType,
+        smoothColoring: this.juliaPanelSmoothColoring,
+        progressiveMode: this.juliaPanelProgressiveMode,
+      },
+      juliaSeed: this.juliaSeed,
+    };
+  }
+
+  // share.js still expects the pre-Mossa-3 flat shape (schema v4 — see
+  // Mossa 4 for when this changes); this assembles that flat shape directly
+  // from the panels rather than delegating to snapshotView(), whose shape
+  // has since diverged for the undo-history/Reset use case above.
+  shareState() {
     return {
       mandelbrotPanelCenter: this.mandelbrotPanel.center,
       mandelbrotPanelScale: this.mandelbrotPanel.scale,
       maxIter: this.mandelbrotPanel.maxIter,
-      juliaSeed: this.juliaSeed,
       paletteType: this.mandelbrotPanel.paletteType,
       progressiveMode: this.mandelbrotPanel.progressiveMode,
       smoothColoring: this.mandelbrotPanel.smoothColoring,
-    };
-  }
-
-  // share.js's functions take a plain state object (no `this`) — this
-  // assembles the shape they expect from wherever each field actually
-  // lives now (mandelbrotPanel vs app-global fields).
-  shareState() {
-    return {
-      ...this.snapshotView(),
+      juliaSeed: this.juliaSeed,
       juliaPanelCenter: this.juliaPanelCenter,
       juliaPanelScale: this.juliaPanelScale,
       gridOverlay: this.mandelbrotPanel.gridOverlay,
@@ -287,22 +368,20 @@ class MandelbrotApp {
     };
   }
 
-  // Tier 2 ("display preferences"): overlay toggles, panel visibility, and
-  // the Julia panel's own independent pan/zoom — persisted (see shareState()
-  // above) but deliberately outside undo history, unlike snapshotView()'s
-  // Tier 1. Captured/restored as one unit so Reset doesn't need to remember
-  // each field separately (that per-field bookkeeping in onReset used to be
-  // exactly how the Julia panel's own view got left out of Reset — see the
-  // `c2889b3` fix).
+  // Tier 2 ("display preferences"): overlay toggles (per panel) and panel
+  // visibility — persisted (see shareState() above) but deliberately outside
+  // undo history, unlike snapshotView()'s Tier 1. juliaMarker stays a single
+  // app-level flag (it marks where juliaSeed sits on the Mandelbrot plane,
+  // meaningless on Julia's own view — see drawOverlayForPanel).
   captureDisplayPrefs() {
     return {
       gridOverlay: this.mandelbrotPanel.gridOverlay,
       centerMarker: this.mandelbrotPanel.centerMarker,
+      juliaGridOverlay: this.juliaPanelGridOverlay,
+      juliaCenterMarker: this.juliaPanelCenterMarker,
       juliaMarker: this.juliaMarker,
       showMandelbrot: this.showMandelbrot,
       showJulia: this.showJulia,
-      juliaPanelCenter: this.juliaPanelCenter,
-      juliaPanelScale: this.juliaPanelScale,
     };
   }
 
@@ -311,6 +390,8 @@ class MandelbrotApp {
     this.gridOverlayChk.checked = !!p.gridOverlay;
     this.mandelbrotPanel.centerMarker = p.centerMarker;
     this.centerMarkerChk.checked = !!p.centerMarker;
+    this.juliaPanelGridOverlay = p.juliaGridOverlay;
+    this.juliaPanelCenterMarker = p.juliaCenterMarker;
     this.juliaMarker = p.juliaMarker;
     this.juliaMarkerChk.checked = !!p.juliaMarker;
 
@@ -321,13 +402,6 @@ class MandelbrotApp {
     this.updatePanelVisibility();
     this.resizeCanvas();
     this.resizeOverlayCanvas();
-
-    this.juliaPanelCenter = p.juliaPanelCenter;
-    this.juliaPanelScale = p.juliaPanelScale;
-    if (this.juliaPanel) {
-      this.juliaPanel.pivot = this.juliaPanel.center;
-      this.juliaPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    }
   }
 
   saveSettings() {
@@ -354,8 +428,27 @@ class MandelbrotApp {
     this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
   };
 
+  // share.js's buildShareUrl diffs against the same flat shape shareState()
+  // produces — this.initialState is snapshotView()'s nested Tier 1 shape
+  // (for applySnapshot/Reset), so it needs flattening here, same as
+  // shareState() flattens the *live* panels instead of delegating to
+  // snapshotView() directly.
+  flattenSnapshotForShare(s) {
+    return {
+      mandelbrotPanelCenter: s.mandelbrotPanel.center,
+      mandelbrotPanelScale: s.mandelbrotPanel.scale,
+      maxIter: s.mandelbrotPanel.maxIter,
+      paletteType: s.mandelbrotPanel.paletteType,
+      progressiveMode: s.mandelbrotPanel.progressiveMode,
+      smoothColoring: s.mandelbrotPanel.smoothColoring,
+      juliaSeed: s.juliaSeed,
+      juliaPanelCenter: s.juliaPanel.center,
+      juliaPanelScale: s.juliaPanel.scale,
+    };
+  }
+
   buildShareUrl() {
-    return share.buildShareUrl(this.shareState(), this.initialState, location.origin, location.pathname);
+    return share.buildShareUrl(this.shareState(), this.flattenSnapshotForShare(this.initialState), location.origin, location.pathname);
   }
 
   restoreSettings() {
@@ -413,24 +506,36 @@ class MandelbrotApp {
   }
 
   applySnapshot(s) {
-    this.mandelbrotPanel.center = s.mandelbrotPanelCenter;
-    this.mandelbrotPanel.pivot = s.mandelbrotPanelCenter;
+    this.mandelbrotPanel.center = s.mandelbrotPanel.center;
+    this.mandelbrotPanel.pivot = s.mandelbrotPanel.center;
     this.mandelbrotPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.setScale(s.mandelbrotPanelScale);
-    this.setMaxIter(s.maxIter);
+    this.setScale(s.mandelbrotPanel.scale);
+    this.setMaxIter(s.mandelbrotPanel.maxIter);
+    this.applyPalette(s.mandelbrotPanel.paletteType);
+    this.paletteSel.value = s.mandelbrotPanel.paletteType;
+    this.mandelbrotPanel.progressiveMode = s.mandelbrotPanel.progressiveMode;
+    this.progressiveChk.checked = !!s.mandelbrotPanel.progressiveMode;
+    this.mandelbrotPanel.smoothColoring = s.mandelbrotPanel.smoothColoring;
+    this.smoothColoringChk.checked = !!s.mandelbrotPanel.smoothColoring;
+    this.resetProgressive(this.mandelbrotPanel);
+
+    // The juliaPanelX setters already route through the real side-effecting
+    // update (UI sync, palette texture) when juliaPanel exists, or a backing
+    // field otherwise — see the accessors above.
+    this.juliaPanelCenter = s.juliaPanel.center;
+    this.juliaPanelScale = s.juliaPanel.scale;
+    this.juliaPanelMaxIter = s.juliaPanel.maxIter;
+    this.juliaPanelPaletteType = s.juliaPanel.paletteType;
+    this.juliaPanelSmoothColoring = s.juliaPanel.smoothColoring;
+    this.juliaPanelProgressiveMode = s.juliaPanel.progressiveMode;
+    if (this.juliaPanel) {
+      this.juliaPanel.pivot = this.juliaPanel.center;
+      this.juliaPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+      this.resetProgressive(this.juliaPanel);
+    }
 
     this.juliaSeed = s.juliaSeed;
 
-    this.applyPalette(s.paletteType);
-    this.paletteSel.value = s.paletteType;
-
-    this.mandelbrotPanel.progressiveMode = s.progressiveMode;
-    this.progressiveChk.checked = !!s.progressiveMode;
-
-    this.mandelbrotPanel.smoothColoring = s.smoothColoring;
-    this.smoothColoringChk.checked = !!s.smoothColoring;
-
-    this.resetProgressive(this.mandelbrotPanel);
     this.scheduleRender();
   }
 
@@ -598,18 +703,21 @@ class MandelbrotApp {
   };
 
   onJuliaIterInput = () => {
+    if (!this.pendingIterSnapshotJulia) this.pendingIterSnapshotJulia = this.snapshotView();
     this.setJuliaMaxIter(10 ** Number(this.iterSliderJulia.value));
     this.resetProgressive(this.juliaPanel);
     this.scheduleRender();
   };
 
   onJuliaZoomInput = () => {
+    if (!this.pendingZoomSnapshotJulia) this.pendingZoomSnapshotJulia = this.snapshotView();
     this.juliaPanel.setScale(10 ** Number(this.zoomSliderJulia.value), MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
     this.syncJuliaZoomSliderUI();
     this.scheduleRender();
   };
 
   onJuliaPaletteChange = () => {
+    this.pushHistory(this.snapshotView());
     this.applyJuliaPalette(Number(this.paletteSelJulia.value));
     this.scheduleRender();
   };
@@ -670,19 +778,22 @@ class MandelbrotApp {
 
   createJuliaPanel() {
     const panel = new FractalPanel(document.getElementById("gfxJulia"), document.getElementById("overlayJulia"));
-    // this.juliaPanel isn't assigned yet, so these getters read the
-    // restored/persisted pan+zoom (or fall back to centering on juliaSeed at
-    // the default scale, same as before this state was persisted).
+    // this.juliaPanel isn't assigned yet, so these getters read whatever was
+    // restored via Back/Forward/Reset before the panel existed (backing
+    // fields), or fall back to FractalPanel's own class defaults.
     panel.center = this.juliaPanelCenter;
     panel.pivot = panel.center;
     panel.scale = this.juliaPanelScale;
-    // maxIter/paletteType/smoothColoring/progressiveMode/gridOverlay/
-    // centerMarker start at FractalPanel's own class defaults — Julia isn't
-    // persisted yet (see Mossa 4), so there's nothing to restore here.
+    panel.maxIter = this.juliaPanelMaxIter;
+    panel.paletteType = this.juliaPanelPaletteType;
     panel.palette256 = makePalette(panel.paletteType);
+    panel.smoothColoring = this.juliaPanelSmoothColoring;
+    panel.progressiveMode = this.juliaPanelProgressiveMode;
+    panel.gridOverlay = this.juliaPanelGridOverlay;
+    panel.centerMarker = this.juliaPanelCenterMarker;
     this.juliaPanel = panel;
 
-    // Sync Julia's own controls to the panel's (default) values.
+    // Sync Julia's own controls to the (restored or default) panel values.
     this.setJuliaMaxIter(panel.maxIter);
     this.syncJuliaZoomSliderUI();
     this.paletteSelJulia.value = panel.paletteType;
@@ -691,17 +802,16 @@ class MandelbrotApp {
     this.gridOverlayChkJulia.checked = !!panel.gridOverlay;
     this.centerMarkerChkJulia.checked = !!panel.centerMarker;
 
-    // No onGenuineClick/history hooks: clicking inside the Julia panel only
-    // moves its own pivot/zoom anchor, it never sets juliaSeed (only a click on
-    // the Mandelbrot panel does that), and its pan/zoom isn't pushed to the
-    // shared undo history yet — see Mossa 3. onScaleChange is real, though:
-    // it just syncs Julia's own zoom slider, no history involved.
-    const noHistory = () => {};
+    // pushHistory/armWheelHistory are real now: Julia's own pan/zoom/quality
+    // is Tier 1, symmetric with Mandelbrot (History A — see snapshotView/
+    // applySnapshot above). Still no onGenuineClick: clicking inside the
+    // Julia panel only moves its own pivot/zoom anchor, never sets juliaSeed
+    // (only a click on the Mandelbrot panel does that).
     this.attachPanelEvents({
       panel,
       hooks: {
-        pushHistory: noHistory,
-        armWheelHistory: noHistory,
+        pushHistory: (snapshot) => this.pushHistory(snapshot),
+        armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
         onScaleChange: () => this.syncJuliaZoomSliderUI(),
       },
     });
@@ -746,19 +856,23 @@ class MandelbrotApp {
     this.scheduleRender();
   };
 
-  // Julia's own quality/look controls — independent, no history bookkeeping
-  // (Julia isn't in undo history yet — see Mossa 3).
+  // Julia's own quality controls — Tier 1, symmetric with Mandelbrot's above
+  // (pushHistory immediately, same as onProgressiveChange/onSmoothColoringChange).
   onJuliaProgressiveChange = () => {
+    this.pushHistory(this.snapshotView());
     this.juliaPanel.progressiveMode = this.progressiveChkJulia.checked ? 1 : 0;
     this.resetProgressive(this.juliaPanel);
     this.scheduleRender();
   };
 
   onJuliaSmoothColoringChange = () => {
+    this.pushHistory(this.snapshotView());
     this.juliaPanel.smoothColoring = this.smoothColoringChkJulia.checked ? 1 : 0;
     this.scheduleRender();
   };
 
+  // Julia's own grid/center-marker — Tier 2 (display preference), no
+  // pushHistory, mirrors Mandelbrot's onGridOverlayChange/onCenterMarkerChange.
   onJuliaGridOverlayChange = () => {
     this.juliaPanel.gridOverlay = this.gridOverlayChkJulia.checked ? 1 : 0;
     this.scheduleRender();
@@ -799,6 +913,8 @@ class MandelbrotApp {
   onReset = () => {
     this.pendingIterSnapshot = null;
     this.pendingZoomSnapshot = null;
+    this.pendingIterSnapshotJulia = null;
+    this.pendingZoomSnapshotJulia = null;
     this.history.reset();
     // Tier 2 (display preferences) and Tier 1 (navigable view) are restored
     // as two independent units — see captureDisplayPrefs/restoreDisplayPrefs
