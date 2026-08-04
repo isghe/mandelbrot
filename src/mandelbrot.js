@@ -183,12 +183,23 @@ class MandelbrotApp {
     this.shareBtn.onclick   = this.onShare;
     this.uiToggleBtn.onclick = this.onUiToggle;
 
-    this.mandelbrotPanel.canvas.addEventListener("pointerdown", this.onPointerDown);
-    this.mandelbrotPanel.canvas.addEventListener("pointermove", this.onPointerMove);
-    this.mandelbrotPanel.canvas.addEventListener("pointerup", this.onPointerUp);
-    this.mandelbrotPanel.canvas.addEventListener("pointercancel", this.onPointerUp);
-    this.mandelbrotPanel.canvas.addEventListener("pointerleave", this.onPointerLeave);
-    this.mandelbrotPanel.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    this.attachPanelEvents({
+      panel: this.mandelbrotPanel,
+      hooks: {
+        pushHistory: (s) => this.pushHistory(s),
+        armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
+        onScaleChange: () => this.syncZoomSliderUI(),
+        // Only the Mandelbrot panel's genuine click sets the shared Julia
+        // constant — see attachPanelEvents' hooks param.
+        onGenuineClick: (fractalPoint) => {
+          this.juliaC = fractalPoint;
+          // Only the Julia panel's render actually depends on juliaC; if
+          // it's not shown this just moves the marker, so don't restart its
+          // progressive reveal over an unrelated, unchanged image.
+          if (this.showJulia && this.juliaPanel) this.resetProgressive();
+        },
+      },
+    });
     window.addEventListener("resize", this.onResize);
     window.addEventListener("keydown", this.onKeyDown);
 
@@ -540,7 +551,15 @@ class MandelbrotApp {
     panel.pivot = panel.center;
     panel.scale = this.juliaPanelScale;
     this.juliaPanel = panel;
-    this.attachJuliaPanelEvents(panel);
+    // No onGenuineClick/history hooks: clicking inside the Julia panel only
+    // moves its own pivot/zoom anchor, it never sets juliaC (only a click on
+    // the Mandelbrot panel does that), and its pan/zoom isn't pushed to the
+    // shared undo history — Back/Forward navigates the Mandelbrot view only.
+    const noHistory = () => {};
+    this.attachPanelEvents({
+      panel,
+      hooks: { pushHistory: noHistory, armWheelHistory: noHistory },
+    });
     if (this.gpuDevice) {
       attachCanvas(this.gpuDevice, panel.canvas, this.palette256)
         .then((renderer) => {
@@ -549,46 +568,6 @@ class MandelbrotApp {
         })
         .catch((e) => this.showError(`Failed to initialize the Julia panel: ${e.message}`));
     }
-  }
-
-  // Wires the Julia panel's own pan/zoom/select gestures. No onGenuineClick
-  // hook: clicking inside the Julia panel only moves its own pivot/zoom
-  // anchor, it never sets juliaC (only a click on the Mandelbrot panel does
-  // that). Its pan/zoom also isn't pushed to the shared undo history —
-  // Back/Forward navigates the Mandelbrot view only.
-  attachJuliaPanelEvents(panel) {
-    const noHistory = () => {};
-    panel.canvas.addEventListener("pointerdown", (e) => {
-      panel.onPointerDown(e, { selectionBox: this.selectionBox, snapshotView: () => this.snapshotView() });
-    });
-    panel.canvas.addEventListener("pointermove", (e) => {
-      panel.onPointerMove(e, { selectionBox: this.selectionBox });
-    });
-    const onUp = (e) => {
-      panel.onPointerUp(e, {
-        selectionBox: this.selectionBox,
-        minScale: MandelbrotApp.MIN_SCALE,
-        maxScale: MandelbrotApp.MAX_SCALE,
-        snapshotView: () => this.snapshotView(),
-        pushHistory: noHistory,
-        resetProgressive: () => this.resetProgressive(),
-        scheduleRender: () => this.scheduleRender(),
-      });
-    };
-    panel.canvas.addEventListener("pointerup", onUp);
-    panel.canvas.addEventListener("pointercancel", onUp);
-    panel.canvas.addEventListener("pointerleave", () => {
-      panel.onPointerLeave({ selectionBox: this.selectionBox });
-    });
-    panel.canvas.addEventListener("wheel", (e) => {
-      panel.onWheel(e, {
-        minScale: MandelbrotApp.MIN_SCALE,
-        maxScale: MandelbrotApp.MAX_SCALE,
-        armWheelHistory: noHistory,
-        resetProgressive: () => this.resetProgressive(),
-        scheduleRender: () => this.scheduleRender(),
-      });
-    }, { passive: false });
   }
 
   onProgressiveChange = () => {
@@ -676,8 +655,9 @@ class MandelbrotApp {
     this.resizeOverlayCanvas();
     this.applySnapshot(this.initialState);
     // The Julia panel's own pan/zoom is independent of the Mandelbrot view
-    // history (see attachJuliaPanelEvents), so applySnapshot() above doesn't
-    // touch it — reset it back to its initial center/scale here too.
+    // history (see createJuliaPanel's no-op history hooks), so
+    // applySnapshot() above doesn't touch it — reset it back to its initial
+    // center/scale here too.
     this.juliaPanelCenter = this.initialState.juliaPanelCenter;
     this.juliaPanelScale = this.initialState.juliaPanelScale;
     if (this.juliaPanel) {
@@ -696,55 +676,51 @@ class MandelbrotApp {
     if (next) this.applySnapshot(next);
   };
 
-  // PAN / CLICK / SELECT: delegated to FractalPanel, which owns the pointer
-  // math; hooks here supply the app-global side effects (history, render
-  // scheduling, UI sync) and what a genuine click on this panel should do.
-  onPointerDown = (e) => {
-    this.mandelbrotPanel.onPointerDown(e, {
-      selectionBox: this.selectionBox,
-      snapshotView: () => this.snapshotView(),
+  // PAN / CLICK / SELECT / WHEEL: delegated to FractalPanel, which owns the
+  // pointer math; `hooks` supplies the app-global side effects a panel can't
+  // own itself (history, render scheduling, zoom-slider sync) and what a
+  // genuine click on *this* panel should do. Used for both the Mandelbrot
+  // panel (real hooks, wired in the constructor) and the Julia panel
+  // (no-op history/onGenuineClick hooks, wired in createJuliaPanel) — the
+  // difference between the two panels lives entirely in which hooks are
+  // passed in, not in two separate copies of this wiring.
+  attachPanelEvents({ panel, hooks }) {
+    const { pushHistory, armWheelHistory, onScaleChange, onGenuineClick } = hooks;
+    panel.canvas.addEventListener("pointerdown", (e) => {
+      panel.onPointerDown(e, { selectionBox: this.selectionBox, snapshotView: () => this.snapshotView() });
     });
-  };
-
-  onPointerMove = (e) => {
-    this.mandelbrotPanel.onPointerMove(e, { selectionBox: this.selectionBox });
-  };
-
-  onPointerUp = (e) => {
-    this.mandelbrotPanel.onPointerUp(e, {
-      selectionBox: this.selectionBox,
-      minScale: MandelbrotApp.MIN_SCALE,
-      maxScale: MandelbrotApp.MAX_SCALE,
-      snapshotView: () => this.snapshotView(),
-      pushHistory: (s) => this.pushHistory(s),
-      resetProgressive: () => this.resetProgressive(),
-      scheduleRender: () => this.scheduleRender(),
-      onScaleChange: () => this.syncZoomSliderUI(),
-      onGenuineClick: (fractalPoint) => {
-        this.juliaC = fractalPoint;
-        // Only the Julia panel's render actually depends on juliaC; if it's
-        // not shown this just moves the marker, so don't restart its
-        // progressive reveal over an unrelated, unchanged image.
-        if (this.showJulia && this.juliaPanel) this.resetProgressive();
-      },
+    panel.canvas.addEventListener("pointermove", (e) => {
+      panel.onPointerMove(e, { selectionBox: this.selectionBox });
     });
-  };
-
-  onPointerLeave = () => {
-    this.mandelbrotPanel.onPointerLeave({ selectionBox: this.selectionBox });
-  };
-
-  // WHEEL → zoom centered on the pivot
-  onWheel = (e) => {
-    this.mandelbrotPanel.onWheel(e, {
-      minScale: MandelbrotApp.MIN_SCALE,
-      maxScale: MandelbrotApp.MAX_SCALE,
-      armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
-      resetProgressive: () => this.resetProgressive(),
-      scheduleRender: () => this.scheduleRender(),
-      onScaleChange: () => this.syncZoomSliderUI(),
+    const onUp = (e) => {
+      panel.onPointerUp(e, {
+        selectionBox: this.selectionBox,
+        minScale: MandelbrotApp.MIN_SCALE,
+        maxScale: MandelbrotApp.MAX_SCALE,
+        snapshotView: () => this.snapshotView(),
+        pushHistory,
+        resetProgressive: () => this.resetProgressive(),
+        scheduleRender: () => this.scheduleRender(),
+        onScaleChange,
+        onGenuineClick,
+      });
+    };
+    panel.canvas.addEventListener("pointerup", onUp);
+    panel.canvas.addEventListener("pointercancel", onUp);
+    panel.canvas.addEventListener("pointerleave", () => {
+      panel.onPointerLeave({ selectionBox: this.selectionBox });
     });
-  };
+    panel.canvas.addEventListener("wheel", (e) => {
+      panel.onWheel(e, {
+        minScale: MandelbrotApp.MIN_SCALE,
+        maxScale: MandelbrotApp.MAX_SCALE,
+        armWheelHistory,
+        resetProgressive: () => this.resetProgressive(),
+        scheduleRender: () => this.scheduleRender(),
+        onScaleChange,
+      });
+    }, { passive: false });
+  }
 
   // Renders one panel with the given juliaMode/displayIter (both panels
   // share the same progressive ramp and iteration count; see renderOnce).
