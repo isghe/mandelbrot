@@ -13,6 +13,15 @@ class MandelbrotApp {
   static WHEEL_HISTORY_MS = 250;
   static SETTINGS_KEY = 'isghe-mandelbrot-settings';
   static SETTINGS_SAVE_MS = 400;
+  // Visibility toggling operates on DOM elements that exist from page load,
+  // independent of whether a panel's FractalPanel/JS wrapper has been
+  // instantiated yet (the Julia one is created lazily — see createJuliaPanel).
+  // This table is what makes updatePanelVisibility() generic instead of one
+  // hardcoded branch per panel.
+  static PANEL_VISIBILITY = [
+    { canvasId: "gfx", overlayId: "overlay", showField: "showMandelbrot" },
+    { canvasId: "gfxJulia", overlayId: "overlayJulia", showField: "showJulia" },
+  ];
 
   // State (JS = f64)
   maxIter = 256;
@@ -343,13 +352,9 @@ class MandelbrotApp {
   }
 
   onResize = () => {
-    if (this.showMandelbrot) {
-      this.resizeCanvas();
-      this.resizeOverlayCanvas();
-    }
-    if (this.showJulia && this.juliaPanel) {
-      this.juliaPanel.resizeCanvas();
-      this.juliaPanel.resizeOverlayCanvas();
+    for (const { panel } of this.panels) {
+      panel.resizeCanvas();
+      panel.resizeOverlayCanvas();
     }
     this.scheduleRender();
   };
@@ -389,8 +394,9 @@ class MandelbrotApp {
   }
 
   drawOverlay = () => {
-    if (this.showMandelbrot) this.drawOverlayForPanel(this.mandelbrotPanel, { showJuliaMarker: true });
-    if (this.showJulia && this.juliaPanel) this.drawOverlayForPanel(this.juliaPanel, { showJuliaMarker: false });
+    for (const { panel, showJuliaMarker } of this.panels) {
+      this.drawOverlayForPanel(panel, { showJuliaMarker });
+    }
   };
 
   showError(msg) {
@@ -497,14 +503,32 @@ class MandelbrotApp {
 
   updatePanelVisibility() {
     document.body.classList.toggle("dual-view", !!(this.showMandelbrot && this.showJulia));
-    document.getElementById("gfx").classList.toggle("panel-hidden", !this.showMandelbrot);
-    document.getElementById("overlay").classList.toggle("panel-hidden", !this.showMandelbrot);
-    document.getElementById("gfxJulia").classList.toggle("panel-hidden", !this.showJulia);
-    document.getElementById("overlayJulia").classList.toggle("panel-hidden", !this.showJulia);
+    let anyVisible = false;
+    for (const { canvasId, overlayId, showField } of MandelbrotApp.PANEL_VISIBILITY) {
+      const show = !!this[showField];
+      anyVisible = anyVisible || show;
+      document.getElementById(canvasId).classList.toggle("panel-hidden", !show);
+      document.getElementById(overlayId).classList.toggle("panel-hidden", !show);
+    }
     // Generic over however many visualization modes eventually exist, not
     // just these two: show the placeholder whenever none of them are on.
-    const anyVisible = !!this.showMandelbrot || !!this.showJulia;
     this.noVizMessage.style.display = anyVisible ? "none" : "block";
+  }
+
+  // Currently-shown panels that actually have a FractalPanel instance to
+  // operate on (unlike PANEL_VISIBILITY above, this needs the live JS
+  // object, not just a DOM id) — what onResize/drawOverlay/renderOnce loop
+  // over. mandelbrotPanel always exists; juliaPanel is lazy (see
+  // createJuliaPanel), so it's only included once created.
+  get panels() {
+    const list = [];
+    if (this.showMandelbrot) {
+      list.push({ panel: this.mandelbrotPanel, juliaMode: 0, showJuliaMarker: true });
+    }
+    if (this.showJulia && this.juliaPanel) {
+      list.push({ panel: this.juliaPanel, juliaMode: 1, showJuliaMarker: false });
+    }
+    return list;
   }
 
   createJuliaPanel() {
@@ -752,8 +776,9 @@ class MandelbrotApp {
       }
     }
 
-    if (this.showMandelbrot) this.renderPanel(this.mandelbrotPanel, 0, displayIter);
-    if (this.showJulia && this.juliaPanel) this.renderPanel(this.juliaPanel, 1, displayIter);
+    for (const { panel, juliaMode } of this.panels) {
+      this.renderPanel(panel, juliaMode, displayIter);
+    }
 
     // Exposed on the instance (rather than a local) so e2e tests can observe
     // the iteration count actually rendered, not just progressiveIter's
