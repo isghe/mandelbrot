@@ -125,6 +125,103 @@ test('buildUniformData packs a 16-float array in the WGSL Params layout', () => 
   assert.deepStrictEqual([...data.slice(14, 16)], [0, 0], 'trailing padding');
 });
 
+function makeMockSelectionBox() {
+  return { style: {} };
+}
+
+const noopHooks = (overrides = {}) => ({
+  selectionBox: makeMockSelectionBox(),
+  minScale: 0.1,
+  maxScale: 10,
+  snapshotView: () => ({}),
+  pushHistory: () => {},
+  resetProgressive: () => {},
+  scheduleRender: () => {},
+  onGenuineClick: () => {},
+  onScaleChange: () => {},
+  ...overrides,
+});
+
+// Regression coverage for 96c7474: onPointerDown/onPointerUp used to ignore
+// e.button entirely, so a right-click was handled identically to a genuine
+// left-click (silently setting juliaSeed on the Mandelbrot panel and pushing
+// history), on top of triggering the browser's own context menu.
+test('onPointerDown ignores non-primary mouse buttons (e.g. right-click) and starts no gesture', () => {
+  const canvas = makeMockCanvas();
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+
+  panel.onPointerDown(
+    { button: 2, ctrlKey: false, clientX: 10, clientY: 10, pointerId: 1 },
+    { selectionBox: makeMockSelectionBox(), snapshotView: () => ({}) }
+  );
+
+  assert.strictEqual(panel.primaryButtonDown, false);
+  assert.strictEqual(panel.isDragging, false);
+  assert.strictEqual(panel.isSelecting, false);
+});
+
+test('onPointerUp ignores the release of a button onPointerDown ignored, even with stale hasDragged state', () => {
+  const canvas = makeMockCanvas();
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+
+  // The exact stale state that used to make a later right-click's release
+  // fall through into the "genuine click" branch: hasDragged left over
+  // false from a previous real left-click, with no gesture actually open.
+  panel.hasDragged = false;
+
+  let genuineClicks = 0;
+  panel.onPointerUp(
+    { button: 2, clientX: 10, clientY: 10 },
+    noopHooks({ onGenuineClick: () => { genuineClicks++; } })
+  );
+
+  assert.strictEqual(genuineClicks, 0, 'a right-click release must not trigger onGenuineClick');
+});
+
+test('a primary-button click sets primaryButtonDown on pointerdown and clears it on pointerup, running the genuine-click path', () => {
+  const canvas = makeMockCanvas();
+  canvas.setPointerCapture = () => {};
+  canvas.getBoundingClientRect = () => ({ width: 800, height: 600, left: 0, top: 0 });
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+
+  panel.onPointerDown(
+    { button: 0, ctrlKey: false, clientX: 10, clientY: 10, pointerId: 1 },
+    { selectionBox: makeMockSelectionBox(), snapshotView: () => ({}) }
+  );
+  assert.strictEqual(panel.primaryButtonDown, true);
+
+  let genuineClicks = 0;
+  panel.onPointerUp(
+    { button: 0, clientX: 10, clientY: 10 },
+    noopHooks({ onGenuineClick: () => { genuineClicks++; } })
+  );
+
+  assert.strictEqual(panel.primaryButtonDown, false);
+  assert.strictEqual(genuineClicks, 1);
+});
+
+test('onPointerLeave clears primaryButtonDown', () => {
+  const canvas = makeMockCanvas();
+  canvas.setPointerCapture = () => {};
+  canvas.style = {}; // isDragging is true here, so onPointerLeave's clearDragPreview() writes to it
+  const overlayCanvas = makeMockOverlayCanvas();
+  overlayCanvas.style = {};
+  const panel = new FractalPanel(canvas, overlayCanvas);
+  const selectionBox = makeMockSelectionBox();
+
+  panel.onPointerDown(
+    { button: 0, ctrlKey: false, clientX: 0, clientY: 0, pointerId: 1 },
+    { selectionBox, snapshotView: () => ({}) }
+  );
+  assert.strictEqual(panel.primaryButtonDown, true);
+
+  panel.onPointerLeave({ selectionBox });
+  assert.strictEqual(panel.primaryButtonDown, false);
+});
+
 test('default field values match the app defaults FractalPanel replaced', () => {
   const canvas = makeMockCanvas();
   const overlayCanvas = makeMockOverlayCanvas();
