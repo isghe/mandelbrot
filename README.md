@@ -18,7 +18,7 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 - **Shareable view URLs** — copy a link that reproduces the exact view, iterations,
   palette, and mode you're looking at.
 
-  Example: https://isghe.github.io/mandelbrot/?x=-0.7445137502875607&y=0.16445045543801942&scale=0.007380653541488702
+  Example: https://isghe.github.io/mandelbrot/?mx=-0.7445137502875607&my=0.16445045543801942&mscale=0.007380653541488702
 
   ![Spiral view reached via a shared URL](examples/share-example.png)
 
@@ -111,7 +111,8 @@ Mandelbrot/Julia panel visibility) is persisted to `localStorage` and restored o
 next page load, so the app reopens where you left it. Settings-panel visibility (the ☰
 toggle / **H** key) is a session-only preference and is not persisted.
 
-Opening a URL with share parameters (`?x=...&y=...&scale=...`, etc.) always takes
+Opening a URL with share parameters (`?mx=...&my=...&mscale=...`, etc. — older links
+using the pre-rename `?x=...&y=...&scale=...` names still work) always takes
 precedence over `localStorage`: any field present in the URL is applied, and any field
 *not* present falls back to the app's built-in defaults, not to whatever was previously
 saved locally in that browser. In other words, a partial share link is not merged with
