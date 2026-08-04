@@ -23,20 +23,17 @@ class MandelbrotApp {
     { canvasId: "gfxJulia", overlayId: "overlayJulia", showField: "showJulia" },
   ];
 
-  // State (JS = f64)
-  maxIter = 256;
+  // State (JS = f64). maxIter/paletteType/smoothColoring/progressiveMode/
+  // gridOverlay/centerMarker live per-panel (this.mandelbrotPanel.X /
+  // this.juliaPanel.X) — see FractalPanel. juliaSeed is the one piece of
+  // "Julia-family" state that isn't a canvas's own view (it's the constant
+  // the Julia set is drawn for), so it stays app-global here.
   juliaSeed = new DOMPointReadOnly(-0.8, 0.156);
-  paletteType = 4;
-  smoothColoring = 0;
 
-  // overlay display preferences (not part of view history)
-  gridOverlay = 0;
-  centerMarker = 0;
+  // overlay display preference that's genuinely app-level: the marker points
+  // at where juliaSeed sits on the Mandelbrot plane, meaningless on the Julia
+  // panel's own view — see drawOverlayForPanel's showJuliaMarker.
   juliaMarker = 0;
-
-  // progressive mode (reveals the fractal iteration by iteration)
-  progressiveMode = 0;
-  progressiveIter = 1;
 
   // Panel visibility (display preferences, not view history — mirrors the
   // overlay toggles above): the Mandelbrot panel and Julia panel are each
@@ -85,13 +82,13 @@ class MandelbrotApp {
     this.initialState = {
       mandelbrotPanelCenter: this.mandelbrotPanel.center,
       mandelbrotPanelScale: this.mandelbrotPanel.scale,
-      maxIter: this.maxIter,
+      maxIter: this.mandelbrotPanel.maxIter,
       juliaSeed: this.juliaSeed,
       juliaPanelCenter: this.juliaPanelCenter,
       juliaPanelScale: this.juliaPanelScale,
-      paletteType: this.paletteType,
-      progressiveMode: this.progressiveMode,
-      smoothColoring: this.smoothColoring,
+      paletteType: this.mandelbrotPanel.paletteType,
+      progressiveMode: this.mandelbrotPanel.progressiveMode,
+      smoothColoring: this.mandelbrotPanel.smoothColoring,
     };
     // Tier 2 ("display preferences"): captured pre-restore too, same as
     // initialState above, so Reset always goes back to the app's built-in
@@ -127,15 +124,18 @@ class MandelbrotApp {
     this.centerMarkerChk = document.getElementById("centerMarker");
     this.juliaMarkerChk = document.getElementById("juliaMarker");
     const checkboxFields = [
-      ["centerMarkerChk", "centerMarker"],
-      ["gridOverlayChk", "gridOverlay"],
       ["juliaMarkerChk", "juliaMarker"],
-      ["progressiveChk", "progressiveMode"],
       ["showJuliaChk", "showJulia"],
       ["showMandelbrotChk", "showMandelbrot"],
-      ["smoothColoringChk", "smoothColoring"],
     ];
     checkboxFields.forEach(([chk, field]) => { this[chk].checked = !!this[field]; });
+    const panelCheckboxFields = [
+      ["centerMarkerChk", "centerMarker"],
+      ["gridOverlayChk", "gridOverlay"],
+      ["progressiveChk", "progressiveMode"],
+      ["smoothColoringChk", "smoothColoring"],
+    ];
+    panelCheckboxFields.forEach(([chk, field]) => { this[chk].checked = !!this.mandelbrotPanel[field]; });
     // Apply the restored panel-visibility CSS classes *before* resizing
     // anything below: resizeCanvas()/resizeOverlayCanvas() read the current
     // CSS box size, so if dual-view's 50vw split isn't already in effect,
@@ -153,7 +153,7 @@ class MandelbrotApp {
       this.resizeCanvas();
       this.resizeOverlayCanvas();
     }
-    this.paletteSel.value = this.paletteType;
+    this.paletteSel.value = this.mandelbrotPanel.paletteType;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
@@ -197,10 +197,10 @@ class MandelbrotApp {
         // constant — see attachPanelEvents' hooks param.
         onGenuineClick: (fractalPoint) => {
           this.juliaSeed = fractalPoint;
-          // Only the Julia panel's render actually depends on juliaSeed; if
-          // it's not shown this just moves the marker, so don't restart its
-          // progressive reveal over an unrelated, unchanged image.
-          if (this.showJulia && this.juliaPanel) this.resetProgressive();
+          // Only the Julia panel's render actually depends on juliaSeed
+          // (its escape set changes; the Mandelbrot panel's own image
+          // doesn't) — reset just Julia's progressive ramp, not Mandelbrot's.
+          if (this.showJulia && this.juliaPanel) this.resetProgressive(this.juliaPanel);
         },
       },
     });
@@ -208,8 +208,15 @@ class MandelbrotApp {
     window.addEventListener("keydown", this.onKeyDown);
 
     this.setScale(this.mandelbrotPanel.scale);
-    this.setMaxIter(this.maxIter);
-    this.palette256 = makePalette(this.paletteType);
+    this.setMaxIter(this.mandelbrotPanel.maxIter);
+    this.mandelbrotPanel.palette256 = makePalette(this.mandelbrotPanel.paletteType);
+    // Transitional mirror (see setMaxIter/applyPalette): if createJuliaPanel()
+    // already ran above (restored dual view), it seeded paletteType from
+    // mandelbrotPanel but palette256 wasn't computed yet at that point.
+    if (this.juliaPanel) {
+      this.juliaPanel.paletteType = this.mandelbrotPanel.paletteType;
+      this.juliaPanel.palette256 = this.mandelbrotPanel.palette256;
+    }
 
     this.drawOverlay();
   }
@@ -228,11 +235,11 @@ class MandelbrotApp {
     return {
       mandelbrotPanelCenter: this.mandelbrotPanel.center,
       mandelbrotPanelScale: this.mandelbrotPanel.scale,
-      maxIter: this.maxIter,
+      maxIter: this.mandelbrotPanel.maxIter,
       juliaSeed: this.juliaSeed,
-      paletteType: this.paletteType,
-      progressiveMode: this.progressiveMode,
-      smoothColoring: this.smoothColoring,
+      paletteType: this.mandelbrotPanel.paletteType,
+      progressiveMode: this.mandelbrotPanel.progressiveMode,
+      smoothColoring: this.mandelbrotPanel.smoothColoring,
     };
   }
 
@@ -244,8 +251,8 @@ class MandelbrotApp {
       ...this.snapshotView(),
       juliaPanelCenter: this.juliaPanelCenter,
       juliaPanelScale: this.juliaPanelScale,
-      gridOverlay: this.gridOverlay,
-      centerMarker: this.centerMarker,
+      gridOverlay: this.mandelbrotPanel.gridOverlay,
+      centerMarker: this.mandelbrotPanel.centerMarker,
       juliaMarker: this.juliaMarker,
       showMandelbrot: this.showMandelbrot,
       showJulia: this.showJulia,
@@ -261,8 +268,8 @@ class MandelbrotApp {
   // `c2889b3` fix).
   captureDisplayPrefs() {
     return {
-      gridOverlay: this.gridOverlay,
-      centerMarker: this.centerMarker,
+      gridOverlay: this.mandelbrotPanel.gridOverlay,
+      centerMarker: this.mandelbrotPanel.centerMarker,
       juliaMarker: this.juliaMarker,
       showMandelbrot: this.showMandelbrot,
       showJulia: this.showJulia,
@@ -272,15 +279,12 @@ class MandelbrotApp {
   }
 
   restoreDisplayPrefs(p) {
-    const overlayFields = [
-      ["gridOverlay", "gridOverlayChk"],
-      ["centerMarker", "centerMarkerChk"],
-      ["juliaMarker", "juliaMarkerChk"],
-    ];
-    overlayFields.forEach(([field, chk]) => {
-      this[field] = p[field];
-      this[chk].checked = !!p[field];
-    });
+    this.mandelbrotPanel.gridOverlay = p.gridOverlay;
+    this.gridOverlayChk.checked = !!p.gridOverlay;
+    this.mandelbrotPanel.centerMarker = p.centerMarker;
+    this.centerMarkerChk.checked = !!p.centerMarker;
+    this.juliaMarker = p.juliaMarker;
+    this.juliaMarkerChk.checked = !!p.juliaMarker;
 
     this.showMandelbrot = p.showMandelbrot;
     this.showMandelbrotChk.checked = !!p.showMandelbrot;
@@ -340,24 +344,27 @@ class MandelbrotApp {
         this[field] = new DOMPointReadOnly(p.x, p.y);
       }
     };
+    const restorePanelNumber = (field) => {
+      if (typeof s[field] === "number") this.mandelbrotPanel[field] = s[field];
+    };
 
-    // "mandelbrotPanelCenter"/"mandelbrotPanelScale" live on mandelbrotPanel,
-    // not as plain own fields on `this` (unlike the rest of these), so the
-    // generic this[field] = ... loop below can't reach them — assign
-    // explicitly instead.
+    // "mandelbrotPanelCenter"/"mandelbrotPanelScale" (and the per-panel
+    // quality/look fields below) live on mandelbrotPanel, not as plain own
+    // fields on `this` (unlike the rest of these), so the generic
+    // this[field] = ... loop can't reach them — assign explicitly instead.
     if (s.mandelbrotPanelCenter && Number.isFinite(s.mandelbrotPanelCenter.x) && Number.isFinite(s.mandelbrotPanelCenter.y)) {
       this.mandelbrotPanel.center = new DOMPointReadOnly(s.mandelbrotPanelCenter.x, s.mandelbrotPanelCenter.y);
     }
     if (typeof s.mandelbrotPanelScale === "number") this.mandelbrotPanel.scale = s.mandelbrotPanelScale;
 
     const pointFields = ["juliaSeed", "juliaPanelCenter"];
-    const numberFields = [
-      "centerMarker", "gridOverlay", "juliaMarker", "juliaPanelScale", "maxIter",
-      "paletteType", "progressiveMode", "showJulia", "showMandelbrot",
-      "smoothColoring",
+    const numberFields = ["juliaMarker", "juliaPanelScale", "showJulia", "showMandelbrot"];
+    const panelNumberFields = [
+      "centerMarker", "gridOverlay", "maxIter", "paletteType", "progressiveMode", "smoothColoring",
     ];
     pointFields.forEach(restorePoint);
     numberFields.forEach(restoreNumber);
+    panelNumberFields.forEach(restorePanelNumber);
 
     this.mandelbrotPanel.pivot = this.mandelbrotPanel.center;
 
@@ -389,20 +396,27 @@ class MandelbrotApp {
     this.applyPalette(s.paletteType);
     this.paletteSel.value = s.paletteType;
 
-    this.progressiveMode = s.progressiveMode;
+    this.mandelbrotPanel.progressiveMode = s.progressiveMode;
     this.progressiveChk.checked = !!s.progressiveMode;
+    if (this.juliaPanel) this.juliaPanel.progressiveMode = s.progressiveMode;
 
-    this.smoothColoring = s.smoothColoring;
+    this.mandelbrotPanel.smoothColoring = s.smoothColoring;
     this.smoothColoringChk.checked = !!s.smoothColoring;
+    if (this.juliaPanel) this.juliaPanel.smoothColoring = s.smoothColoring;
 
-    this.resetProgressive();
+    this.resetAllProgressive();
     this.scheduleRender();
   }
 
+  // Transitional mirror: until Julia gets its own real Iterations slider
+  // (Mossa 2), its maxIter tracks Mandelbrot's so its render doesn't
+  // silently stop following the one shared control.
   setMaxIter(next) {
-    this.maxIter = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
-    this.iterSlider.value = Math.log10(this.maxIter);
-    this.iterLabel.textContent = this.maxIter;
+    const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
+    this.mandelbrotPanel.maxIter = clamped;
+    if (this.juliaPanel) this.juliaPanel.maxIter = clamped;
+    this.iterSlider.value = Math.log10(clamped);
+    this.iterLabel.textContent = clamped;
   }
 
   resizeCanvas() {
@@ -432,10 +446,10 @@ class MandelbrotApp {
       // Drawn before renderOnce() so the overlay still shows up even if
       // WebGPU init failed (renderOnce() is a no-op/throws in that case).
       this.drawOverlay();
-      const displayIter = this.renderOnce();
+      this.renderOnce();
       this.scheduleSaveSettings();
       const anyDragging = this.mandelbrotPanel.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
-      if (this.progressiveMode && displayIter < this.maxIter && !anyDragging) {
+      if (this.anyProgressiveBelowCap && !anyDragging) {
         this.scheduleRender();
       }
     });
@@ -450,8 +464,8 @@ class MandelbrotApp {
     const h = panel.overlayCssHeight;
     const aspect = panel.canvas.width / panel.canvas.height;
     ctx.clearRect(0, 0, w, h);
-    if (this.gridOverlay) overlay.drawGrid(ctx, w, h, panel.center, panel.scale, aspect);
-    if (this.centerMarker) overlay.drawCenterMarker(ctx, w, h, panel.center, panel.scale, aspect);
+    if (panel.gridOverlay) overlay.drawGrid(ctx, w, h, panel.center, panel.scale, aspect);
+    if (panel.centerMarker) overlay.drawCenterMarker(ctx, w, h, panel.center, panel.scale, aspect);
     if (showJuliaMarker && this.juliaMarker) overlay.drawJuliaMarker(ctx, w, h, this.juliaSeed, panel.center, panel.scale, aspect);
   }
 
@@ -496,24 +510,42 @@ class MandelbrotApp {
       this.showError("No WebGPU adapter available.");
       return;
     }
-    this.mandelbrotPanel.renderer = await attachCanvas(this.gpuDevice, this.mandelbrotPanel.canvas, this.palette256);
+    this.mandelbrotPanel.renderer = await attachCanvas(this.gpuDevice, this.mandelbrotPanel.canvas, this.mandelbrotPanel.palette256);
     // Dual view may have been toggled on before WebGPU finished
     // initializing; attach the Julia panel now if it's still waiting.
     if (this.juliaPanel && !this.juliaPanel.renderer) {
-      this.juliaPanel.renderer = await attachCanvas(this.gpuDevice, this.juliaPanel.canvas, this.palette256);
+      this.juliaPanel.renderer = await attachCanvas(this.gpuDevice, this.juliaPanel.canvas, this.juliaPanel.palette256);
     }
     this.scheduleRender();
   }
 
-  resetProgressive() {
-    this.progressiveIter = 1;
+  // Resets one panel's own progressive-reveal ramp. Callers that change a
+  // value shared by both panels via the (still transitional, pre-Mossa-2)
+  // mirrored controls use resetAllProgressive() below instead.
+  resetProgressive(panel) {
+    panel.progressiveIter = 1;
   }
 
+  resetAllProgressive() {
+    this.resetProgressive(this.mandelbrotPanel);
+    if (this.juliaPanel) this.resetProgressive(this.juliaPanel);
+  }
+
+  // Transitional mirror (see setMaxIter): Julia's palette tracks
+  // Mandelbrot's until Mossa 2 gives it its own Palette control. Each panel
+  // already has its own GPU palette texture (attachCanvas is per-canvas),
+  // so writing both here is just "keep them equal for now", not a shared
+  // texture.
   applyPalette(type) {
-    this.paletteType = type;
-    this.palette256 = makePalette(type);
-    if (this.mandelbrotPanel.renderer) this.mandelbrotPanel.renderer.writePalette(this.palette256);
-    if (this.juliaPanel?.renderer) this.juliaPanel.renderer.writePalette(this.palette256);
+    const palette256 = makePalette(type);
+    this.mandelbrotPanel.paletteType = type;
+    this.mandelbrotPanel.palette256 = palette256;
+    if (this.mandelbrotPanel.renderer) this.mandelbrotPanel.renderer.writePalette(palette256);
+    if (this.juliaPanel) {
+      this.juliaPanel.paletteType = type;
+      this.juliaPanel.palette256 = palette256;
+      if (this.juliaPanel.renderer) this.juliaPanel.renderer.writePalette(palette256);
+    }
   }
 
   // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
@@ -524,7 +556,7 @@ class MandelbrotApp {
   onIterInput = () => {
     if (!this.pendingIterSnapshot) this.pendingIterSnapshot = this.snapshotView();
     this.setMaxIter(10 ** Number(this.iterSlider.value));
-    this.resetProgressive();
+    this.resetAllProgressive();
     this.scheduleRender();
   };
 
@@ -601,6 +633,16 @@ class MandelbrotApp {
     panel.center = this.juliaPanelCenter;
     panel.pivot = panel.center;
     panel.scale = this.juliaPanelScale;
+    // Transitional mirror (see setMaxIter/applyPalette): seed from
+    // mandelbrotPanel's current values, which by now already reflect any
+    // restored settings. Removed once Julia gets its own controls (Mossa 2).
+    panel.maxIter = this.mandelbrotPanel.maxIter;
+    panel.paletteType = this.mandelbrotPanel.paletteType;
+    panel.palette256 = this.mandelbrotPanel.palette256;
+    panel.smoothColoring = this.mandelbrotPanel.smoothColoring;
+    panel.progressiveMode = this.mandelbrotPanel.progressiveMode;
+    panel.gridOverlay = this.mandelbrotPanel.gridOverlay;
+    panel.centerMarker = this.mandelbrotPanel.centerMarker;
     this.juliaPanel = panel;
     // No onGenuineClick/history hooks: clicking inside the Julia panel only
     // moves its own pivot/zoom anchor, it never sets juliaSeed (only a click on
@@ -612,7 +654,7 @@ class MandelbrotApp {
       hooks: { pushHistory: noHistory, armWheelHistory: noHistory },
     });
     if (this.gpuDevice) {
-      attachCanvas(this.gpuDevice, panel.canvas, this.palette256)
+      attachCanvas(this.gpuDevice, panel.canvas, panel.palette256)
         .then((renderer) => {
           panel.renderer = renderer;
           this.scheduleRender();
@@ -621,16 +663,22 @@ class MandelbrotApp {
     }
   }
 
+  // Transitional mirror (see setMaxIter): applies to Mandelbrot and mirrors
+  // to Julia until Mossa 2 gives Julia its own Progressive mode checkbox.
   onProgressiveChange = () => {
     this.pushHistory(this.snapshotView());
-    this.progressiveMode = this.progressiveChk.checked ? 1 : 0;
-    this.resetProgressive();
+    const on = this.progressiveChk.checked ? 1 : 0;
+    this.mandelbrotPanel.progressiveMode = on;
+    if (this.juliaPanel) this.juliaPanel.progressiveMode = on;
+    this.resetAllProgressive();
     this.scheduleRender();
   };
 
   onSmoothColoringChange = () => {
     this.pushHistory(this.snapshotView());
-    this.smoothColoring = this.smoothColoringChk.checked ? 1 : 0;
+    const on = this.smoothColoringChk.checked ? 1 : 0;
+    this.mandelbrotPanel.smoothColoring = on;
+    if (this.juliaPanel) this.juliaPanel.smoothColoring = on;
     this.scheduleRender();
   };
 
@@ -638,12 +686,16 @@ class MandelbrotApp {
   // change what the fractal render pass produces, only what's drawn on the
   // separate #overlay canvas, so no pushHistory here (unlike the toggles above).
   onGridOverlayChange = () => {
-    this.gridOverlay = this.gridOverlayChk.checked ? 1 : 0;
+    const on = this.gridOverlayChk.checked ? 1 : 0;
+    this.mandelbrotPanel.gridOverlay = on;
+    if (this.juliaPanel) this.juliaPanel.gridOverlay = on;
     this.scheduleRender();
   };
 
   onCenterMarkerChange = () => {
-    this.centerMarker = this.centerMarkerChk.checked ? 1 : 0;
+    const on = this.centerMarkerChk.checked ? 1 : 0;
+    this.mandelbrotPanel.centerMarker = on;
+    if (this.juliaPanel) this.juliaPanel.centerMarker = on;
     this.scheduleRender();
   };
 
@@ -723,7 +775,7 @@ class MandelbrotApp {
         maxScale: MandelbrotApp.MAX_SCALE,
         snapshotView: () => this.snapshotView(),
         pushHistory,
-        resetProgressive: () => this.resetProgressive(),
+        resetProgressive: () => this.resetProgressive(panel),
         scheduleRender: () => this.scheduleRender(),
         onScaleChange,
         onGenuineClick,
@@ -739,15 +791,16 @@ class MandelbrotApp {
         minScale: MandelbrotApp.MIN_SCALE,
         maxScale: MandelbrotApp.MAX_SCALE,
         armWheelHistory,
-        resetProgressive: () => this.resetProgressive(),
+        resetProgressive: () => this.resetProgressive(panel),
         scheduleRender: () => this.scheduleRender(),
         onScaleChange,
       });
     }, { passive: false });
   }
 
-  // Renders one panel with the given juliaMode/displayIter (both panels
-  // share the same progressive ramp and iteration count; see renderOnce).
+  // Renders one panel with the given juliaMode/displayIter — each panel's
+  // own maxIter/smoothColoring/progressiveMode/progressiveIter, computed by
+  // renderOnce below.
   renderPanel(panel, juliaMode, displayIter) {
     if (!panel.renderer) return;
     const data = buildUniformData({
@@ -758,33 +811,38 @@ class MandelbrotApp {
       canvasWidth: panel.canvas.width,
       canvasHeight: panel.canvas.height,
       juliaMode,
-      smoothColoring: this.smoothColoring,
+      smoothColoring: panel.smoothColoring,
     });
     panel.renderer.render(data);
   }
 
-  // RENDER
+  // RENDER. Each visible panel ramps toward its own maxIter independently;
+  // scheduleRender's re-arm check (this.anyProgressiveBelowCap) re-arms while
+  // at least one panel's ramp hasn't yet reached its own cap.
   renderOnce = () => {
-    if (this.deviceLost || !this.mandelbrotPanel.renderer) return Infinity;
+    if (this.deviceLost || !this.mandelbrotPanel.renderer) {
+      this.anyProgressiveBelowCap = false;
+      return Infinity;
+    }
 
     const anyDragging = this.mandelbrotPanel.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
-    let displayIter = this.maxIter;
-    if (this.progressiveMode && !anyDragging) {
-      displayIter = Math.min(this.progressiveIter, this.maxIter);
-      if (this.progressiveIter < this.maxIter) {
-        this.progressiveIter = Math.min(this.maxIter, Math.ceil(this.progressiveIter * 1.08 + 1));
-      }
-    }
+    let anyBelowCap = false;
 
     for (const { panel, juliaMode } of this.panels) {
+      let displayIter = panel.maxIter;
+      if (panel.progressiveMode && !anyDragging) {
+        displayIter = Math.min(panel.progressiveIter, panel.maxIter);
+        if (panel.progressiveIter < panel.maxIter) {
+          panel.progressiveIter = Math.min(panel.maxIter, Math.ceil(panel.progressiveIter * 1.08 + 1));
+          anyBelowCap = true;
+        }
+      }
       this.renderPanel(panel, juliaMode, displayIter);
+      if (panel === this.mandelbrotPanel) this.lastDisplayIter = displayIter;
     }
 
-    // Exposed on the instance (rather than a local) so e2e tests can observe
-    // the iteration count actually rendered, not just progressiveIter's
-    // internal, already-incremented-for-next-frame value.
-    this.lastDisplayIter = displayIter;
-    return displayIter;
+    this.anyProgressiveBelowCap = anyBelowCap;
+    return this.lastDisplayIter;
   };
 }
 

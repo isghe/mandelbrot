@@ -27,8 +27,9 @@ export function buildUniformData({
 }
 
 // Per-canvas render/interaction state: one Mandelbrot canvas today, a second
-// independent Julia canvas later. Shared/app-global state (juliaSeed, maxIter,
-// palette, ...) stays on MandelbrotApp and is passed into panel methods.
+// independent Julia canvas later. `juliaSeed` (the Julia-family constant, not
+// a canvas's own view) stays app-global on MandelbrotApp; everything else
+// that characterizes a single canvas's frame (view, quality, look) lives here.
 export class FractalPanel {
   // Shared with MandelbrotApp's juliaPanelScale fallback, so the Julia
   // panel's default zoom (before any pan/zoom is persisted) doesn't drift
@@ -37,6 +38,19 @@ export class FractalPanel {
 
   center = new DOMPointReadOnly(-0.5, 0.0);
   scale = FractalPanel.DEFAULT_SCALE;
+
+  // Frame quality/look — independent per panel (see MandelbrotApp's
+  // three-tier state model). `palette256` is the derived 256-entry RGBA
+  // lookup table for `paletteType`, computed and written by MandelbrotApp
+  // (this class doesn't depend on palette.js).
+  maxIter = 256;
+  paletteType = 4;
+  palette256 = null;
+  smoothColoring = 0;
+  progressiveMode = 0;
+  progressiveIter = 1;
+  gridOverlay = 0;
+  centerMarker = 0;
 
   // pivot for centered zoom
   pivot = new DOMPointReadOnly(-0.5, 0.0);

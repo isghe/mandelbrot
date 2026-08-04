@@ -106,9 +106,9 @@ test('a share URL with only some params leaves the rest at their defaults', asyn
   await expect(gpuError).toBeHidden();
 
   const state = await page.evaluate(() => ({
-    maxIter: window.app.maxIter,
+    maxIter: window.app.mandelbrotPanel.maxIter,
     juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
-    paletteType: window.app.paletteType,
+    paletteType: window.app.mandelbrotPanel.paletteType,
   }));
   expect(state.maxIter).toBe(256);
   expect(state.juliaSeed).toEqual({ x: -0.8, y: 0.156 });
@@ -128,7 +128,7 @@ test('a param present but empty (e.g. ?iter=) is treated as absent, not zero', a
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
-  const maxIter = await page.evaluate(() => window.app.maxIter);
+  const maxIter = await page.evaluate(() => window.app.mandelbrotPanel.maxIter);
   expect(maxIter).toBe(256);
 });
 
@@ -163,14 +163,14 @@ for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
     await expect(gpuError).toBeHidden();
 
     const state = await page.evaluate(() => ({
-      maxIter: window.app.maxIter,
+      maxIter: window.app.mandelbrotPanel.maxIter,
       showMandelbrot: window.app.showMandelbrot,
       showJulia: window.app.showJulia,
-      paletteType: window.app.paletteType,
-      progressiveMode: window.app.progressiveMode,
-      smoothColoring: window.app.smoothColoring,
-      gridOverlay: window.app.gridOverlay,
-      centerMarker: window.app.centerMarker,
+      paletteType: window.app.mandelbrotPanel.paletteType,
+      progressiveMode: window.app.mandelbrotPanel.progressiveMode,
+      smoothColoring: window.app.mandelbrotPanel.smoothColoring,
+      gridOverlay: window.app.mandelbrotPanel.gridOverlay,
+      centerMarker: window.app.mandelbrotPanel.centerMarker,
       juliaMarker: window.app.juliaMarker,
       mandelbrotPanelCenter: { x: window.app.mandelbrotPanel.center.x, y: window.app.mandelbrotPanel.center.y },
       juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },

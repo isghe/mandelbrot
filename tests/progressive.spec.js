@@ -46,7 +46,7 @@ test('device loss stops the progressive re-arm instead of looping every frame', 
     const orig = window.app.renderOnce;
     window.app.renderOnce = () => { window.__renderCount++; return orig.call(window.app); };
 
-    window.app.progressiveMode = true;
+    window.app.mandelbrotPanel.progressiveMode = true;
     window.app.deviceLost = true;
     window.app.scheduleRender();
 
