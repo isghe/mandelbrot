@@ -140,4 +140,13 @@ test('default field values match the app defaults FractalPanel replaced', () => 
   assert.strictEqual(panel.isDragging, false);
   assert.strictEqual(panel.isSelecting, false);
   assert.strictEqual(panel.renderer, null);
+
+  assert.strictEqual(panel.maxIter, 256);
+  assert.strictEqual(panel.paletteType, 4);
+  assert.strictEqual(panel.palette256, null);
+  assert.strictEqual(panel.smoothColoring, 0);
+  assert.strictEqual(panel.progressiveMode, 0);
+  assert.strictEqual(panel.progressiveIter, 1);
+  assert.strictEqual(panel.gridOverlay, 0);
+  assert.strictEqual(panel.centerMarker, 0);
 });

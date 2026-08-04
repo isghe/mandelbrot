@@ -40,6 +40,13 @@ label { display:block; margin-top:6px; }
 #resetBtn { display:block; margin-top:10px; }
 .hint { font-size:0.8em; opacity:0.7; margin-top:10px; max-width:200px; }
 
+/* Mandelbrot/Julia sections stack in single-panel view (whichever is shown);
+   body.dual-view (already toggled for the canvases) puts them side by side. */
+#uiPanels { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+body.dual-view #uiPanels { flex-direction:row; }
+#uiPanels fieldset { border:1px solid #fff4; border-radius:6px; padding:8px; margin:0; }
+#uiPanels legend { padding:0 4px; }
+
 #selectionBox {
   position:fixed; z-index:2;
   display:none;

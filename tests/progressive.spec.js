@@ -29,6 +29,23 @@ test('progressive mode ramp actually renders a frame at maxIter', async ({ page 
   }, { timeout: 15000 }).toBe(64);
 });
 
+// Coverage for the per-panel progressive ramp (Mossa 1): each panel now owns
+// its own progressiveIter/maxIter, so a dual-view session with different
+// per-panel iteration caps must let each ramp reach its *own* target
+// independently rather than sharing a single app-wide ramp.
+test('progressive ramps are independent per panel — Julia reaches its own (different) maxIter', async ({ page }) => {
+  await page.goto('/index.html?v=5&progressive=1&iter=64&mandelbrot=1&julia=1&jprogressive=1&jiter=32');
+  const gpuError = page.locator('#gpuError');
+  await expect(gpuError).toBeHidden();
+
+  await expect.poll(async () => {
+    return page.evaluate(() => window.app.mandelbrotPanel.lastDisplayIter);
+  }, { timeout: 15000 }).toBe(64);
+  await expect.poll(async () => {
+    return page.evaluate(() => window.app.juliaPanel?.lastDisplayIter);
+  }, { timeout: 15000 }).toBe(32);
+});
+
 // Regression test for a bug introduced while fixing the above: renderOnce()'s
 // early-return guard (deviceLost/no renderer) used -Infinity as its sentinel,
 // which is always < maxIter — so with progressive mode on, scheduleRender()
@@ -46,7 +63,7 @@ test('device loss stops the progressive re-arm instead of looping every frame', 
     const orig = window.app.renderOnce;
     window.app.renderOnce = () => { window.__renderCount++; return orig.call(window.app); };
 
-    window.app.progressiveMode = true;
+    window.app.mandelbrotPanel.progressiveMode = true;
     window.app.deviceLost = true;
     window.app.scheduleRender();
 

@@ -289,6 +289,32 @@ test('clicking sets the Julia point and is undoable, even with the Julia panel h
   await expect(backBtn).toBeDisabled();
 });
 
+// Regression coverage for History A (Mossa 3): the Julia panel's own
+// pan/zoom/quality used to be a Tier 2 display preference outside undo
+// history; it's now Tier 1, symmetric with the Mandelbrot panel.
+test('zooming the Julia panel enables Back/Forward and is undoable', async ({ page }) => {
+  const backBtn = page.locator('#backBtn');
+  await page.check('#showJulia');
+  await page.waitForTimeout(200);
+  await expect(backBtn).toBeDisabled();
+
+  const scaleBefore = await page.evaluate(() => window.app.juliaPanel.scale);
+
+  await page.mouse.move(900, 350); // over the Julia (right) panel
+  await page.mouse.wheel(0, -200);
+  await page.waitForTimeout(400);
+
+  await expect(backBtn).toBeEnabled();
+  const scaleAfter = await page.evaluate(() => window.app.juliaPanel.scale);
+  expect(scaleAfter).not.toBe(scaleBefore);
+
+  await backBtn.click();
+  await page.waitForTimeout(200);
+  const scaleAfterBack = await page.evaluate(() => window.app.juliaPanel.scale);
+  expect(scaleAfterBack).toBe(scaleBefore);
+  await expect(backBtn).toBeDisabled();
+});
+
 test('wheel-zoom after panning centers on the new position, not the stale pivot', async ({ page }) => {
   const box = await page.locator('#gfx').boundingBox();
   const cx = box.x + box.width / 2;

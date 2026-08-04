@@ -9,6 +9,10 @@ const initialState = {
   juliaSeed: { x: -0.8, y: 0.156 },
   juliaPanelCenter: { x: -0.8, y: 0.156 },
   juliaPanelScale: 3.0,
+  juliaPanelMaxIter: 256,
+  juliaPanelPaletteType: 4,
+  juliaPanelProgressiveMode: 0,
+  juliaPanelSmoothColoring: 0,
   paletteType: 4,
   progressiveMode: 0,
   smoothColoring: 0,
@@ -22,6 +26,8 @@ function baseState(overrides = {}) {
     juliaPanelCenter: { ...initialState.juliaPanelCenter },
     gridOverlay: 0,
     centerMarker: 0,
+    juliaPanelGridOverlay: 0,
+    juliaPanelCenterMarker: 0,
     juliaMarker: 0,
     showMandelbrot: 1,
     showJulia: 0,
@@ -145,6 +151,39 @@ test('buildShareUrl encodes the Julia panel\'s own pan/zoom (jpx/jpy/jscale) whe
   assert.strictEqual(parsed.juliaPanelScale, 1.5);
 });
 
+test('buildShareUrl encodes the Julia panel\'s own quality/look (jiter/jpalette/jprogressive/jsmooth) when it differs from initialState, and round-trips', () => {
+  const state = baseState({
+    juliaPanelMaxIter: 999,
+    juliaPanelPaletteType: 2,
+    juliaPanelProgressiveMode: 1,
+    juliaPanelSmoothColoring: 1,
+  });
+  const url = share.buildShareUrl(state, initialState, 'https://example.com', '/');
+  const search = new URL(url).search;
+  assert.match(search, /jiter=999/);
+  assert.match(search, /jpalette=2/);
+  assert.match(search, /jprogressive=1/);
+  assert.match(search, /jsmooth=1/);
+
+  const parsed = share.parseShareParams(search);
+  assert.strictEqual(parsed.juliaPanelMaxIter, 999);
+  assert.strictEqual(parsed.juliaPanelPaletteType, 2);
+  assert.strictEqual(parsed.juliaPanelProgressiveMode, 1);
+  assert.strictEqual(parsed.juliaPanelSmoothColoring, 1);
+});
+
+test('buildShareUrl encodes the Julia panel\'s own grid/center-marker overlay flags (jgrid/jcenterMark) whenever truthy, regardless of initialState, and round-trips', () => {
+  const state = baseState({ juliaPanelGridOverlay: 1, juliaPanelCenterMarker: 1 });
+  const url = share.buildShareUrl(state, initialState, 'https://example.com', '/');
+  const params = new URL(url).searchParams;
+  assert.strictEqual(params.get('jgrid'), '1');
+  assert.strictEqual(params.get('jcenterMark'), '1');
+
+  const parsed = share.parseShareParams(new URL(url).search);
+  assert.strictEqual(parsed.juliaPanelGridOverlay, 1);
+  assert.strictEqual(parsed.juliaPanelCenterMarker, 1);
+});
+
 test('parseShareParams (v3) maps scalar params to their field names', () => {
   const s = share.parseShareParams('?v=3&iter=999&mandelbrot=0&julia=1&palette=2&progressive=1&smooth=1&grid=1&centerMark=1&juliaMark=1&mscale=1.5');
   assert.deepStrictEqual(s, {
@@ -205,7 +244,7 @@ test('parseShareParams accepts v=1 explicitly (legacy julia semantics, old "scal
 });
 
 test('parseShareParams rejects an unknown future version', () => {
-  const s = share.parseShareParams('?v=5&mscale=1.5');
+  const s = share.parseShareParams('?v=6&mscale=1.5');
   assert.strictEqual(s, null);
 });
 
@@ -252,18 +291,20 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
   const state = baseState({ mandelbrotPanelScale: 1.5, gridOverlay: 1 });
   const data = share.settingsData(state);
   assert.deepStrictEqual(data, {
-    v: 4,
-    mandelbrotPanel: { center: { x: -0.5, y: 0 }, scale: 1.5 },
-    maxIter: 256,
+    v: 5,
+    mandelbrotPanel: {
+      center: { x: -0.5, y: 0 }, scale: 1.5,
+      maxIter: 256, paletteType: 4, smoothColoring: 0, progressiveMode: 0,
+      gridOverlay: 1, centerMarker: 0,
+    },
     showMandelbrot: 1,
     showJulia: 0,
     juliaSeed: { x: -0.8, y: 0.156 },
-    juliaPanel: { center: { x: -0.8, y: 0.156 }, scale: 3.0 },
-    paletteType: 4,
-    progressiveMode: 0,
-    smoothColoring: 0,
-    gridOverlay: 1,
-    centerMarker: 0,
+    juliaPanel: {
+      center: { x: -0.8, y: 0.156 }, scale: 3.0,
+      maxIter: 256, paletteType: 4, smoothColoring: 0, progressiveMode: 0,
+      gridOverlay: 0, centerMarker: 0,
+    },
     juliaMarker: 0,
   });
   assert.strictEqual(JSON.stringify(data), JSON.stringify(JSON.parse(JSON.stringify(data))));
@@ -343,24 +384,57 @@ test('loadSettingsData (v3) passes flat mandelbrotPanelCenter/Scale and juliaPan
   assert.strictEqual(loaded.juliaPanel, undefined);
 });
 
-test('loadSettingsData (v4) flattens mandelbrotPanel/juliaPanel back into the pre-v4 field names', () => {
-  const stored = share.settingsData(baseState({ mandelbrotPanelScale: 1.5 }));
+test('loadSettingsData (v5) flattens mandelbrotPanel/juliaPanel back into the pre-v4 field names, including the new per-panel quality/look fields', () => {
+  const stored = share.settingsData(baseState({ mandelbrotPanelScale: 1.5, juliaPanelPaletteType: 2 }));
   const loaded = share.loadSettingsData(stored);
   assert.deepStrictEqual(loaded.mandelbrotPanelCenter, { x: -0.5, y: 0 });
   assert.strictEqual(loaded.mandelbrotPanelScale, 1.5);
   assert.deepStrictEqual(loaded.juliaPanelCenter, { x: -0.8, y: 0.156 });
   assert.strictEqual(loaded.juliaPanelScale, 3.0);
+  assert.strictEqual(loaded.juliaPanelPaletteType, 2);
+  assert.strictEqual(loaded.juliaPanelMaxIter, 256);
+  assert.strictEqual(loaded.juliaPanelGridOverlay, 0);
   assert.strictEqual(loaded.mandelbrotPanel, undefined);
   assert.strictEqual(loaded.juliaPanel, undefined);
 });
 
+test('loadSettingsData (v<5) promotes the old shared flat maxIter/paletteType/etc onto juliaPanel\'s own field names', () => {
+  const v4 = {
+    v: 4,
+    mandelbrotPanel: { center: { x: -0.5, y: 0 }, scale: 3.0 },
+    juliaPanel: { center: { x: -0.8, y: 0.156 }, scale: 3.0 },
+    juliaSeed: { x: -0.8, y: 0.156 },
+    maxIter: 999,
+    paletteType: 2,
+    smoothColoring: 1,
+    progressiveMode: 1,
+    gridOverlay: 1,
+    centerMarker: 1,
+    showMandelbrot: 1,
+    showJulia: 0,
+  };
+  const loaded = share.loadSettingsData(v4);
+  assert.strictEqual(loaded.maxIter, 999);
+  assert.strictEqual(loaded.juliaPanelMaxIter, 999);
+  assert.strictEqual(loaded.paletteType, 2);
+  assert.strictEqual(loaded.juliaPanelPaletteType, 2);
+  assert.strictEqual(loaded.smoothColoring, 1);
+  assert.strictEqual(loaded.juliaPanelSmoothColoring, 1);
+  assert.strictEqual(loaded.progressiveMode, 1);
+  assert.strictEqual(loaded.juliaPanelProgressiveMode, 1);
+  assert.strictEqual(loaded.gridOverlay, 1);
+  assert.strictEqual(loaded.juliaPanelGridOverlay, 1);
+  assert.strictEqual(loaded.centerMarker, 1);
+  assert.strictEqual(loaded.juliaPanelCenterMarker, 1);
+});
+
 test('loadSettingsData rejects an unknown future version', () => {
-  const future = { ...share.settingsData(baseState()), v: 5 };
+  const future = { ...share.settingsData(baseState()), v: 6 };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 
 test('loadSettingsData rejects a future version given as a string, not treated as legacy', () => {
-  const future = { ...share.settingsData(baseState()), v: "5" };
+  const future = { ...share.settingsData(baseState()), v: "6" };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 

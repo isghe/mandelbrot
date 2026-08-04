@@ -80,7 +80,7 @@ test('opening a share URL overrides both defaults and localStorage', async ({ pa
   await page.selectOption('#paletteType', '2');
   await expect.poll(async () => {
     const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
-    return raw ? JSON.parse(raw).paletteType : null;
+    return raw ? JSON.parse(raw).mandelbrotPanel.paletteType : null;
   }).toBe(2);
 
   // No `v=` param: this is a legacy (pre-v2) share URL, where `julia=1` meant
@@ -106,9 +106,9 @@ test('a share URL with only some params leaves the rest at their defaults', asyn
   await expect(gpuError).toBeHidden();
 
   const state = await page.evaluate(() => ({
-    maxIter: window.app.maxIter,
+    maxIter: window.app.mandelbrotPanel.maxIter,
     juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
-    paletteType: window.app.paletteType,
+    paletteType: window.app.mandelbrotPanel.paletteType,
   }));
   expect(state.maxIter).toBe(256);
   expect(state.juliaSeed).toEqual({ x: -0.8, y: 0.156 });
@@ -128,7 +128,7 @@ test('a param present but empty (e.g. ?iter=) is treated as absent, not zero', a
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
-  const maxIter = await page.evaluate(() => window.app.maxIter);
+  const maxIter = await page.evaluate(() => window.app.mandelbrotPanel.maxIter);
   expect(maxIter).toBe(256);
 });
 
@@ -163,14 +163,14 @@ for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
     await expect(gpuError).toBeHidden();
 
     const state = await page.evaluate(() => ({
-      maxIter: window.app.maxIter,
+      maxIter: window.app.mandelbrotPanel.maxIter,
       showMandelbrot: window.app.showMandelbrot,
       showJulia: window.app.showJulia,
-      paletteType: window.app.paletteType,
-      progressiveMode: window.app.progressiveMode,
-      smoothColoring: window.app.smoothColoring,
-      gridOverlay: window.app.gridOverlay,
-      centerMarker: window.app.centerMarker,
+      paletteType: window.app.mandelbrotPanel.paletteType,
+      progressiveMode: window.app.mandelbrotPanel.progressiveMode,
+      smoothColoring: window.app.mandelbrotPanel.smoothColoring,
+      gridOverlay: window.app.mandelbrotPanel.gridOverlay,
+      centerMarker: window.app.mandelbrotPanel.centerMarker,
       juliaMarker: window.app.juliaMarker,
       mandelbrotPanelCenter: { x: window.app.mandelbrotPanel.center.x, y: window.app.mandelbrotPanel.center.y },
       juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
@@ -202,14 +202,14 @@ test('opening a share URL persists the shared settings to localStorage', async (
 
   await expect.poll(async () => {
     const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
-    return raw ? JSON.parse(raw).paletteType : null;
+    return raw ? JSON.parse(raw).mandelbrotPanel.paletteType : null;
   }).toBe(3);
 
   const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
   const data = JSON.parse(raw);
   expect(data.mandelbrotPanel.center).toEqual({ x: -1.25, y: 0.1 });
   expect(data.mandelbrotPanel.scale).toBe(0.5);
-  expect(data.maxIter).toBe(512);
+  expect(data.mandelbrotPanel.maxIter).toBe(512);
 });
 
 // Every other test in this file that touches mx/my/sx/sy/mscale gets there by
@@ -217,7 +217,7 @@ test('opening a share URL persists the shared settings to localStorage', async (
 // a real pan/zoom/click through the browser and check the *fresh* encoding.
 // This is that missing case: a genuine user interaction should produce a
 // current-schema (v3) URL, not just accept legacy input.
-test('a real pan, zoom, and click-to-set-seed stamp v=4 while keeping v3 param names (mx/my/mscale/sx/sy)', async ({ page }) => {
+test('a real pan, zoom, and click-to-set-seed stamp v=5 while keeping v3 param names (mx/my/mscale/sx/sy)', async ({ page }) => {
   const cx = 900, cy = 400; // well clear of the #ui panel (see panelVisibility.spec.js)
 
   await page.mouse.move(cx, cy);
@@ -239,7 +239,7 @@ test('a real pan, zoom, and click-to-set-seed stamp v=4 while keeping v3 param n
   const url = new URL(page.url());
   // SCHEMA_VERSION lives in share.js, not exposed on window.app; bumping it
   // means updating this literal too.
-  expect(url.searchParams.get('v')).toBe('4');
+  expect(url.searchParams.get('v')).toBe('5');
   expect(url.searchParams.get('my')).not.toBeNull();
   expect(url.searchParams.get('mscale')).not.toBeNull();
   expect(url.searchParams.get('sx')).not.toBeNull();

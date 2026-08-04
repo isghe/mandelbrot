@@ -49,6 +49,23 @@ test('unchecking Mandelbrot with Julia checked shows only the Julia panel, full-
   await expect(page.locator('#noVizMessage')).toBeHidden();
 });
 
+test('the settings panel shows only the section for each currently-visible canvas', async ({ page }) => {
+  await expect(page.locator('#uiMandelbrot')).toBeVisible();
+  await expect(page.locator('#uiJulia')).toBeHidden();
+
+  await page.check('#showJulia');
+  await expect(page.locator('#uiMandelbrot')).toBeVisible();
+  await expect(page.locator('#uiJulia')).toBeVisible();
+
+  await page.uncheck('#showMandelbrot');
+  await expect(page.locator('#uiMandelbrot')).toBeHidden();
+  await expect(page.locator('#uiJulia')).toBeVisible();
+
+  await page.uncheck('#showJulia');
+  await expect(page.locator('#uiMandelbrot')).toBeHidden();
+  await expect(page.locator('#uiJulia')).toBeHidden();
+});
+
 test('unchecking both panels shows the "No visualization mode selected" placeholder', async ({ page }) => {
   await page.uncheck('#showMandelbrot');
   await expect(page.locator('#gfx')).toBeHidden();
