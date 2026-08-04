@@ -565,8 +565,9 @@ class MandelbrotApp {
     this.iterLabel.textContent = clamped;
   }
 
-  // Julia's own Iterations slider — independent of Mandelbrot's, no history
-  // bookkeeping (see Mossa 3 for when Julia's view/quality joins undo history).
+  // Julia's own Iterations slider — independent of Mandelbrot's. History
+  // bookkeeping (pushHistory) is done by the caller (see the slider's
+  // onchange/pendingIterSnapshotJulia handling and applySnapshot above).
   setJuliaMaxIter(next) {
     const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
     this.juliaPanel.maxIter = clamped;

@@ -55,6 +55,26 @@ test('reloading the page restores persisted settings', async ({ page }) => {
   await expect(page.locator('#showJulia')).toBeChecked();
 });
 
+// Coverage for schema v5 (Mossa 4): the Julia panel's own maxIter/paletteType
+// are now nested under juliaPanel{} in localStorage, independent of the
+// Mandelbrot panel's — a reload must not mix the two panels' values up.
+test('the Mandelbrot and Julia panels persist independent palette/iterations across reload', async ({ page }) => {
+  await page.click('#showJulia');
+  await page.waitForTimeout(200);
+
+  await page.selectOption('#paletteType', '1');
+  await page.selectOption('#paletteTypeJulia', '2');
+  await waitForPersisted(page, 'mandelbrotPanel.paletteType', 1);
+  await waitForPersisted(page, 'juliaPanel.paletteType', 2);
+
+  await page.reload();
+  const gpuError = page.locator('#gpuError');
+  await expect(gpuError).toBeHidden();
+
+  await expect(page.locator('#paletteType')).toHaveValue('1');
+  await expect(page.locator('#paletteTypeJulia')).toHaveValue('2');
+});
+
 test('reloading the page restores the Julia panel\'s own dragged/zoomed position, not just juliaSeed', async ({ page }) => {
   await page.click('#showJulia');
   await page.waitForTimeout(200);

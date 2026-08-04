@@ -151,6 +151,39 @@ test('buildShareUrl encodes the Julia panel\'s own pan/zoom (jpx/jpy/jscale) whe
   assert.strictEqual(parsed.juliaPanelScale, 1.5);
 });
 
+test('buildShareUrl encodes the Julia panel\'s own quality/look (jiter/jpalette/jprogressive/jsmooth) when it differs from initialState, and round-trips', () => {
+  const state = baseState({
+    juliaPanelMaxIter: 999,
+    juliaPanelPaletteType: 2,
+    juliaPanelProgressiveMode: 1,
+    juliaPanelSmoothColoring: 1,
+  });
+  const url = share.buildShareUrl(state, initialState, 'https://example.com', '/');
+  const search = new URL(url).search;
+  assert.match(search, /jiter=999/);
+  assert.match(search, /jpalette=2/);
+  assert.match(search, /jprogressive=1/);
+  assert.match(search, /jsmooth=1/);
+
+  const parsed = share.parseShareParams(search);
+  assert.strictEqual(parsed.juliaPanelMaxIter, 999);
+  assert.strictEqual(parsed.juliaPanelPaletteType, 2);
+  assert.strictEqual(parsed.juliaPanelProgressiveMode, 1);
+  assert.strictEqual(parsed.juliaPanelSmoothColoring, 1);
+});
+
+test('buildShareUrl encodes the Julia panel\'s own grid/center-marker overlay flags (jgrid/jcenterMark) whenever truthy, regardless of initialState, and round-trips', () => {
+  const state = baseState({ juliaPanelGridOverlay: 1, juliaPanelCenterMarker: 1 });
+  const url = share.buildShareUrl(state, initialState, 'https://example.com', '/');
+  const params = new URL(url).searchParams;
+  assert.strictEqual(params.get('jgrid'), '1');
+  assert.strictEqual(params.get('jcenterMark'), '1');
+
+  const parsed = share.parseShareParams(new URL(url).search);
+  assert.strictEqual(parsed.juliaPanelGridOverlay, 1);
+  assert.strictEqual(parsed.juliaPanelCenterMarker, 1);
+});
+
 test('parseShareParams (v3) maps scalar params to their field names', () => {
   const s = share.parseShareParams('?v=3&iter=999&mandelbrot=0&julia=1&palette=2&progressive=1&smooth=1&grid=1&centerMark=1&juliaMark=1&mscale=1.5');
   assert.deepStrictEqual(s, {
