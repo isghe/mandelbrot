@@ -49,7 +49,7 @@ test('reloading the page restores persisted settings', async ({ page }) => {
   await expect(page.locator('#showJulia')).toBeChecked();
 });
 
-test('reloading the page restores the Julia panel\'s own dragged/zoomed position, not just juliaC', async ({ page }) => {
+test('reloading the page restores the Julia panel\'s own dragged/zoomed position, not just juliaSeed', async ({ page }) => {
   await page.click('#showJulia');
   await page.waitForTimeout(200);
 

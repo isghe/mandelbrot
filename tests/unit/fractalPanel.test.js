@@ -93,11 +93,11 @@ test('toFractal delegates to view.normalizedToFractal with the panel aspect rati
 
 test('buildUniformData packs a 16-float array in the WGSL Params layout', () => {
   const center = new DOMPointReadOnly(-0.5, 0.25);
-  const juliaC = new DOMPointReadOnly(-0.8, 0.156);
+  const juliaSeed = new DOMPointReadOnly(-0.8, 0.156);
   const data = buildUniformData({
     center,
     scale: 2.5,
-    juliaC,
+    juliaSeed,
     displayIter: 128,
     canvasWidth: 800,
     canvasHeight: 600,
@@ -114,8 +114,8 @@ test('buildUniformData packs a 16-float array in the WGSL Params layout', () => 
   const asF32Pair = ([hi, lo]) => [Math.fround(hi), Math.fround(lo)];
   assert.deepStrictEqual([...data.slice(1, 3)], asF32Pair(split64(center.x)), 'center.x hi/lo');
   assert.deepStrictEqual([...data.slice(3, 5)], asF32Pair(split64(center.y)), 'center.y hi/lo');
-  assert.deepStrictEqual([...data.slice(5, 7)], asF32Pair(split64(juliaC.x)), 'juliaC.x hi/lo');
-  assert.deepStrictEqual([...data.slice(7, 9)], asF32Pair(split64(juliaC.y)), 'juliaC.y hi/lo');
+  assert.deepStrictEqual([...data.slice(5, 7)], asF32Pair(split64(juliaSeed.x)), 'juliaSeed.x hi/lo');
+  assert.deepStrictEqual([...data.slice(7, 9)], asF32Pair(split64(juliaSeed.y)), 'juliaSeed.y hi/lo');
 
   assert.strictEqual(data[9], 128, 'displayIter');
   assert.strictEqual(data[10], 800, 'canvasWidth');

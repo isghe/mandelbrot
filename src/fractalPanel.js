@@ -4,19 +4,19 @@ import { split64 } from './precision.js';
 // Packs render state into the 16-float layout of the WGSL `Params` uniform
 // (see renderer.js's uniformBuffer comment for the byte layout/padding).
 export function buildUniformData({
-  center, scale, juliaC, displayIter, canvasWidth, canvasHeight, juliaMode, smoothColoring,
+  center, scale, juliaSeed, displayIter, canvasWidth, canvasHeight, juliaMode, smoothColoring,
 }) {
   const [cx_hi, cx_lo] = split64(center.x);
   const [cy_hi, cy_lo] = split64(center.y);
-  const [jx_hi, jx_lo] = split64(juliaC.x);
-  const [jy_hi, jy_lo] = split64(juliaC.y);
+  const [sx_hi, sx_lo] = split64(juliaSeed.x);
+  const [sy_hi, sy_lo] = split64(juliaSeed.y);
 
   return new Float32Array([
     scale,
     cx_hi, cx_lo,
     cy_hi, cy_lo,
-    jx_hi, jx_lo,
-    jy_hi, jy_lo,
+    sx_hi, sx_lo,
+    sy_hi, sy_lo,
     displayIter,
     canvasWidth,
     canvasHeight,
@@ -27,7 +27,7 @@ export function buildUniformData({
 }
 
 // Per-canvas render/interaction state: one Mandelbrot canvas today, a second
-// independent Julia canvas later. Shared/app-global state (juliaC, maxIter,
+// independent Julia canvas later. Shared/app-global state (juliaSeed, maxIter,
 // palette, ...) stays on MandelbrotApp and is passed into panel methods.
 export class FractalPanel {
   // Shared with MandelbrotApp's juliaPanelScale fallback, so the Julia
@@ -110,7 +110,7 @@ export class FractalPanel {
   // app-global side effects a single canvas can't own by itself (a shared
   // selection-box element, view history, render scheduling, and what a
   // genuine click on *this* panel should do — e.g. only the Mandelbrot
-  // panel sets juliaC from it).
+  // panel sets juliaSeed from it).
   onPointerDown(e, { selectionBox, snapshotView }) {
     this.canvas.setPointerCapture(e.pointerId);
     if (e.ctrlKey) {

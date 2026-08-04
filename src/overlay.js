@@ -72,8 +72,8 @@ function strokeCrosshair(ctx, p, r) {
 
 // Diamond marker, distinct in shape and color from the center crosshair
 // so the two are never confused when both are visible.
-function drawJuliaMarker(ctx, w, h, juliaC, center, scale, aspect) {
-  const p = view.fractalToPixel(juliaC, center, scale, aspect, w, h);
+function drawJuliaMarker(ctx, w, h, juliaSeed, center, scale, aspect) {
+  const p = view.fractalToPixel(juliaSeed, center, scale, aspect, w, h);
   if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) return;
   const r = 7;
 

@@ -7,10 +7,10 @@ struct Params {
     centerX_lo    : f32,
     centerY_hi    : f32,
     centerY_lo    : f32,
-    juliaCx_hi    : f32,
-    juliaCx_lo    : f32,
-    juliaCy_hi    : f32,
-    juliaCy_lo    : f32,
+    juliaSeedX_hi : f32,
+    juliaSeedX_lo : f32,
+    juliaSeedY_hi : f32,
+    juliaSeedY_lo : f32,
     maxIter       : f32,
     width         : f32,
     height        : f32,
@@ -137,9 +137,9 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
         vec2<f32>(params.centerX_hi, params.centerX_lo),
         vec2<f32>(params.centerY_hi, params.centerY_lo)
     );
-    let juliaC = Point(
-        vec2<f32>(params.juliaCx_hi, params.juliaCx_lo),
-        vec2<f32>(params.juliaCy_hi, params.juliaCy_lo)
+    let juliaSeed = Point(
+        vec2<f32>(params.juliaSeedX_hi, params.juliaSeedX_lo),
+        vec2<f32>(params.juliaSeedY_hi, params.juliaSeedY_lo)
     );
 
     let offsetX = (uv.x - 0.5) * params.scale * aspect;
@@ -156,7 +156,7 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
         c = z0;
     } else {
         z = z0;
-        c = juliaC;
+        c = juliaSeed;
     }
 
     var iter:i32 = 0;
