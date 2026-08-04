@@ -6,7 +6,14 @@
 // independent panel-visibility flags, `showMandelbrot`/`showJulia`. See the
 // v<2 migration branches below for how legacy `julia=1` URLs/localStorage
 // map onto the new shape.
-const SCHEMA_VERSION = 2;
+//
+// v3: renamed fields for clarity/symmetry: `center`/`scale` (the Mandelbrot
+// panel's own view, previously unprefixed as if app-global) became
+// `mandelbrotPanelCenter`/`mandelbrotPanelScale`, matching the already-
+// prefixed `juliaPanelCenter`/`juliaPanelScale`; `juliaC` (the Julia set's
+// parameter, easily confused with `juliaPanelCenter`) became `juliaSeed`.
+// URL params renamed to match: x/y -> mx/my, scale -> mscale, jx/jy -> sx/sy.
+const SCHEMA_VERSION = 3;
 
 // Only encodes fields that differ from `initialState`, so the "Reset to
 // initial condition" state always maps to a bare URL and the address bar
@@ -18,13 +25,13 @@ function buildShareUrl(state, initialState, origin, pathname) {
     if (current !== initial) params.set(name, current);
   };
 
-  if (state.center.x !== init.center.x || state.center.y !== init.center.y) {
-    params.set("x", state.center.x);
-    params.set("y", state.center.y);
+  if (state.mandelbrotPanelCenter.x !== init.mandelbrotPanelCenter.x || state.mandelbrotPanelCenter.y !== init.mandelbrotPanelCenter.y) {
+    params.set("mx", state.mandelbrotPanelCenter.x);
+    params.set("my", state.mandelbrotPanelCenter.y);
   }
-  if (state.juliaC.x !== init.juliaC.x || state.juliaC.y !== init.juliaC.y) {
-    params.set("jx", state.juliaC.x);
-    params.set("jy", state.juliaC.y);
+  if (state.juliaSeed.x !== init.juliaSeed.x || state.juliaSeed.y !== init.juliaSeed.y) {
+    params.set("sx", state.juliaSeed.x);
+    params.set("sy", state.juliaSeed.y);
   }
   if (state.juliaPanelCenter.x !== init.juliaPanelCenter.x || state.juliaPanelCenter.y !== init.juliaPanelCenter.y) {
     params.set("jpx", state.juliaPanelCenter.x);
@@ -35,7 +42,7 @@ function buildShareUrl(state, initialState, origin, pathname) {
     ["jscale", "juliaPanelScale"],
     ["palette", "paletteType"],
     ["progressive", "progressiveMode"],
-    ["scale", "scale"],
+    ["mscale", "mandelbrotPanelScale"],
     ["smooth", "smoothColoring"],
   ];
   changedFields.forEach(([name, field]) => setIfChanged(name, state[field], init[field]));
@@ -84,10 +91,16 @@ function parseShareParams(search) {
     if (v !== undefined) s[field] = v;
   };
 
-  const x = num("x"), y = num("y");
-  if (x !== undefined && y !== undefined) s.center = { x, y };
-  const jx = num("jx"), jy = num("jy");
-  if (jx !== undefined && jy !== undefined) s.juliaC = { x: jx, y: jy };
+  // v3 renamed x/y -> mx/my, jx/jy -> sx/sy, scale -> mscale; older URLs
+  // still use the pre-rename names.
+  const [xName, yName] = schemaVersion < 3 ? ["x", "y"] : ["mx", "my"];
+  const [sxName, syName] = schemaVersion < 3 ? ["jx", "jy"] : ["sx", "sy"];
+  const scaleName = schemaVersion < 3 ? "scale" : "mscale";
+
+  const x = num(xName), y = num(yName);
+  if (x !== undefined && y !== undefined) s.mandelbrotPanelCenter = { x, y };
+  const sx = num(sxName), sy = num(syName);
+  if (sx !== undefined && sy !== undefined) s.juliaSeed = { x: sx, y: sy };
   const jpx = num("jpx"), jpy = num("jpy");
   if (jpx !== undefined && jpy !== undefined) s.juliaPanelCenter = { x: jpx, y: jpy };
 
@@ -99,7 +112,7 @@ function parseShareParams(search) {
     ["maxIter", "iter"],
     ["paletteType", "palette"],
     ["progressiveMode", "progressive"],
-    ["scale", "scale"],
+    ["mandelbrotPanelScale", scaleName],
     ["smoothColoring", "smooth"],
   ];
   presentFields.forEach(([field, paramName]) => setIfPresent(field, paramName));
@@ -124,12 +137,12 @@ function parseShareParams(search) {
 function settingsData(state) {
   return {
     v: SCHEMA_VERSION,
-    center: { x: state.center.x, y: state.center.y },
-    scale: state.scale,
+    mandelbrotPanelCenter: { x: state.mandelbrotPanelCenter.x, y: state.mandelbrotPanelCenter.y },
+    mandelbrotPanelScale: state.mandelbrotPanelScale,
     maxIter: state.maxIter,
     showMandelbrot: state.showMandelbrot,
     showJulia: state.showJulia,
-    juliaC: { x: state.juliaC.x, y: state.juliaC.y },
+    juliaSeed: { x: state.juliaSeed.x, y: state.juliaSeed.y },
     juliaPanelCenter: { x: state.juliaPanelCenter.x, y: state.juliaPanelCenter.y },
     juliaPanelScale: state.juliaPanelScale,
     paletteType: state.paletteType,
@@ -148,17 +161,29 @@ function loadSettingsData(parsed) {
   if (!parsed || typeof parsed !== "object") return null;
   const v = parsed.v === undefined ? 1 : Number(parsed.v);
   if (!Number.isFinite(v) || v > SCHEMA_VERSION) return null;
+  let result = parsed;
   if (v < 2) {
     // Legacy `juliaMode` meant an exclusive full-screen Julia render; map it
     // onto the new independent Mandelbrot/Julia visibility flags.
-    const legacyJuliaMode = parsed.juliaMode;
-    return {
-      ...parsed,
+    const legacyJuliaMode = result.juliaMode;
+    result = {
+      ...result,
       showJulia: legacyJuliaMode ? 1 : 0,
       showMandelbrot: legacyJuliaMode ? 0 : 1,
     };
   }
-  return parsed;
+  if (v < 3) {
+    // `center`/`scale`/`juliaC` were renamed to `mandelbrotPanelCenter`/
+    // `mandelbrotPanelScale`/`juliaSeed` (see SCHEMA_VERSION comment above).
+    const { center, scale, juliaC, ...rest } = result;
+    result = {
+      ...rest,
+      ...(center !== undefined && { mandelbrotPanelCenter: center }),
+      ...(scale !== undefined && { mandelbrotPanelScale: scale }),
+      ...(juliaC !== undefined && { juliaSeed: juliaC }),
+    };
+  }
+  return result;
 }
 
 export const share = { buildShareUrl, parseShareParams, settingsData, loadSettingsData, SCHEMA_VERSION };

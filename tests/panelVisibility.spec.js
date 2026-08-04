@@ -61,22 +61,22 @@ test('unchecking both panels shows the "No visualization mode selected" placehol
   await expect(page.locator('#noVizMessage')).toBeHidden();
 });
 
-test('clicking on the Mandelbrot panel updates the Julia panel, but clicking on the Julia panel does not change juliaC', async ({ page }) => {
+test('clicking on the Mandelbrot panel updates the Julia panel, but clicking on the Julia panel does not change juliaSeed', async ({ page }) => {
   await page.check('#showJulia');
   await page.waitForTimeout(200);
 
-  const before = await page.evaluate(() => ({ x: window.app.juliaC.x, y: window.app.juliaC.y }));
+  const before = await page.evaluate(() => ({ x: window.app.juliaSeed.x, y: window.app.juliaSeed.y }));
 
   // Click away from the #ui panel, on the Mandelbrot half.
   await page.mouse.click(550, 600);
   await page.waitForTimeout(200);
-  const afterMandelbrotClick = await page.evaluate(() => ({ x: window.app.juliaC.x, y: window.app.juliaC.y }));
+  const afterMandelbrotClick = await page.evaluate(() => ({ x: window.app.juliaSeed.x, y: window.app.juliaSeed.y }));
   expect(afterMandelbrotClick).not.toEqual(before);
 
-  // Click on the Julia half: juliaC must stay unchanged.
+  // Click on the Julia half: juliaSeed must stay unchanged.
   await page.mouse.click(900, 350);
   await page.waitForTimeout(200);
-  const afterJuliaClick = await page.evaluate(() => ({ x: window.app.juliaC.x, y: window.app.juliaC.y }));
+  const afterJuliaClick = await page.evaluate(() => ({ x: window.app.juliaSeed.x, y: window.app.juliaSeed.y }));
   expect(afterJuliaClick).toEqual(afterMandelbrotClick);
 });
 

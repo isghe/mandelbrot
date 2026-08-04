@@ -43,20 +43,20 @@ test('drawCenterMarker is always centered at (w/2, h/2), regardless of center/sc
 
 test('drawJuliaMarker draws nothing when the point falls outside the canvas', () => {
   const { ctx, calls } = makeMockCtx();
-  const juliaC = new DOMPointReadOnly(1000, 1000);
+  const juliaSeed = new DOMPointReadOnly(1000, 1000);
   const center = new DOMPointReadOnly(0, 0);
-  overlay.drawJuliaMarker(ctx, 100, 100, juliaC, center, 2, 1);
+  overlay.drawJuliaMarker(ctx, 100, 100, juliaSeed, center, 2, 1);
 
   assert.deepStrictEqual(calls, []);
 });
 
 test('drawJuliaMarker draws a diamond centered on the projected point when in bounds', () => {
   const { ctx, calls } = makeMockCtx();
-  const juliaC = new DOMPointReadOnly(0, 0);
+  const juliaSeed = new DOMPointReadOnly(0, 0);
   const center = new DOMPointReadOnly(0, 0);
-  overlay.drawJuliaMarker(ctx, 100, 100, juliaC, center, 2, 1);
+  overlay.drawJuliaMarker(ctx, 100, 100, juliaSeed, center, 2, 1);
 
-  // juliaC === center projects to the canvas midpoint, (50, 50).
+  // juliaSeed === center projects to the canvas midpoint, (50, 50).
   const moveToCalls = calls.filter(([method]) => method === 'moveTo');
   assert.strictEqual(moveToCalls.length, 2, 'diamond is stroked twice (shadow + yellow)');
   for (const [, x, y] of moveToCalls) {

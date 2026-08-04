@@ -25,7 +25,7 @@ class MandelbrotApp {
 
   // State (JS = f64)
   maxIter = 256;
-  juliaC = new DOMPointReadOnly(-0.8, 0.156);
+  juliaSeed = new DOMPointReadOnly(-0.8, 0.156);
   paletteType = 4;
   smoothColoring = 0;
 
@@ -48,10 +48,10 @@ class MandelbrotApp {
   showJulia = 0;
 
   // The Julia panel's own independent pan/zoom, persisted separately from
-  // `juliaC` (the constant the Julia set is drawn for). Backing fields for
+  // `juliaSeed` (the constant the Julia set is drawn for). Backing fields for
   // the juliaPanelCenter/juliaPanelScale accessors below: null means "not
   // restored, not yet dragged/zoomed" — createJuliaPanel() then falls back
-  // to centering on the current juliaC at the default scale, same as before
+  // to centering on the current juliaSeed at the default scale, same as before
   // this persistence existed.
   _juliaPanelCenter = null;
   _juliaPanelScale = null;
@@ -74,7 +74,7 @@ class MandelbrotApp {
   // panel is never destroyed once created, just hidden by CSS — see
   // createJuliaPanel), so this stays live for saveSettings()/buildShareUrl()
   // even while the Julia panel is currently hidden.
-  get juliaPanelCenter() { return this.juliaPanel ? this.juliaPanel.center : (this._juliaPanelCenter ?? this.juliaC); }
+  get juliaPanelCenter() { return this.juliaPanel ? this.juliaPanel.center : (this._juliaPanelCenter ?? this.juliaSeed); }
   set juliaPanelCenter(v) { if (this.juliaPanel) this.juliaPanel.center = v; else this._juliaPanelCenter = v; }
   get juliaPanelScale() { return this.juliaPanel ? this.juliaPanel.scale : (this._juliaPanelScale ?? FractalPanel.DEFAULT_SCALE); }
   set juliaPanelScale(v) { if (this.juliaPanel) this.juliaPanel.scale = v; else this._juliaPanelScale = v; }
@@ -83,10 +83,10 @@ class MandelbrotApp {
     this.mandelbrotPanel = new FractalPanel(canvas, document.getElementById("overlay"));
 
     this.initialState = {
-      center: this.mandelbrotPanel.center,
-      scale: this.mandelbrotPanel.scale,
+      mandelbrotPanelCenter: this.mandelbrotPanel.center,
+      mandelbrotPanelScale: this.mandelbrotPanel.scale,
       maxIter: this.maxIter,
-      juliaC: this.juliaC,
+      juliaSeed: this.juliaSeed,
       juliaPanelCenter: this.juliaPanelCenter,
       juliaPanelScale: this.juliaPanelScale,
       paletteType: this.paletteType,
@@ -196,8 +196,8 @@ class MandelbrotApp {
         // Only the Mandelbrot panel's genuine click sets the shared Julia
         // constant — see attachPanelEvents' hooks param.
         onGenuineClick: (fractalPoint) => {
-          this.juliaC = fractalPoint;
-          // Only the Julia panel's render actually depends on juliaC; if
+          this.juliaSeed = fractalPoint;
+          // Only the Julia panel's render actually depends on juliaSeed; if
           // it's not shown this just moves the marker, so don't restart its
           // progressive reveal over an unrelated, unchanged image.
           if (this.showJulia && this.juliaPanel) this.resetProgressive();
@@ -226,10 +226,10 @@ class MandelbrotApp {
 
   snapshotView() {
     return {
-      center: this.mandelbrotPanel.center,
-      scale: this.mandelbrotPanel.scale,
+      mandelbrotPanelCenter: this.mandelbrotPanel.center,
+      mandelbrotPanelScale: this.mandelbrotPanel.scale,
       maxIter: this.maxIter,
-      juliaC: this.juliaC,
+      juliaSeed: this.juliaSeed,
       paletteType: this.paletteType,
       progressiveMode: this.progressiveMode,
       smoothColoring: this.smoothColoring,
@@ -341,15 +341,16 @@ class MandelbrotApp {
       }
     };
 
-    // "center"/"scale" live on mandelbrotPanel, not as plain own fields on
-    // `this` (unlike the rest of these), so the generic this[field] = ...
-    // loop below can't reach them — assign explicitly instead.
-    if (s.center && Number.isFinite(s.center.x) && Number.isFinite(s.center.y)) {
-      this.mandelbrotPanel.center = new DOMPointReadOnly(s.center.x, s.center.y);
+    // "mandelbrotPanelCenter"/"mandelbrotPanelScale" live on mandelbrotPanel,
+    // not as plain own fields on `this` (unlike the rest of these), so the
+    // generic this[field] = ... loop below can't reach them — assign
+    // explicitly instead.
+    if (s.mandelbrotPanelCenter && Number.isFinite(s.mandelbrotPanelCenter.x) && Number.isFinite(s.mandelbrotPanelCenter.y)) {
+      this.mandelbrotPanel.center = new DOMPointReadOnly(s.mandelbrotPanelCenter.x, s.mandelbrotPanelCenter.y);
     }
-    if (typeof s.scale === "number") this.mandelbrotPanel.scale = s.scale;
+    if (typeof s.mandelbrotPanelScale === "number") this.mandelbrotPanel.scale = s.mandelbrotPanelScale;
 
-    const pointFields = ["juliaC", "juliaPanelCenter"];
+    const pointFields = ["juliaSeed", "juliaPanelCenter"];
     const numberFields = [
       "centerMarker", "gridOverlay", "juliaMarker", "juliaPanelScale", "maxIter",
       "paletteType", "progressiveMode", "showJulia", "showMandelbrot",
@@ -377,13 +378,13 @@ class MandelbrotApp {
   }
 
   applySnapshot(s) {
-    this.mandelbrotPanel.center = s.center;
-    this.mandelbrotPanel.pivot = s.center;
+    this.mandelbrotPanel.center = s.mandelbrotPanelCenter;
+    this.mandelbrotPanel.pivot = s.mandelbrotPanelCenter;
     this.mandelbrotPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.setScale(s.scale);
+    this.setScale(s.mandelbrotPanelScale);
     this.setMaxIter(s.maxIter);
 
-    this.juliaC = s.juliaC;
+    this.juliaSeed = s.juliaSeed;
 
     this.applyPalette(s.paletteType);
     this.paletteSel.value = s.paletteType;
@@ -441,7 +442,7 @@ class MandelbrotApp {
   };
 
   // `showJuliaMarker` is false for the Julia panel itself: the marker
-  // points at where juliaC sits on the *Mandelbrot* plane, which is
+  // points at where juliaSeed sits on the *Mandelbrot* plane, which is
   // meaningless overlaid on the Julia panel's own view.
   drawOverlayForPanel(panel, { showJuliaMarker }) {
     const ctx = panel.overlayCtx;
@@ -451,7 +452,7 @@ class MandelbrotApp {
     ctx.clearRect(0, 0, w, h);
     if (this.gridOverlay) overlay.drawGrid(ctx, w, h, panel.center, panel.scale, aspect);
     if (this.centerMarker) overlay.drawCenterMarker(ctx, w, h, panel.center, panel.scale, aspect);
-    if (showJuliaMarker && this.juliaMarker) overlay.drawJuliaMarker(ctx, w, h, this.juliaC, panel.center, panel.scale, aspect);
+    if (showJuliaMarker && this.juliaMarker) overlay.drawJuliaMarker(ctx, w, h, this.juliaSeed, panel.center, panel.scale, aspect);
   }
 
   drawOverlay = () => {
@@ -595,14 +596,14 @@ class MandelbrotApp {
   createJuliaPanel() {
     const panel = new FractalPanel(document.getElementById("gfxJulia"), document.getElementById("overlayJulia"));
     // this.juliaPanel isn't assigned yet, so these getters read the
-    // restored/persisted pan+zoom (or fall back to centering on juliaC at
+    // restored/persisted pan+zoom (or fall back to centering on juliaSeed at
     // the default scale, same as before this state was persisted).
     panel.center = this.juliaPanelCenter;
     panel.pivot = panel.center;
     panel.scale = this.juliaPanelScale;
     this.juliaPanel = panel;
     // No onGenuineClick/history hooks: clicking inside the Julia panel only
-    // moves its own pivot/zoom anchor, it never sets juliaC (only a click on
+    // moves its own pivot/zoom anchor, it never sets juliaSeed (only a click on
     // the Mandelbrot panel does that), and its pan/zoom isn't pushed to the
     // shared undo history — Back/Forward navigates the Mandelbrot view only.
     const noHistory = () => {};
@@ -752,7 +753,7 @@ class MandelbrotApp {
     const data = buildUniformData({
       center: panel.center,
       scale: panel.scale,
-      juliaC: this.juliaC,
+      juliaSeed: this.juliaSeed,
       displayIter,
       canvasWidth: panel.canvas.width,
       canvasHeight: panel.canvas.height,
