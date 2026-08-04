@@ -274,22 +274,33 @@ test('settingsData always stamps the current schema version', () => {
   assert.strictEqual(data.v, share.SCHEMA_VERSION);
 });
 
+// A real pre-v2 blob: flat center/scale/juliaC (pre-v3 names too), no `v`,
+// juliaMode instead of showMandelbrot/showJulia — not derived from the
+// current (v4, nested) settingsData() output.
+function legacyV1Blob(juliaMode) {
+  return {
+    center: { x: -0.5, y: 0 },
+    scale: 3.0,
+    juliaC: { x: -0.8, y: 0.156 },
+    maxIter: 256,
+    juliaMode,
+    paletteType: 4,
+    progressiveMode: 0,
+    smoothColoring: 0,
+    gridOverlay: 0,
+    centerMarker: 0,
+    juliaMarker: 0,
+  };
+}
+
 test('loadSettingsData treats an object without v as legacy version 1', () => {
-  const legacy = { ...share.settingsData(baseState()), juliaMode: 0 };
-  delete legacy.v;
-  delete legacy.showMandelbrot;
-  delete legacy.showJulia;
-  const loaded = share.loadSettingsData(legacy);
+  const loaded = share.loadSettingsData(legacyV1Blob(0));
   assert.strictEqual(loaded.showJulia, 0);
   assert.strictEqual(loaded.showMandelbrot, 1);
 });
 
 test('loadSettingsData (legacy v1) maps a truthy juliaMode to the exclusive-Julia visibility combo', () => {
-  const legacy = { ...share.settingsData(baseState()), juliaMode: 1 };
-  delete legacy.v;
-  delete legacy.showMandelbrot;
-  delete legacy.showJulia;
-  const loaded = share.loadSettingsData(legacy);
+  const loaded = share.loadSettingsData(legacyV1Blob(1));
   assert.strictEqual(loaded.showJulia, 1);
   assert.strictEqual(loaded.showMandelbrot, 0);
 });
@@ -310,6 +321,26 @@ test('loadSettingsData (legacy v2) migrates center/scale/juliaC to the renamed f
   assert.strictEqual(loaded.center, undefined);
   assert.strictEqual(loaded.scale, undefined);
   assert.strictEqual(loaded.juliaC, undefined);
+});
+
+test('loadSettingsData (v3) passes flat mandelbrotPanelCenter/Scale and juliaPanelCenter/Scale through unchanged', () => {
+  const flatV3 = {
+    v: 3,
+    mandelbrotPanelCenter: { x: -1.25, y: 0.1 },
+    mandelbrotPanelScale: 1.5,
+    juliaSeed: { x: -0.3, y: 0.9 },
+    juliaPanelCenter: { x: 0.1, y: -0.2 },
+    juliaPanelScale: 2.0,
+    showMandelbrot: 1,
+    showJulia: 0,
+  };
+  const loaded = share.loadSettingsData(flatV3);
+  assert.deepStrictEqual(loaded.mandelbrotPanelCenter, { x: -1.25, y: 0.1 });
+  assert.strictEqual(loaded.mandelbrotPanelScale, 1.5);
+  assert.deepStrictEqual(loaded.juliaPanelCenter, { x: 0.1, y: -0.2 });
+  assert.strictEqual(loaded.juliaPanelScale, 2.0);
+  assert.strictEqual(loaded.mandelbrotPanel, undefined);
+  assert.strictEqual(loaded.juliaPanel, undefined);
 });
 
 test('loadSettingsData (v4) flattens mandelbrotPanel/juliaPanel back into the pre-v4 field names', () => {
