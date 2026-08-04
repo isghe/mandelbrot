@@ -28,41 +28,66 @@
 <a id="repoLink" href="https://github.com/isghe/mandelbrot" target="_blank" rel="noopener">https://github.com/isghe/mandelbrot</a>
 
 <div id="ui">
-  <label>Iterations: <span id="iterLabel">256</span></label>
-  <input type="range" id="iterSlider" step="0.01">
+  <div id="uiCommon">
+    <label><input type="checkbox" id="showMandelbrot" checked> Mandelbrot</label>
+    <label><input type="checkbox" id="showJulia"> Julia</label>
 
-  <label>Zoom: <span id="zoomLabel">3</span></label>
-  <input type="range" id="zoomSlider" step="0.01">
+    <button type="button" id="backBtn" disabled>Back</button>
+    <button type="button" id="forwardBtn" disabled>Forward</button>
+    <button type="button" id="resetBtn">Reset to initial condition</button>
+    <button type="button" id="shareBtn">Copy URL</button>
 
-  <label>Palette:</label>
-  <select id="paletteType">
-    <option value="0">Viridis</option>
-    <option value="1">Fire</option>
-    <option value="2">Ocean</option>
-    <option value="3">Rainbow</option>
-    <option value="4" selected>Apple II</option>
-  </select>
+    <p class="hint">Ctrl+drag: draw a selection rectangle to recenter and zoom to fit</p>
+  </div>
 
-  <label><input type="checkbox" id="showMandelbrot" checked> Mandelbrot</label>
+  <div id="uiPanels">
+    <fieldset id="uiMandelbrot">
+      <legend>Mandelbrot</legend>
+      <label>Iterations: <span id="iterLabel">256</span></label>
+      <input type="range" id="iterSlider" step="0.01">
 
-  <label><input type="checkbox" id="showJulia"> Julia</label>
+      <label>Zoom: <span id="zoomLabel">3</span></label>
+      <input type="range" id="zoomSlider" step="0.01">
 
-  <label><input type="checkbox" id="progressiveMode"> Progressive mode</label>
+      <label>Palette:</label>
+      <select id="paletteType">
+        <option value="0">Viridis</option>
+        <option value="1">Fire</option>
+        <option value="2">Ocean</option>
+        <option value="3">Rainbow</option>
+        <option value="4" selected>Apple II</option>
+      </select>
 
-  <label><input type="checkbox" id="smoothColoring"> Smooth coloring</label>
+      <label><input type="checkbox" id="progressiveMode"> Progressive mode</label>
+      <label><input type="checkbox" id="smoothColoring"> Smooth coloring</label>
+      <label><input type="checkbox" id="gridOverlay"> Show grid</label>
+      <label><input type="checkbox" id="centerMarker"> Show center marker</label>
+      <label><input type="checkbox" id="juliaMarker"> Show Julia point marker</label>
+    </fieldset>
 
-  <label><input type="checkbox" id="gridOverlay"> Show grid</label>
+    <fieldset id="uiJulia">
+      <legend>Julia</legend>
+      <label>Iterations: <span id="iterLabelJulia">256</span></label>
+      <input type="range" id="iterSliderJulia" step="0.01">
 
-  <label><input type="checkbox" id="centerMarker"> Show center marker</label>
+      <label>Zoom: <span id="zoomLabelJulia">3</span></label>
+      <input type="range" id="zoomSliderJulia" step="0.01">
 
-  <label><input type="checkbox" id="juliaMarker"> Show Julia point marker</label>
+      <label>Palette:</label>
+      <select id="paletteTypeJulia">
+        <option value="0">Viridis</option>
+        <option value="1">Fire</option>
+        <option value="2">Ocean</option>
+        <option value="3">Rainbow</option>
+        <option value="4" selected>Apple II</option>
+      </select>
 
-  <button type="button" id="backBtn" disabled>Back</button>
-  <button type="button" id="forwardBtn" disabled>Forward</button>
-  <button type="button" id="resetBtn">Reset to initial condition</button>
-  <button type="button" id="shareBtn">Copy URL</button>
-
-  <p class="hint">Ctrl+drag: draw a selection rectangle to recenter and zoom to fit</p>
+      <label><input type="checkbox" id="progressiveModeJulia"> Progressive mode</label>
+      <label><input type="checkbox" id="smoothColoringJulia"> Smooth coloring</label>
+      <label><input type="checkbox" id="gridOverlayJulia"> Show grid</label>
+      <label><input type="checkbox" id="centerMarkerJulia"> Show center marker</label>
+    </fieldset>
+  </div>
 </div>
 
 <script type="module" src="src/mandelbrot.js"></script>
