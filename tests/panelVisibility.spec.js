@@ -97,6 +97,27 @@ test('clicking on the Mandelbrot panel updates the Julia panel, but clicking on 
   expect(afterJuliaClick).toEqual(afterMandelbrotClick);
 });
 
+// Regression test: onPointerDown/onPointerUp never checked which mouse
+// button was pressed, so a right-click (button 2) was handled identically
+// to a genuine left-click — silently changing juliaSeed and the pivot, and
+// leaving the browser's context menu as an unrelated side effect on top.
+test('right-clicking on the Mandelbrot panel does not change juliaSeed or pan the view', async ({ page }) => {
+  const before = await page.evaluate(() => ({
+    juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
+    center: { x: window.app.mandelbrotPanel.center.x, y: window.app.mandelbrotPanel.center.y },
+  }));
+
+  await page.mouse.click(600, 300, { button: 'right' });
+  await page.waitForTimeout(200);
+
+  const after = await page.evaluate(() => ({
+    juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
+    center: { x: window.app.mandelbrotPanel.center.x, y: window.app.mandelbrotPanel.center.y },
+  }));
+  expect(after).toEqual(before);
+  await expect(page.locator('#backBtn')).toBeDisabled();
+});
+
 test('the Julia panel pans/zooms independently of the Mandelbrot panel', async ({ page }) => {
   await page.check('#showJulia');
   await page.waitForTimeout(200);
