@@ -76,7 +76,7 @@ class MandelbrotApp {
   // even while the Julia panel is currently hidden.
   get juliaPanelCenter() { return this.juliaPanel ? this.juliaPanel.center : (this._juliaPanelCenter ?? this.juliaC); }
   set juliaPanelCenter(v) { if (this.juliaPanel) this.juliaPanel.center = v; else this._juliaPanelCenter = v; }
-  get juliaPanelScale() { return this.juliaPanel ? this.juliaPanel.scale : (this._juliaPanelScale ?? 3.0); }
+  get juliaPanelScale() { return this.juliaPanel ? this.juliaPanel.scale : (this._juliaPanelScale ?? FractalPanel.DEFAULT_SCALE); }
   set juliaPanelScale(v) { if (this.juliaPanel) this.juliaPanel.scale = v; else this._juliaPanelScale = v; }
 
   constructor(canvas) {
@@ -93,6 +93,10 @@ class MandelbrotApp {
       progressiveMode: this.progressiveMode,
       smoothColoring: this.smoothColoring,
     };
+    // Tier 2 ("display preferences"): captured pre-restore too, same as
+    // initialState above, so Reset always goes back to the app's built-in
+    // defaults rather than whatever was last persisted.
+    this.initialDisplayPrefs = this.captureDisplayPrefs();
 
     this.restoreSettings();
 
@@ -246,6 +250,52 @@ class MandelbrotApp {
       showMandelbrot: this.showMandelbrot,
       showJulia: this.showJulia,
     };
+  }
+
+  // Tier 2 ("display preferences"): overlay toggles, panel visibility, and
+  // the Julia panel's own independent pan/zoom — persisted (see shareState()
+  // above) but deliberately outside undo history, unlike snapshotView()'s
+  // Tier 1. Captured/restored as one unit so Reset doesn't need to remember
+  // each field separately (that per-field bookkeeping in onReset used to be
+  // exactly how the Julia panel's own view got left out of Reset — see the
+  // `c2889b3` fix).
+  captureDisplayPrefs() {
+    return {
+      gridOverlay: this.gridOverlay,
+      centerMarker: this.centerMarker,
+      juliaMarker: this.juliaMarker,
+      showMandelbrot: this.showMandelbrot,
+      showJulia: this.showJulia,
+      juliaPanelCenter: this.juliaPanelCenter,
+      juliaPanelScale: this.juliaPanelScale,
+    };
+  }
+
+  restoreDisplayPrefs(p) {
+    const overlayFields = [
+      ["gridOverlay", "gridOverlayChk"],
+      ["centerMarker", "centerMarkerChk"],
+      ["juliaMarker", "juliaMarkerChk"],
+    ];
+    overlayFields.forEach(([field, chk]) => {
+      this[field] = p[field];
+      this[chk].checked = !!p[field];
+    });
+
+    this.showMandelbrot = p.showMandelbrot;
+    this.showMandelbrotChk.checked = !!p.showMandelbrot;
+    this.showJulia = p.showJulia;
+    this.showJuliaChk.checked = !!p.showJulia;
+    this.updatePanelVisibility();
+    this.resizeCanvas();
+    this.resizeOverlayCanvas();
+
+    this.juliaPanelCenter = p.juliaPanelCenter;
+    this.juliaPanelScale = p.juliaPanelScale;
+    if (this.juliaPanel) {
+      this.juliaPanel.pivot = this.juliaPanel.center;
+      this.juliaPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+    }
   }
 
   saveSettings() {
@@ -632,38 +682,11 @@ class MandelbrotApp {
     this.pendingIterSnapshot = null;
     this.pendingZoomSnapshot = null;
     this.history.reset();
-    // Overlay display preferences aren't part of view history (see the
-    // comment on the on*Change handlers below), but Reset should still
-    // restore them to their defaults along with everything else.
-    const overlayFields = [
-      ["centerMarker", "centerMarkerChk"],
-      ["gridOverlay", "gridOverlayChk"],
-      ["juliaMarker", "juliaMarkerChk"],
-    ];
-    overlayFields.forEach(([field, chk]) => {
-      this[field] = 0;
-      this[chk].checked = false;
-    });
-    // Panel visibility isn't part of view history either, but Reset should
-    // still restore the default single-Mandelbrot view.
-    this.showMandelbrot = 1;
-    this.showMandelbrotChk.checked = true;
-    this.showJulia = 0;
-    this.showJuliaChk.checked = false;
-    this.updatePanelVisibility();
-    this.resizeCanvas();
-    this.resizeOverlayCanvas();
+    // Tier 2 (display preferences) and Tier 1 (navigable view) are restored
+    // as two independent units — see captureDisplayPrefs/restoreDisplayPrefs
+    // and snapshotView/applySnapshot respectively.
+    this.restoreDisplayPrefs(this.initialDisplayPrefs);
     this.applySnapshot(this.initialState);
-    // The Julia panel's own pan/zoom is independent of the Mandelbrot view
-    // history (see createJuliaPanel's no-op history hooks), so
-    // applySnapshot() above doesn't touch it — reset it back to its initial
-    // center/scale here too.
-    this.juliaPanelCenter = this.initialState.juliaPanelCenter;
-    this.juliaPanelScale = this.initialState.juliaPanelScale;
-    if (this.juliaPanel) {
-      this.juliaPanel.pivot = this.juliaPanel.center;
-      this.juliaPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    }
   };
 
   onBack = () => {
