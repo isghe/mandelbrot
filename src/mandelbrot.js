@@ -61,25 +61,6 @@ class MandelbrotApp {
   // render scheduling
   rafPending = false;
 
-  // Per-canvas render/interaction state (center, scale, pivot, pan/selection,
-  // renderer, ...) lives on FractalPanel; these accessors keep the rest of
-  // this class working against `this.foo` unchanged while that state moves.
-  get canvas() { return this.mandelbrotPanel.canvas; }
-  get overlayCanvas() { return this.mandelbrotPanel.overlayCanvas; }
-  get overlayCtx() { return this.mandelbrotPanel.overlayCtx; }
-  get overlayCssWidth() { return this.mandelbrotPanel.overlayCssWidth; }
-  get overlayCssHeight() { return this.mandelbrotPanel.overlayCssHeight; }
-  get center() { return this.mandelbrotPanel.center; }
-  set center(v) { this.mandelbrotPanel.center = v; }
-  get scale() { return this.mandelbrotPanel.scale; }
-  set scale(v) { this.mandelbrotPanel.scale = v; }
-  get pivot() { return this.mandelbrotPanel.pivot; }
-  set pivot(v) { this.mandelbrotPanel.pivot = v; }
-  get pivotScreen() { return this.mandelbrotPanel.pivotScreen; }
-  set pivotScreen(v) { this.mandelbrotPanel.pivotScreen = v; }
-  get isDragging() { return this.mandelbrotPanel.isDragging; }
-  get renderer() { return this.mandelbrotPanel.renderer; }
-  set renderer(v) { this.mandelbrotPanel.renderer = v; }
   // Reads/writes go straight to the live juliaPanel once it exists (the
   // panel is never destroyed once created, just hidden by CSS — see
   // createJuliaPanel), so this stays live for saveSettings()/buildShareUrl()
@@ -93,8 +74,8 @@ class MandelbrotApp {
     this.mandelbrotPanel = new FractalPanel(canvas, document.getElementById("overlay"));
 
     this.initialState = {
-      center: this.center,
-      scale: this.scale,
+      center: this.mandelbrotPanel.center,
+      scale: this.mandelbrotPanel.scale,
       maxIter: this.maxIter,
       juliaC: this.juliaC,
       juliaPanelCenter: this.juliaPanelCenter,
@@ -193,16 +174,16 @@ class MandelbrotApp {
     this.shareBtn.onclick   = this.onShare;
     this.uiToggleBtn.onclick = this.onUiToggle;
 
-    this.canvas.addEventListener("pointerdown", this.onPointerDown);
-    this.canvas.addEventListener("pointermove", this.onPointerMove);
-    this.canvas.addEventListener("pointerup", this.onPointerUp);
-    this.canvas.addEventListener("pointercancel", this.onPointerUp);
-    this.canvas.addEventListener("pointerleave", this.onPointerLeave);
-    this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    this.mandelbrotPanel.canvas.addEventListener("pointerdown", this.onPointerDown);
+    this.mandelbrotPanel.canvas.addEventListener("pointermove", this.onPointerMove);
+    this.mandelbrotPanel.canvas.addEventListener("pointerup", this.onPointerUp);
+    this.mandelbrotPanel.canvas.addEventListener("pointercancel", this.onPointerUp);
+    this.mandelbrotPanel.canvas.addEventListener("pointerleave", this.onPointerLeave);
+    this.mandelbrotPanel.canvas.addEventListener("wheel", this.onWheel, { passive: false });
     window.addEventListener("resize", this.onResize);
     window.addEventListener("keydown", this.onKeyDown);
 
-    this.setScale(this.scale);
+    this.setScale(this.mandelbrotPanel.scale);
     this.setMaxIter(this.maxIter);
     this.palette256 = makePalette(this.paletteType);
 
@@ -215,14 +196,14 @@ class MandelbrotApp {
   }
 
   syncZoomSliderUI() {
-    this.zoomSlider.value = Math.log10(this.scale);
-    this.zoomLabel.textContent = this.scale;
+    this.zoomSlider.value = Math.log10(this.mandelbrotPanel.scale);
+    this.zoomLabel.textContent = this.mandelbrotPanel.scale;
   }
 
   snapshotView() {
     return {
-      center: this.center,
-      scale: this.scale,
+      center: this.mandelbrotPanel.center,
+      scale: this.mandelbrotPanel.scale,
       maxIter: this.maxIter,
       juliaC: this.juliaC,
       paletteType: this.paletteType,
@@ -231,8 +212,24 @@ class MandelbrotApp {
     };
   }
 
+  // share.js's functions take a plain state object (no `this`) — this
+  // assembles the shape they expect from wherever each field actually
+  // lives now (mandelbrotPanel vs app-global fields).
+  shareState() {
+    return {
+      ...this.snapshotView(),
+      juliaPanelCenter: this.juliaPanelCenter,
+      juliaPanelScale: this.juliaPanelScale,
+      gridOverlay: this.gridOverlay,
+      centerMarker: this.centerMarker,
+      juliaMarker: this.juliaMarker,
+      showMandelbrot: this.showMandelbrot,
+      showJulia: this.showJulia,
+    };
+  }
+
   saveSettings() {
-    const data = share.settingsData(this);
+    const data = share.settingsData(this.shareState());
     try {
       localStorage.setItem(MandelbrotApp.SETTINGS_KEY, JSON.stringify(data));
     } catch {
@@ -256,7 +253,7 @@ class MandelbrotApp {
   };
 
   buildShareUrl() {
-    return share.buildShareUrl(this, this.initialState, location.origin, location.pathname);
+    return share.buildShareUrl(this.shareState(), this.initialState, location.origin, location.pathname);
   }
 
   restoreSettings() {
@@ -274,16 +271,24 @@ class MandelbrotApp {
       }
     };
 
-    const pointFields = ["center", "juliaC", "juliaPanelCenter"];
+    // "center"/"scale" live on mandelbrotPanel, not as plain own fields on
+    // `this` (unlike the rest of these), so the generic this[field] = ...
+    // loop below can't reach them — assign explicitly instead.
+    if (s.center && Number.isFinite(s.center.x) && Number.isFinite(s.center.y)) {
+      this.mandelbrotPanel.center = new DOMPointReadOnly(s.center.x, s.center.y);
+    }
+    if (typeof s.scale === "number") this.mandelbrotPanel.scale = s.scale;
+
+    const pointFields = ["juliaC", "juliaPanelCenter"];
     const numberFields = [
       "centerMarker", "gridOverlay", "juliaMarker", "juliaPanelScale", "maxIter",
-      "paletteType", "progressiveMode", "scale", "showJulia", "showMandelbrot",
+      "paletteType", "progressiveMode", "showJulia", "showMandelbrot",
       "smoothColoring",
     ];
     pointFields.forEach(restorePoint);
     numberFields.forEach(restoreNumber);
 
-    this.pivot = this.center;
+    this.mandelbrotPanel.pivot = this.mandelbrotPanel.center;
 
     if (shared) this.saveSettings();
   }
@@ -302,9 +307,9 @@ class MandelbrotApp {
   }
 
   applySnapshot(s) {
-    this.center = s.center;
-    this.pivot = s.center;
-    this.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+    this.mandelbrotPanel.center = s.center;
+    this.mandelbrotPanel.pivot = s.center;
+    this.mandelbrotPanel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
     this.setScale(s.scale);
     this.setMaxIter(s.maxIter);
 
@@ -362,7 +367,7 @@ class MandelbrotApp {
       this.drawOverlay();
       const displayIter = this.renderOnce();
       this.scheduleSaveSettings();
-      const anyDragging = this.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
+      const anyDragging = this.mandelbrotPanel.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
       if (this.progressiveMode && displayIter < this.maxIter && !anyDragging) {
         this.scheduleRender();
       }
@@ -423,7 +428,7 @@ class MandelbrotApp {
       this.showError("No WebGPU adapter available.");
       return;
     }
-    this.renderer = await attachCanvas(this.gpuDevice, this.canvas, this.palette256);
+    this.mandelbrotPanel.renderer = await attachCanvas(this.gpuDevice, this.mandelbrotPanel.canvas, this.palette256);
     // Dual view may have been toggled on before WebGPU finished
     // initializing; attach the Julia panel now if it's still waiting.
     if (this.juliaPanel && !this.juliaPanel.renderer) {
@@ -439,7 +444,7 @@ class MandelbrotApp {
   applyPalette(type) {
     this.paletteType = type;
     this.palette256 = makePalette(type);
-    if (this.renderer) this.renderer.writePalette(this.palette256);
+    if (this.mandelbrotPanel.renderer) this.mandelbrotPanel.renderer.writePalette(this.palette256);
     if (this.juliaPanel?.renderer) this.juliaPanel.renderer.writePalette(this.palette256);
   }
 
@@ -736,9 +741,9 @@ class MandelbrotApp {
 
   // RENDER
   renderOnce = () => {
-    if (this.deviceLost || !this.renderer) return Infinity;
+    if (this.deviceLost || !this.mandelbrotPanel.renderer) return Infinity;
 
-    const anyDragging = this.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
+    const anyDragging = this.mandelbrotPanel.isDragging || !!(this.showJulia && this.juliaPanel?.isDragging);
     let displayIter = this.maxIter;
     if (this.progressiveMode && !anyDragging) {
       displayIter = Math.min(this.progressiveIter, this.maxIter);
