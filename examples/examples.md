@@ -10,12 +10,6 @@ https://isghe.github.io/mandelbrot/?mx=-1.859401731016781&my=-0.0018090580610105
 
 ![Dual-panel view with both panels' grids on](dual-panel-view.png)
 
-## Julia set view
-
-Pubblicato: 2026-08-02 17:51:45
-
-https://isghe.github.io/mandelbrot/?x=0.2797017482028588&y=0.05908713712789222&scale=0.02986438769314073&iter=1820&julia=1&jx=-0.0805761466417163&jy=-0.6491461154259417&juliaMark=1
-
 ## Spiral view
 
 Pubblicato: 2026-08-01 19:06:14
