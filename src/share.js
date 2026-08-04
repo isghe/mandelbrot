@@ -13,7 +13,14 @@
 // prefixed `juliaPanelCenter`/`juliaPanelScale`; `juliaC` (the Julia set's
 // parameter, easily confused with `juliaPanelCenter`) became `juliaSeed`.
 // URL params renamed to match: x/y -> mx/my, scale -> mscale, jx/jy -> sx/sy.
-const SCHEMA_VERSION = 3;
+//
+// v4: localStorage only (URL params unaffected) — `mandelbrotPanelCenter`/
+// `mandelbrotPanelScale` nest under `mandelbrotPanel: { center, scale }`,
+// and `juliaPanelCenter`/`juliaPanelScale` under `juliaPanel: { center,
+// scale }`. `juliaSeed` stays flat: it's the Julia constant, not a panel's
+// own view. loadSettingsData() flattens the nested shape back out so every
+// other call site keeps using the flat field names.
+const SCHEMA_VERSION = 4;
 
 // Only encodes fields that differ from `initialState`, so the "Reset to
 // initial condition" state always maps to a bare URL and the address bar
@@ -137,14 +144,18 @@ function parseShareParams(search) {
 function settingsData(state) {
   return {
     v: SCHEMA_VERSION,
-    mandelbrotPanelCenter: { x: state.mandelbrotPanelCenter.x, y: state.mandelbrotPanelCenter.y },
-    mandelbrotPanelScale: state.mandelbrotPanelScale,
+    mandelbrotPanel: {
+      center: { x: state.mandelbrotPanelCenter.x, y: state.mandelbrotPanelCenter.y },
+      scale: state.mandelbrotPanelScale,
+    },
     maxIter: state.maxIter,
     showMandelbrot: state.showMandelbrot,
     showJulia: state.showJulia,
     juliaSeed: { x: state.juliaSeed.x, y: state.juliaSeed.y },
-    juliaPanelCenter: { x: state.juliaPanelCenter.x, y: state.juliaPanelCenter.y },
-    juliaPanelScale: state.juliaPanelScale,
+    juliaPanel: {
+      center: { x: state.juliaPanelCenter.x, y: state.juliaPanelCenter.y },
+      scale: state.juliaPanelScale,
+    },
     paletteType: state.paletteType,
     progressiveMode: state.progressiveMode,
     smoothColoring: state.smoothColoring,
@@ -181,6 +192,24 @@ function loadSettingsData(parsed) {
       ...(center !== undefined && { mandelbrotPanelCenter: center }),
       ...(scale !== undefined && { mandelbrotPanelScale: scale }),
       ...(juliaC !== undefined && { juliaSeed: juliaC }),
+    };
+  }
+  if (v >= 4) {
+    // v4 nests mandelbrotPanelCenter/mandelbrotPanelScale under
+    // mandelbrotPanel, and juliaPanelCenter/juliaPanelScale under
+    // juliaPanel (see SCHEMA_VERSION comment above) — flatten back out so
+    // every other call site keeps using the pre-v4 flat field names.
+    const { mandelbrotPanel, juliaPanel, ...rest } = result;
+    result = {
+      ...rest,
+      ...(mandelbrotPanel && {
+        mandelbrotPanelCenter: mandelbrotPanel.center,
+        mandelbrotPanelScale: mandelbrotPanel.scale,
+      }),
+      ...(juliaPanel && {
+        juliaPanelCenter: juliaPanel.center,
+        juliaPanelScale: juliaPanel.scale,
+      }),
     };
   }
   return result;

@@ -73,7 +73,7 @@ test('reloading the page restores the Julia panel\'s own dragged/zoomed position
   // drag's own later settings save and only see pre-drag persisted state.
   await expect.poll(async () => {
     const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
-    return raw ? JSON.parse(raw).juliaPanelCenter?.x : null;
+    return raw ? JSON.parse(raw).juliaPanel?.center?.x : null;
   }).toBe(before.center.x);
   await page.reload();
   const gpuError = page.locator('#gpuError');

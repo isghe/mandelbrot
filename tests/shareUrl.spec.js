@@ -207,8 +207,8 @@ test('opening a share URL persists the shared settings to localStorage', async (
 
   const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
   const data = JSON.parse(raw);
-  expect(data.mandelbrotPanelCenter).toEqual({ x: -1.25, y: 0.1 });
-  expect(data.mandelbrotPanelScale).toBe(0.5);
+  expect(data.mandelbrotPanel.center).toEqual({ x: -1.25, y: 0.1 });
+  expect(data.mandelbrotPanel.scale).toBe(0.5);
   expect(data.maxIter).toBe(512);
 });
 
@@ -217,7 +217,7 @@ test('opening a share URL persists the shared settings to localStorage', async (
 // a real pan/zoom/click through the browser and check the *fresh* encoding.
 // This is that missing case: a genuine user interaction should produce a
 // current-schema (v3) URL, not just accept legacy input.
-test('a real pan, zoom, and click-to-set-seed produce a v3 URL with mx/my/mscale/sx/sy', async ({ page }) => {
+test('a real pan, zoom, and click-to-set-seed stamp v=4 while keeping v3 param names (mx/my/mscale/sx/sy)', async ({ page }) => {
   const cx = 900, cy = 400; // well clear of the #ui panel (see panelVisibility.spec.js)
 
   await page.mouse.move(cx, cy);
@@ -239,7 +239,7 @@ test('a real pan, zoom, and click-to-set-seed produce a v3 URL with mx/my/mscale
   const url = new URL(page.url());
   // SCHEMA_VERSION lives in share.js, not exposed on window.app; bumping it
   // means updating this literal too.
-  expect(url.searchParams.get('v')).toBe('3');
+  expect(url.searchParams.get('v')).toBe('4');
   expect(url.searchParams.get('my')).not.toBeNull();
   expect(url.searchParams.get('mscale')).not.toBeNull();
   expect(url.searchParams.get('sx')).not.toBeNull();
