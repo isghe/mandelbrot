@@ -69,6 +69,13 @@ export class FractalPanel {
   dragStartClient = new DOMPointReadOnly(0, 0);
   startCenter = new DOMPointReadOnly(0, 0);
   dragStartSnapshot = null;
+  // True between a primary-button onPointerDown and its matching
+  // onPointerUp/onPointerLeave — lets onPointerUp tell "a real gesture we
+  // started" apart from the up/cancel of a button onPointerDown ignored
+  // (see there), rather than trusting `hasDragged`, which is stale left over
+  // from the last real gesture and would otherwise make an ignored button's
+  // release fall through into the "genuine click" branch.
+  primaryButtonDown = false;
 
   // selection area (Ctrl + drag)
   isSelecting = false;
@@ -132,6 +139,13 @@ export class FractalPanel {
   // genuine click on *this* panel should do — e.g. only the Mandelbrot
   // panel sets juliaSeed from it).
   onPointerDown(e, { selectionBox, snapshotView }) {
+    // Only the primary (usually left) mouse button — or a touch/pen contact,
+    // which is also reported as button 0 — drives pan/click/select. A
+    // right-click must not pan, set the pivot, or (on the Mandelbrot panel)
+    // change juliaSeed; leaving it unhandled here also lets the browser's
+    // native context menu open as expected.
+    if (e.button !== 0) return;
+    this.primaryButtonDown = true;
     this.canvas.setPointerCapture(e.pointerId);
     if (e.ctrlKey) {
       this.isSelecting = true;
@@ -195,6 +209,12 @@ export class FractalPanel {
     selectionBox, minScale, maxScale, snapshotView, pushHistory,
     resetProgressive, scheduleRender, onGenuineClick, onScaleChange,
   }) {
+    // Matches a button onPointerDown ignored (see there) — without this, a
+    // right-click's own release would fall through using stale state left
+    // over from the last real gesture (see primaryButtonDown's declaration).
+    if (!this.primaryButtonDown) return;
+    this.primaryButtonDown = false;
+
     if (this.isSelecting) {
       this.isSelecting = false;
       selectionBox.style.display = "none";
@@ -271,6 +291,7 @@ export class FractalPanel {
   onPointerLeave({ selectionBox }) {
     if (this.isDragging) this.clearDragPreview();
     this.isDragging = false;
+    this.primaryButtonDown = false;
     if (this.isSelecting) {
       this.isSelecting = false;
       selectionBox.style.display = "none";
