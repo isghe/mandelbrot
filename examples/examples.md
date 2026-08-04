@@ -11,3 +11,9 @@ https://isghe.github.io/mandelbrot/?x=-0.7445137502875607&y=0.16445045543801942&
 ## Julia set view
 
 https://isghe.github.io/mandelbrot/?x=0.2797017482028588&y=0.05908713712789222&scale=0.02986438769314073&iter=1820&julia=1&jx=-0.0805761466417163&jy=-0.6491461154259417&juliaMark=1
+
+## Dual-panel view (Mandelbrot + Julia, grid on)
+
+https://isghe.github.io/mandelbrot/?mx=-1.859401731016781&my=-0.001809058061010546&sx=-1.8594016853129103&sy=-0.0018090766053930985&jpx=0.00000675443222884764&jpy=0.00003088196423953486&iter=1549&jscale=0.0018197008586099826&jiter=245&mscale=2.899932872038949e-7&grid=1&jgrid=1&juliaMark=1&julia=1&v=5
+
+![Dual-panel view with both panels' grids on](dual-panel-view.png)
