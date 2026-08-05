@@ -65,7 +65,7 @@ clear that state before dialing the iteration count back up more gradually.
   fractal. Also toggleable with the **H** key.
 - **Repo link** (bottom-center) — links back to this GitHub repository.
 - **Drag** — pan the view.
-- **Click** (without dragging) — set the zoom pivot point, and also set the Julia constant
+- **Click** (without dragging) — set the zoom pivot point, and also set the Julia seed
   (regardless of mode, so it can be picked while still viewing the Mandelbrot set).
 - **Scroll wheel** — zoom in/out, centered on the last pivot point.
 - **Ctrl+drag** — draw a selection rectangle; releasing recenters and zooms to fit it.
@@ -82,15 +82,15 @@ clear that state before dialing the iteration count back up more gradually.
 - **Show center marker** checkbox (off by default) — overlay a crosshair at the current
   view center.
 - **Show Julia seed marker** checkbox (off by default) — overlay a diamond at the current
-  Julia constant, in either mode.
+  Julia seed, in either mode.
 - **Back / Forward** buttons — step through the view history (center, zoom, iterations,
-  palette, Julia constant, progressive mode, smooth coloring). Continuous wheel-zoom
+  palette, Julia seed, progressive mode, smooth coloring). Continuous wheel-zoom
   and slider drags each count as a single history step. The grid/marker checkboxes and the
   Mandelbrot/Julia panel-visibility checkboxes above are display preferences, not view
   state, and are not part of this history — panning/zooming the Julia panel independently
   is likewise not undoable.
 - **Reset to initial condition** button — restore the default view, iterations, palette,
-  Julia constant, progressive mode, smooth coloring, the grid/marker overlay checkboxes
+  Julia seed, progressive mode, smooth coloring, the grid/marker overlay checkboxes
   (unchecked), and panel visibility (Mandelbrot shown, Julia hidden) — even though none of
   these are part of the Back/Forward history. Also clears the Back/Forward history. Note
   this also overwrites the persisted settings below with these defaults, once the next
@@ -99,13 +99,13 @@ clear that state before dialing the iteration count back up more gradually.
   at both the low and deep-zoom ends of their range); palette is also adjustable via the
   UI panel.
 - **Copy URL** button — copy a link to the clipboard that reproduces the current view,
-  iterations, palette, Julia constant, the Julia panel's own independent pan/zoom,
+  iterations, palette, Julia seed, the Julia panel's own independent pan/zoom,
   progressive mode, smooth coloring, grid/marker overlay checkboxes, and Mandelbrot/Julia
   panel visibility. Only fields that differ from the app's built-in defaults are encoded,
   so the address bar also updates live as you interact and collapses back to a bare URL
   after **Reset to initial condition**.
 
-All of the above (view, iterations, palette, Julia constant, the Julia panel's own
+All of the above (view, iterations, palette, Julia seed, the Julia panel's own
 pan/zoom, progressive mode, smooth coloring, the grid/marker overlay checkboxes, and
 Mandelbrot/Julia panel visibility) is persisted to `localStorage` and restored on the
 next page load, so the app reopens where you left it. Settings-panel visibility (the ☰
