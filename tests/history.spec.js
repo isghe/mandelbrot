@@ -265,10 +265,10 @@ test('Reset mid-slider-drag discards the pending snapshot without a spurious pus
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
-test('clicking sets the Julia point and is undoable, even with the Julia panel hidden', async ({ page }) => {
+test('clicking sets the Julia seed and is undoable, even with the Julia panel hidden', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
 
-  // The Julia point only affects the rendered fractal when the Julia panel
+  // The Julia seed only affects the rendered fractal when the Julia panel
   // is shown, so show its overlay marker instead to get a visible signal of
   // the click's effect while the Julia panel stays hidden.
   await page.check('#juliaMarker');
