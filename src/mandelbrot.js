@@ -279,7 +279,7 @@ class MandelbrotApp {
         armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
         onScaleChange: () => this.syncMandelbrotZoomSliderUI(),
         // Only the Mandelbrot panel's genuine click sets the shared Julia
-        // constant — see attachPanelEvents' hooks param.
+        // seed — see attachPanelEvents' hooks param.
         onGenuineClick: (fractalPoint) => {
           this.juliaSeed = fractalPoint;
           // Only the Julia panel's render actually depends on juliaSeed
