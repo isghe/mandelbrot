@@ -221,7 +221,7 @@ test('opening a share URL persists the shared settings to localStorage', async (
 // loading a legacy (pre-v3) URL and checking the app rewrites it — none drive
 // a real pan/zoom/click through the browser and check the *fresh* encoding.
 // This is that missing case: a genuine user interaction should produce a
-// current-schema (v6) URL, not just accept legacy input.
+// current-schema (v7) URL, not just accept legacy input.
 test('a real pan, zoom, and click-to-set-seed stamp v=7, using the unchanged-since-v3 pan/zoom/seed param names (mx/my/mscale/sx/sy) — this test doesn\'t touch the v6-renamed quality/look params', async ({ page }) => {
   // Mandelbrot-only, so the fixed coordinates below land on its own canvas
   // rather than Julia's (both panels are shown, split-screen, by default).

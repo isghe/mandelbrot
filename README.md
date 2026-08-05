@@ -18,7 +18,7 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 - **Shareable view URLs** — copy a link that reproduces the exact view, iterations,
   palette, and mode you're looking at.
 
-  Example: https://isghe.github.io/mandelbrot/?mx=-0.7445137502875607&my=0.16445045543801942&mscale=0.007380653541488702&v=6
+  Example: https://isghe.github.io/mandelbrot/?mx=-0.7445137502875607&my=0.16445045543801942&mscale=0.007380653541488702&v=7
 
   ![Spiral view reached via a shared URL](examples/share-example.png)
 
@@ -69,10 +69,10 @@ clear that state before dialing the iteration count back up more gradually.
   (regardless of mode, so it can be picked while still viewing the Mandelbrot set).
 - **Scroll wheel** — zoom in/out, centered on the last pivot point.
 - **Ctrl+drag** — draw a selection rectangle; releasing recenters and zooms to fit it.
-- **Mandelbrot** / **Julia** checkboxes — independently show/hide each panel. Both on
-  shows them side by side, each with its own independent pan/zoom; either alone shows
-  that panel full-screen; both off is a black screen. The Julia panel always renders the
-  set for the current pivot-selected constant.
+- **Mandelbrot** / **Julia** checkboxes — independently show/hide each panel (both on,
+  split screen, by default). Both on shows them side by side, each with its own
+  independent pan/zoom; either alone shows that panel full-screen; both off is a black
+  screen. The Julia panel always renders the set for the current pivot-selected seed.
 - **Progressive mode** checkbox — reveal the fractal iteration by iteration instead of
   jumping straight to full quality.
 - **Smooth coloring** checkbox (off by default) — continuous escape-time coloring instead
@@ -111,7 +111,7 @@ Mandelbrot/Julia panel visibility) is persisted to `localStorage` and restored o
 next page load, so the app reopens where you left it. Settings-panel visibility (the ☰
 toggle / **H** key) is a session-only preference and is not persisted.
 
-Opening a URL with share parameters (`?mx=...&my=...&mscale=...&v=6`, etc.) always takes
+Opening a URL with share parameters (`?mx=...&my=...&mscale=...&v=7`, etc.) always takes
 precedence over `localStorage`. Param names have been renamed as the app grew, gated on
 `v`: the pan/zoom names `mx`/`my`/`mscale` (and Julia's `sx`/`sy`) need `v` ≥ 3 — Julia's
 own `jscale` has always used that name; the Mandelbrot quality/look/overlay names
@@ -123,6 +123,13 @@ names, with a lower or absent `v=`, still work: any field present in the URL is 
 and any field *not* present falls back to the app's built-in defaults, not to whatever was previously
 saved locally in that browser. In other words, a partial share link is not merged with
 your existing local settings — it's applied against a clean slate.
+
+One exception to "falls back to the app's built-in defaults": panel visibility
+(`mandelbrot`/`julia`). The app's own default changed from Mandelbrot-only to both panels
+shown (split screen) in `v` 7, so an absent `mandelbrot`/`julia` in a `v` < 7 link still
+resolves to the *old* default (Mandelbrot-only) rather than today's, so links shared
+before that change keep opening the exact view they captured. Only `v` ≥ 7 links defer
+an absent visibility param to the app's current (split-screen) default.
 
 ## Testing
 
