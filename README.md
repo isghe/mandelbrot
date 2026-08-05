@@ -113,10 +113,11 @@ toggle / **H** key) is a session-only preference and is not persisted.
 
 Opening a URL with share parameters (`?mx=...&my=...&mscale=...&v=6`, etc.) always takes
 precedence over `localStorage`. Param names have been renamed as the app grew, gated on
-`v`: the pan/zoom names `mx`/`my`/`mscale` (and Julia's `sx`/`sy`/`jscale`) need `v` ≥ 3;
-the Mandelbrot quality/look/overlay names `miter`/`mpalette`/`mprogressive`/`msmooth`/
-`mgrid`/`mcenterMark` need `v` ≥ 6 — their Julia counterparts `jiter`/`jpalette`/
-`jprogressive`/`jsmooth`/`jgrid`/`jcenterMark` have always used this prefix. Older links
+`v`: the pan/zoom names `mx`/`my`/`mscale` (and Julia's `sx`/`sy`) need `v` ≥ 3 — Julia's
+own `jscale` has always used that name; the Mandelbrot quality/look/overlay names
+`miter`/`mpalette`/`mprogressive`/`msmooth`/`mgrid`/`mcenterMark` need `v` ≥ 6 — their
+Julia counterparts `jiter`/`jpalette`/`jprogressive`/`jsmooth`/`jgrid`/`jcenterMark` have
+always used this prefix. Older links
 using the pre-rename `?iter=...&palette=...` (Mandelbrot) or `?x=...&y=...&scale=...`
 names, with a lower or absent `v=`, still work: any field present in the URL is applied,
 and any field *not* present falls back to the app's built-in defaults, not to whatever was previously
