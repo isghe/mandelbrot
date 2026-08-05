@@ -217,7 +217,7 @@ test('opening a share URL persists the shared settings to localStorage', async (
 // a real pan/zoom/click through the browser and check the *fresh* encoding.
 // This is that missing case: a genuine user interaction should produce a
 // current-schema (v3) URL, not just accept legacy input.
-test('a real pan, zoom, and click-to-set-seed stamp v=6 while keeping v3 param names (mx/my/mscale/sx/sy)', async ({ page }) => {
+test('a real pan, zoom, and click-to-set-seed stamp v=6, using the unchanged-since-v3 pan/zoom/seed param names (mx/my/mscale/sx/sy) — this test doesn\'t touch the v6-renamed quality/look params', async ({ page }) => {
   const cx = 900, cy = 400; // well clear of the #ui panel (see panelVisibility.spec.js)
 
   await page.mouse.move(cx, cy);
