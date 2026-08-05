@@ -81,7 +81,7 @@ clear that state before dialing the iteration count back up more gradually.
   spaced gridlines and brighter x=0/y=0 axes.
 - **Show center marker** checkbox (off by default) — overlay a crosshair at the current
   view center.
-- **Show Julia point marker** checkbox (off by default) — overlay a diamond at the current
+- **Show Julia seed marker** checkbox (off by default) — overlay a diamond at the current
   Julia constant, in either mode.
 - **Back / Forward** buttons — step through the view history (center, zoom, iterations,
   palette, Julia constant, progressive mode, smooth coloring). Continuous wheel-zoom
