@@ -380,10 +380,10 @@ class MandelbrotApp {
   // meaningless on Julia's own view — see drawOverlayForPanel).
   captureDisplayPrefs() {
     return {
-      mandelbrotGridOverlay: this.mandelbrotPanel.gridOverlay,
-      mandelbrotCenterMarker: this.mandelbrotPanel.centerMarker,
-      juliaGridOverlay: this.juliaPanelGridOverlay,
-      juliaCenterMarker: this.juliaPanelCenterMarker,
+      mandelbrotPanelGridOverlay: this.mandelbrotPanel.gridOverlay,
+      mandelbrotPanelCenterMarker: this.mandelbrotPanel.centerMarker,
+      juliaPanelGridOverlay: this.juliaPanelGridOverlay,
+      juliaPanelCenterMarker: this.juliaPanelCenterMarker,
       juliaMarker: this.juliaMarker,
       showMandelbrot: this.showMandelbrot,
       showJulia: this.showJulia,
@@ -391,12 +391,12 @@ class MandelbrotApp {
   }
 
   restoreDisplayPrefs(p) {
-    this.mandelbrotPanel.gridOverlay = p.mandelbrotGridOverlay;
-    this.mandelbrotGridOverlayChk.checked = !!p.mandelbrotGridOverlay;
-    this.mandelbrotPanel.centerMarker = p.mandelbrotCenterMarker;
-    this.mandelbrotCenterMarkerChk.checked = !!p.mandelbrotCenterMarker;
-    this.juliaPanelGridOverlay = p.juliaGridOverlay;
-    this.juliaPanelCenterMarker = p.juliaCenterMarker;
+    this.mandelbrotPanel.gridOverlay = p.mandelbrotPanelGridOverlay;
+    this.mandelbrotGridOverlayChk.checked = !!p.mandelbrotPanelGridOverlay;
+    this.mandelbrotPanel.centerMarker = p.mandelbrotPanelCenterMarker;
+    this.mandelbrotCenterMarkerChk.checked = !!p.mandelbrotPanelCenterMarker;
+    this.juliaPanelGridOverlay = p.juliaPanelGridOverlay;
+    this.juliaPanelCenterMarker = p.juliaPanelCenterMarker;
     this.juliaMarker = p.juliaMarker;
     this.juliaMarkerChk.checked = !!p.juliaMarker;
 
