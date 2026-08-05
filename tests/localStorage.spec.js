@@ -43,25 +43,22 @@ test('changing a setting persists it to localStorage', async ({ page }) => {
 
 test('reloading the page restores persisted settings', async ({ page }) => {
   await page.selectOption('#mandelbrotPaletteType', '1');
-  await page.click('#showJulia');
+  await page.click('#mandelbrotGridOverlay');
   await waitForPersisted(page, 'mandelbrotPanel.paletteType', 1);
-  await waitForPersisted(page, 'showJulia', 1);
+  await waitForPersisted(page, 'mandelbrotPanel.gridOverlay', 1);
 
   await page.reload();
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
   await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('1');
-  await expect(page.locator('#showJulia')).toBeChecked();
+  await expect(page.locator('#mandelbrotGridOverlay')).toBeChecked();
 });
 
 // Coverage for schema v5 (Mossa 4): the Julia panel's own maxIter/paletteType
 // are now nested under juliaPanel{} in localStorage, independent of the
 // Mandelbrot panel's — a reload must not mix the two panels' values up.
 test('the Mandelbrot and Julia panels persist independent palette/iterations across reload', async ({ page }) => {
-  await page.click('#showJulia');
-  await page.waitForTimeout(200);
-
   await page.selectOption('#mandelbrotPaletteType', '1');
   await page.selectOption('#juliaPaletteType', '2');
   await waitForPersisted(page, 'mandelbrotPanel.paletteType', 1);
@@ -76,8 +73,10 @@ test('the Mandelbrot and Julia panels persist independent palette/iterations acr
 });
 
 test('reloading the page restores the Julia panel\'s own dragged/zoomed position, not just juliaSeed', async ({ page }) => {
-  await page.click('#showJulia');
-  await page.waitForTimeout(200);
+  const initial = await page.evaluate(() => ({
+    center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
+    scale: window.app.juliaPanel.scale,
+  }));
 
   await page.mouse.move(900, 350); // over the Julia (right) panel
   await page.mouse.wheel(0, -400);
@@ -91,12 +90,16 @@ test('reloading the page restores the Julia panel\'s own dragged/zoomed position
     center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
     scale: window.app.juliaPanel.scale,
   }));
+  // Confirm the drag/zoom actually registered — otherwise this test would
+  // pass trivially even if the mouse actions produced no effect at all
+  // (e.g. because they landed outside the Julia panel).
+  expect(before).not.toEqual(initial);
 
-  // Wait for the *drag's* debounced save specifically, not just showJulia
-  // (already true since the earlier checkbox click) or juliaPanelScale
-  // (already reached its final value from the wheel-zoom, which lands
-  // before the drag) — otherwise the reload below can race ahead of the
-  // drag's own later settings save and only see pre-drag persisted state.
+  // Wait for the *drag's* debounced save specifically, not just
+  // juliaPanelScale (already reached its final value from the wheel-zoom,
+  // which lands before the drag) — otherwise the reload below can race
+  // ahead of the drag's own later settings save and only see pre-drag
+  // persisted state.
   await expect.poll(async () => {
     const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
     return raw ? JSON.parse(raw).juliaPanel?.center?.x : null;

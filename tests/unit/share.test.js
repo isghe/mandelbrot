@@ -30,7 +30,7 @@ function baseState(overrides = {}) {
     juliaPanelCenterMarker: 0,
     juliaMarker: 0,
     showMandelbrot: 1,
-    showJulia: 0,
+    showJulia: 1,
     ...overrides,
   };
 }
@@ -93,12 +93,12 @@ test('buildShareUrl omits falsy overlay display flags', () => {
   assert.strictEqual(params.has('juliaMark'), false);
 });
 
-test('buildShareUrl encodes julia=1 when the Julia panel is shown, omitting it by default', () => {
-  const shown = share.buildShareUrl(baseState({ showJulia: 1 }), initialState, 'https://example.com', '/');
-  assert.strictEqual(new URL(shown).searchParams.get('julia'), '1');
+test('buildShareUrl encodes julia=0 when the Julia panel is hidden, omitting it by default', () => {
+  const hidden = share.buildShareUrl(baseState({ showJulia: 0 }), initialState, 'https://example.com', '/');
+  assert.strictEqual(new URL(hidden).searchParams.get('julia'), '0');
 
-  const hidden = share.buildShareUrl(baseState(), initialState, 'https://example.com', '/');
-  assert.strictEqual(new URL(hidden).searchParams.has('julia'), false);
+  const shown = share.buildShareUrl(baseState(), initialState, 'https://example.com', '/');
+  assert.strictEqual(new URL(shown).searchParams.has('julia'), false);
 });
 
 test('buildShareUrl encodes mandelbrot=0 when the Mandelbrot panel is hidden, omitting it by default', () => {
@@ -235,6 +235,9 @@ test('parseShareParams (v5) still reads the pre-v6 bare short param names', () =
     mandelbrotPanelSmoothColoring: 1,
     mandelbrotPanelGridOverlay: 1,
     mandelbrotPanelCenterMarker: 1,
+    // v<7: absence of mandelbrot/julia means the old default (Mandelbrot-only).
+    showMandelbrot: 1,
+    showJulia: 0,
   });
 });
 
@@ -262,8 +265,8 @@ test('parseShareParams (legacy v1) maps julia=0 (or absent) to Mandelbrot-only',
   assert.strictEqual(explicit.showMandelbrot, 1);
 
   const absent = share.parseShareParams('?scale=1.5');
-  assert.strictEqual(absent.showJulia, undefined);
-  assert.strictEqual(absent.showMandelbrot, undefined);
+  assert.strictEqual(absent.showJulia, 0);
+  assert.strictEqual(absent.showMandelbrot, 1);
 });
 
 test('parseShareParams treats a present-but-empty param as absent, not zero', () => {
@@ -278,7 +281,7 @@ test('parseShareParams skips non-finite values', () => {
 
 test('parseShareParams treats absent v as legacy version 1 (old unprefixed "scale" name)', () => {
   const s = share.parseShareParams('?scale=1.5');
-  assert.deepStrictEqual(s, { mandelbrotPanelScale: 1.5 });
+  assert.deepStrictEqual(s, { mandelbrotPanelScale: 1.5, showMandelbrot: 1, showJulia: 0 });
 });
 
 test('parseShareParams accepts v=1 explicitly (legacy julia semantics, old "scale" name)', () => {
@@ -287,7 +290,7 @@ test('parseShareParams accepts v=1 explicitly (legacy julia semantics, old "scal
 });
 
 test('parseShareParams rejects an unknown future version', () => {
-  const s = share.parseShareParams('?v=7&mscale=1.5');
+  const s = share.parseShareParams('?v=8&mscale=1.5');
   assert.strictEqual(s, null);
 });
 
@@ -308,8 +311,10 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
     mandelbrotPanelGridOverlay: 1,
     mandelbrotPanelCenterMarker: 1,
     juliaMarker: 1,
+    // showJulia stays at its (now-default) 1 — only showMandelbrot is a real
+    // change here, exercising the "Julia exclusive" combo without needing to
+    // redundantly encode julia=1.
     showMandelbrot: 0,
-    showJulia: 1,
   });
   const url = share.buildShareUrl(state, initialState, 'https://example.com', '/');
   const parsed = share.parseShareParams(new URL(url).search);
@@ -326,7 +331,6 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
     mandelbrotPanelCenterMarker: 1,
     juliaMarker: 1,
     showMandelbrot: 0,
-    showJulia: 1,
   });
 });
 
@@ -334,14 +338,14 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
   const state = baseState({ mandelbrotPanelScale: 1.5, mandelbrotPanelGridOverlay: 1 });
   const data = share.settingsData(state);
   assert.deepStrictEqual(data, {
-    v: 6,
+    v: 7,
     mandelbrotPanel: {
       center: { x: -0.5, y: 0 }, scale: 1.5,
       maxIter: 256, paletteType: 4, smoothColoring: 0, progressiveMode: 0,
       gridOverlay: 1, centerMarker: 0,
     },
     showMandelbrot: 1,
-    showJulia: 0,
+    showJulia: 1,
     juliaSeed: { x: -0.8, y: 0.156 },
     juliaPanel: {
       center: { x: -0.8, y: 0.156 }, scale: 3.0,
@@ -521,12 +525,12 @@ test('settingsData -> loadSettingsData round-trips the Mandelbrot side under man
 });
 
 test('loadSettingsData rejects an unknown future version', () => {
-  const future = { ...share.settingsData(baseState()), v: 7 };
+  const future = { ...share.settingsData(baseState()), v: 8 };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 
 test('loadSettingsData rejects a future version given as a string, not treated as legacy', () => {
-  const future = { ...share.settingsData(baseState()), v: "7" };
+  const future = { ...share.settingsData(baseState()), v: "8" };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 

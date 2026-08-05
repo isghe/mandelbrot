@@ -19,15 +19,26 @@ test.beforeEach(async ({ page }) => {
   }
 });
 
-test('by default, only the Mandelbrot panel is shown, full-screen', async ({ page }) => {
+test('by default, both panels are shown, split-screen', async ({ page }) => {
   await expect(page.locator('#mandelbrotGfx')).toBeVisible();
-  await expect(page.locator('#juliaGfx')).toBeHidden();
-  const box = await page.locator('#mandelbrotGfx').boundingBox();
-  expect(box.width).toBe(VIEWPORT.width);
+  await expect(page.locator('#juliaGfx')).toBeVisible();
+  const mandelbrotBox = await page.locator('#mandelbrotGfx').boundingBox();
+  const juliaBox = await page.locator('#juliaGfx').boundingBox();
+  expect(mandelbrotBox.width).toBe(VIEWPORT.width / 2);
+  expect(juliaBox.width).toBe(VIEWPORT.width / 2);
+  expect(juliaBox.x).toBe(mandelbrotBox.width);
   await expect(page.locator('#noVizMessage')).toBeHidden();
 });
 
-test('checking Julia while Mandelbrot stays checked shows a 50/50 split', async ({ page }) => {
+test('unchecking Julia leaves only the Mandelbrot panel, full-screen', async ({ page }) => {
+  await page.uncheck('#showJulia');
+  await expect(page.locator('#juliaGfx')).toBeHidden();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
+  expect(box.width).toBe(VIEWPORT.width);
+});
+
+test('unchecking then re-checking Julia restores the 50/50 split', async ({ page }) => {
+  await page.uncheck('#showJulia');
   await page.check('#showJulia');
   await expect(page.locator('#juliaGfx')).toBeVisible();
 
@@ -51,10 +62,6 @@ test('unchecking Mandelbrot with Julia checked shows only the Julia panel, full-
 
 test('the settings panel shows only the section for each currently-visible canvas', async ({ page }) => {
   await expect(page.locator('#uiMandelbrot')).toBeVisible();
-  await expect(page.locator('#uiJulia')).toBeHidden();
-
-  await page.check('#showJulia');
-  await expect(page.locator('#uiMandelbrot')).toBeVisible();
   await expect(page.locator('#uiJulia')).toBeVisible();
 
   await page.uncheck('#showMandelbrot');
@@ -64,10 +71,15 @@ test('the settings panel shows only the section for each currently-visible canva
   await page.uncheck('#showJulia');
   await expect(page.locator('#uiMandelbrot')).toBeHidden();
   await expect(page.locator('#uiJulia')).toBeHidden();
+
+  await page.check('#showMandelbrot');
+  await expect(page.locator('#uiMandelbrot')).toBeVisible();
+  await expect(page.locator('#uiJulia')).toBeHidden();
 });
 
 test('unchecking both panels shows the "No visualization mode selected" placeholder', async ({ page }) => {
   await page.uncheck('#showMandelbrot');
+  await page.uncheck('#showJulia');
   await expect(page.locator('#mandelbrotGfx')).toBeHidden();
   await expect(page.locator('#juliaGfx')).toBeHidden();
   await expect(page.locator('#noVizMessage')).toBeVisible();
@@ -79,9 +91,6 @@ test('unchecking both panels shows the "No visualization mode selected" placehol
 });
 
 test('clicking on the Mandelbrot panel updates the Julia panel, but clicking on the Julia panel does not change juliaSeed', async ({ page }) => {
-  await page.check('#showJulia');
-  await page.waitForTimeout(200);
-
   const before = await page.evaluate(() => ({ x: window.app.juliaSeed.x, y: window.app.juliaSeed.y }));
 
   // Click away from the #ui panel, on the Mandelbrot half.
@@ -119,9 +128,6 @@ test('right-clicking on the Mandelbrot panel does not change juliaSeed or pan th
 });
 
 test('the Julia panel pans/zooms independently of the Mandelbrot panel', async ({ page }) => {
-  await page.check('#showJulia');
-  await page.waitForTimeout(200);
-
   const mandelbrotScaleBefore = await page.evaluate(() => window.app.mandelbrotPanel.scale);
   const juliaScaleBefore = await page.evaluate(() => window.app.juliaPanel.scale);
 
@@ -136,8 +142,8 @@ test('the Julia panel pans/zooms independently of the Mandelbrot panel', async (
   expect(juliaScaleAfter).not.toBe(juliaScaleBefore);
 });
 
-test('checking Julia does not enable Back/Forward (a display preference, not view state)', async ({ page }) => {
-  await page.check('#showJulia');
+test('toggling panel visibility does not enable Back/Forward (a display preference, not view state)', async ({ page }) => {
+  await page.uncheck('#showJulia');
   await page.waitForTimeout(200);
   await expect(page.locator('#backBtn')).toBeDisabled();
 
@@ -146,27 +152,23 @@ test('checking Julia does not enable Back/Forward (a display preference, not vie
   await expect(page.locator('#backBtn')).toBeDisabled();
 });
 
-test('Reset restores the default Mandelbrot-only view', async ({ page }) => {
-  await page.check('#showJulia');
-  await page.uncheck('#showMandelbrot');
+test('Reset restores the default split-screen view', async ({ page }) => {
+  await page.uncheck('#showJulia');
   await page.waitForTimeout(200);
 
   await page.click('#resetBtn');
   await page.waitForTimeout(200);
 
   await expect(page.locator('#showMandelbrot')).toBeChecked();
-  await expect(page.locator('#showJulia')).not.toBeChecked();
+  await expect(page.locator('#showJulia')).toBeChecked();
   await expect(page.locator('#mandelbrotGfx')).toBeVisible();
-  await expect(page.locator('#juliaGfx')).toBeHidden();
+  await expect(page.locator('#juliaGfx')).toBeVisible();
 });
 
 // Regression test: the Julia panel's own pan/zoom is independent of the
 // Mandelbrot view history, so Reset used to leave it wherever the user had
 // last dragged/zoomed it instead of restoring its initial center/scale.
 test('Reset also restores the Julia panel\'s own pan/zoom to its initial state', async ({ page }) => {
-  await page.check('#showJulia');
-  await page.waitForTimeout(200);
-
   const initial = await page.evaluate(() => ({
     center: { x: window.app.juliaPanel.center.x, y: window.app.juliaPanel.center.y },
     scale: window.app.juliaPanel.scale,
