@@ -17,7 +17,7 @@
 // v4: localStorage only (URL params unaffected) — `mandelbrotPanelCenter`/
 // `mandelbrotPanelScale` nest under `mandelbrotPanel: { center, scale }`,
 // and `juliaPanelCenter`/`juliaPanelScale` under `juliaPanel: { center,
-// scale }`. `juliaSeed` stays flat: it's the Julia constant, not a panel's
+// scale }`. `juliaSeed` stays flat: it's the Julia seed, not a panel's
 // own view. loadSettingsData() flattens the nested shape back out so every
 // other call site keeps using the flat field names.
 //

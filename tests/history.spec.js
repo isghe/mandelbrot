@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// The #ui panel overlays the full-viewport #gfx canvas, so an element
+// The #ui panel overlays the full-viewport #mandelbrotGfx canvas, so an element
 // screenshot of the canvas still includes overlaid panel pixels (e.g. the
 // Back/Forward disabled styling). Clip to a region right of the panel to
 // compare only the rendered fractal.
