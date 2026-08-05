@@ -130,6 +130,32 @@ class MandelbrotApp {
     else this._juliaPanelCenterMarker = v;
   }
 
+  // Passthrough to the Mandelbrot panel, always live (constructed synchronously
+  // at the top of the constructor, never lazy like juliaPanel) — so unlike the
+  // Julia accessors above there's no backing field and no side effect. These
+  // exist only so restoreSettings() can drive both panels through the same
+  // generic this[field] = s[field] loop. The DOM refs (sliders/checkboxes/
+  // selects) don't exist yet when restoreSettings() runs, so these can't do UI
+  // sync the way the Julia setters do — the rest of the constructor
+  // (setMandelbrotMaxIter / palette256 / the panelCheckboxFields loop, further
+  // down) re-aligns the interface afterward.
+  get mandelbrotPanelCenter() { return this.mandelbrotPanel.center; }
+  set mandelbrotPanelCenter(v) { this.mandelbrotPanel.center = v; }
+  get mandelbrotPanelScale() { return this.mandelbrotPanel.scale; }
+  set mandelbrotPanelScale(v) { this.mandelbrotPanel.scale = v; }
+  get mandelbrotPanelMaxIter() { return this.mandelbrotPanel.maxIter; }
+  set mandelbrotPanelMaxIter(v) { this.mandelbrotPanel.maxIter = v; }
+  get mandelbrotPanelPaletteType() { return this.mandelbrotPanel.paletteType; }
+  set mandelbrotPanelPaletteType(v) { this.mandelbrotPanel.paletteType = v; }
+  get mandelbrotPanelProgressiveMode() { return this.mandelbrotPanel.progressiveMode; }
+  set mandelbrotPanelProgressiveMode(v) { this.mandelbrotPanel.progressiveMode = v; }
+  get mandelbrotPanelSmoothColoring() { return this.mandelbrotPanel.smoothColoring; }
+  set mandelbrotPanelSmoothColoring(v) { this.mandelbrotPanel.smoothColoring = v; }
+  get mandelbrotPanelGridOverlay() { return this.mandelbrotPanel.gridOverlay; }
+  set mandelbrotPanelGridOverlay(v) { this.mandelbrotPanel.gridOverlay = v; }
+  get mandelbrotPanelCenterMarker() { return this.mandelbrotPanel.centerMarker; }
+  set mandelbrotPanelCenterMarker(v) { this.mandelbrotPanel.centerMarker = v; }
+
   constructor(canvas) {
     this.mandelbrotPanel = new FractalPanel(canvas, document.getElementById("mandelbrotOverlay"));
 
@@ -326,12 +352,12 @@ class MandelbrotApp {
   snapshotView() {
     return {
       mandelbrotPanel: {
-        center: this.mandelbrotPanel.center,
-        scale: this.mandelbrotPanel.scale,
-        maxIter: this.mandelbrotPanel.maxIter,
-        paletteType: this.mandelbrotPanel.paletteType,
-        smoothColoring: this.mandelbrotPanel.smoothColoring,
-        progressiveMode: this.mandelbrotPanel.progressiveMode,
+        center: this.mandelbrotPanelCenter,
+        scale: this.mandelbrotPanelScale,
+        maxIter: this.mandelbrotPanelMaxIter,
+        paletteType: this.mandelbrotPanelPaletteType,
+        smoothColoring: this.mandelbrotPanelSmoothColoring,
+        progressiveMode: this.mandelbrotPanelProgressiveMode,
       },
       juliaPanel: {
         center: this.juliaPanelCenter,
@@ -350,14 +376,14 @@ class MandelbrotApp {
   // flattenSnapshotForShare() below for the bridge between the two.
   shareState() {
     return {
-      mandelbrotPanelCenter: this.mandelbrotPanel.center,
-      mandelbrotPanelScale: this.mandelbrotPanel.scale,
-      mandelbrotPanelMaxIter: this.mandelbrotPanel.maxIter,
-      mandelbrotPanelPaletteType: this.mandelbrotPanel.paletteType,
-      mandelbrotPanelProgressiveMode: this.mandelbrotPanel.progressiveMode,
-      mandelbrotPanelSmoothColoring: this.mandelbrotPanel.smoothColoring,
-      mandelbrotPanelGridOverlay: this.mandelbrotPanel.gridOverlay,
-      mandelbrotPanelCenterMarker: this.mandelbrotPanel.centerMarker,
+      mandelbrotPanelCenter: this.mandelbrotPanelCenter,
+      mandelbrotPanelScale: this.mandelbrotPanelScale,
+      mandelbrotPanelMaxIter: this.mandelbrotPanelMaxIter,
+      mandelbrotPanelPaletteType: this.mandelbrotPanelPaletteType,
+      mandelbrotPanelProgressiveMode: this.mandelbrotPanelProgressiveMode,
+      mandelbrotPanelSmoothColoring: this.mandelbrotPanelSmoothColoring,
+      mandelbrotPanelGridOverlay: this.mandelbrotPanelGridOverlay,
+      mandelbrotPanelCenterMarker: this.mandelbrotPanelCenterMarker,
       juliaSeed: this.juliaSeed,
       juliaPanelCenter: this.juliaPanelCenter,
       juliaPanelScale: this.juliaPanelScale,
@@ -380,8 +406,8 @@ class MandelbrotApp {
   // meaningless on Julia's own view — see drawOverlayForPanel).
   captureDisplayPrefs() {
     return {
-      mandelbrotPanelGridOverlay: this.mandelbrotPanel.gridOverlay,
-      mandelbrotPanelCenterMarker: this.mandelbrotPanel.centerMarker,
+      mandelbrotPanelGridOverlay: this.mandelbrotPanelGridOverlay,
+      mandelbrotPanelCenterMarker: this.mandelbrotPanelCenterMarker,
       juliaPanelGridOverlay: this.juliaPanelGridOverlay,
       juliaPanelCenterMarker: this.juliaPanelCenterMarker,
       juliaMarker: this.juliaMarker,
@@ -477,39 +503,22 @@ class MandelbrotApp {
         this[field] = new DOMPointReadOnly(p.x, p.y);
       }
     };
-    const restorePanelNumber = (field, panelField) => {
-      if (typeof s[field] === "number") this.mandelbrotPanel[panelField] = s[field];
-    };
-
-    // "mandelbrotPanelCenter"/"mandelbrotPanelScale" (and the per-panel
-    // quality/look fields below) live on mandelbrotPanel, not as plain own
-    // fields on `this` (unlike the rest of these), so the generic
-    // this[field] = ... loop can't reach them — assign explicitly instead.
-    if (s.mandelbrotPanelCenter && Number.isFinite(s.mandelbrotPanelCenter.x) && Number.isFinite(s.mandelbrotPanelCenter.y)) {
-      this.mandelbrotPanel.center = new DOMPointReadOnly(s.mandelbrotPanelCenter.x, s.mandelbrotPanelCenter.y);
-    }
-    if (typeof s.mandelbrotPanelScale === "number") this.mandelbrotPanel.scale = s.mandelbrotPanelScale;
-
-    const pointFields = ["juliaSeed", "juliaPanelCenter"];
-    // juliaPanelX names double as MandelbrotApp accessor names (see the
-    // getters/setters above the constructor) — this[field] = s[field]
-    // below routes straight through to the live panel or its backing field.
+    const pointFields = ["juliaSeed", "juliaPanelCenter", "mandelbrotPanelCenter"];
+    // mandelbrotPanelX / juliaPanelX names double as MandelbrotApp accessor
+    // names (see the getters/setters above the constructor) — this[field] =
+    // s[field] below routes straight through: mandelbrotPanel always exists;
+    // juliaPanel falls back to a backing field until it's created.
     const numberFields = [
-      "juliaMarker", "juliaPanelScale", "showJulia", "showMandelbrot",
-      "juliaPanelMaxIter", "juliaPanelPaletteType", "juliaPanelProgressiveMode",
-      "juliaPanelSmoothColoring", "juliaPanelGridOverlay", "juliaPanelCenterMarker",
-    ];
-    const panelNumberFields = [
-      ["mandelbrotPanelCenterMarker", "centerMarker"],
-      ["mandelbrotPanelGridOverlay", "gridOverlay"],
-      ["mandelbrotPanelMaxIter", "maxIter"],
-      ["mandelbrotPanelPaletteType", "paletteType"],
-      ["mandelbrotPanelProgressiveMode", "progressiveMode"],
-      ["mandelbrotPanelSmoothColoring", "smoothColoring"],
+      "juliaMarker", "showJulia", "showMandelbrot",
+      "mandelbrotPanelScale", "mandelbrotPanelMaxIter", "mandelbrotPanelPaletteType",
+      "mandelbrotPanelProgressiveMode", "mandelbrotPanelSmoothColoring",
+      "mandelbrotPanelGridOverlay", "mandelbrotPanelCenterMarker",
+      "juliaPanelScale", "juliaPanelMaxIter", "juliaPanelPaletteType",
+      "juliaPanelProgressiveMode", "juliaPanelSmoothColoring",
+      "juliaPanelGridOverlay", "juliaPanelCenterMarker",
     ];
     pointFields.forEach(restorePoint);
     numberFields.forEach(restoreNumber);
-    panelNumberFields.forEach(([field, panelField]) => restorePanelNumber(field, panelField));
 
     this.mandelbrotPanel.pivot = this.mandelbrotPanel.center;
 
