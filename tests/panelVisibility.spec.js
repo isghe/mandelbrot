@@ -20,19 +20,19 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('by default, only the Mandelbrot panel is shown, full-screen', async ({ page }) => {
-  await expect(page.locator('#gfx')).toBeVisible();
-  await expect(page.locator('#gfxJulia')).toBeHidden();
-  const box = await page.locator('#gfx').boundingBox();
+  await expect(page.locator('#mandelbrotGfx')).toBeVisible();
+  await expect(page.locator('#juliaGfx')).toBeHidden();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   expect(box.width).toBe(VIEWPORT.width);
   await expect(page.locator('#noVizMessage')).toBeHidden();
 });
 
 test('checking Julia while Mandelbrot stays checked shows a 50/50 split', async ({ page }) => {
   await page.check('#showJulia');
-  await expect(page.locator('#gfxJulia')).toBeVisible();
+  await expect(page.locator('#juliaGfx')).toBeVisible();
 
-  const mandelbrotBox = await page.locator('#gfx').boundingBox();
-  const juliaBox = await page.locator('#gfxJulia').boundingBox();
+  const mandelbrotBox = await page.locator('#mandelbrotGfx').boundingBox();
+  const juliaBox = await page.locator('#juliaGfx').boundingBox();
   expect(mandelbrotBox.width).toBe(VIEWPORT.width / 2);
   expect(juliaBox.width).toBe(VIEWPORT.width / 2);
   expect(juliaBox.x).toBe(mandelbrotBox.width);
@@ -42,9 +42,9 @@ test('unchecking Mandelbrot with Julia checked shows only the Julia panel, full-
   await page.check('#showJulia');
   await page.uncheck('#showMandelbrot');
 
-  await expect(page.locator('#gfx')).toBeHidden();
-  await expect(page.locator('#gfxJulia')).toBeVisible();
-  const box = await page.locator('#gfxJulia').boundingBox();
+  await expect(page.locator('#mandelbrotGfx')).toBeHidden();
+  await expect(page.locator('#juliaGfx')).toBeVisible();
+  const box = await page.locator('#juliaGfx').boundingBox();
   expect(box.width).toBe(VIEWPORT.width);
   await expect(page.locator('#noVizMessage')).toBeHidden();
 });
@@ -68,8 +68,8 @@ test('the settings panel shows only the section for each currently-visible canva
 
 test('unchecking both panels shows the "No visualization mode selected" placeholder', async ({ page }) => {
   await page.uncheck('#showMandelbrot');
-  await expect(page.locator('#gfx')).toBeHidden();
-  await expect(page.locator('#gfxJulia')).toBeHidden();
+  await expect(page.locator('#mandelbrotGfx')).toBeHidden();
+  await expect(page.locator('#juliaGfx')).toBeHidden();
   await expect(page.locator('#noVizMessage')).toBeVisible();
   await expect(page.locator('#noVizMessage')).toHaveText('No visualization mode selected');
 
@@ -156,8 +156,8 @@ test('Reset restores the default Mandelbrot-only view', async ({ page }) => {
 
   await expect(page.locator('#showMandelbrot')).toBeChecked();
   await expect(page.locator('#showJulia')).not.toBeChecked();
-  await expect(page.locator('#gfx')).toBeVisible();
-  await expect(page.locator('#gfxJulia')).toBeHidden();
+  await expect(page.locator('#mandelbrotGfx')).toBeVisible();
+  await expect(page.locator('#juliaGfx')).toBeHidden();
 });
 
 // Regression test: the Julia panel's own pan/zoom is independent of the
@@ -208,10 +208,10 @@ test('loading directly into dual view via a share URL sizes both backing stores 
   await expect(gpuError).toBeHidden();
 
   const sizes = await page.evaluate(() => ({
-    gfxCssWidth: document.getElementById('gfx').getBoundingClientRect().width,
-    gfxBackingWidth: document.getElementById('gfx').width,
-    juliaCssWidth: document.getElementById('gfxJulia').getBoundingClientRect().width,
-    juliaBackingWidth: document.getElementById('gfxJulia').width,
+    gfxCssWidth: document.getElementById('mandelbrotGfx').getBoundingClientRect().width,
+    gfxBackingWidth: document.getElementById('mandelbrotGfx').width,
+    juliaCssWidth: document.getElementById('juliaGfx').getBoundingClientRect().width,
+    juliaBackingWidth: document.getElementById('juliaGfx').width,
   }));
 
   const dpr = await page.evaluate(() => window.devicePixelRatio);

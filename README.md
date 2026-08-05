@@ -18,7 +18,7 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 - **Shareable view URLs** — copy a link that reproduces the exact view, iterations,
   palette, and mode you're looking at.
 
-  Example: https://isghe.github.io/mandelbrot/?mx=-0.7445137502875607&my=0.16445045543801942&mscale=0.007380653541488702&v=5
+  Example: https://isghe.github.io/mandelbrot/?mx=-0.7445137502875607&my=0.16445045543801942&mscale=0.007380653541488702&v=6
 
   ![Spiral view reached via a shared URL](examples/share-example.png)
 
@@ -111,11 +111,16 @@ Mandelbrot/Julia panel visibility) is persisted to `localStorage` and restored o
 next page load, so the app reopens where you left it. Settings-panel visibility (the ☰
 toggle / **H** key) is a session-only preference and is not persisted.
 
-Opening a URL with share parameters (`?mx=...&my=...&mscale=...&v=5`, etc. — a `v` of at
-least 3 is required for the current param names to be recognized; older links using the
-pre-rename `?x=...&y=...&scale=...` names, with no `v=` at all, still work) always takes
-precedence over `localStorage`: any field present in the URL is applied, and any field
-*not* present falls back to the app's built-in defaults, not to whatever was previously
+Opening a URL with share parameters (`?mx=...&my=...&mscale=...&v=6`, etc.) always takes
+precedence over `localStorage`. Param names have been renamed as the app grew, gated on
+`v`: the pan/zoom names `mx`/`my`/`mscale` (and Julia's `sx`/`sy`) need `v` ≥ 3 — Julia's
+own `jscale` has always used that name; the Mandelbrot quality/look/overlay names
+`miter`/`mpalette`/`mprogressive`/`msmooth`/`mgrid`/`mcenterMark` need `v` ≥ 6 — their
+Julia counterparts `jiter`/`jpalette`/`jprogressive`/`jsmooth`/`jgrid`/`jcenterMark` have
+always used this prefix. Older links
+using the pre-rename `?iter=...&palette=...` (Mandelbrot) or `?x=...&y=...&scale=...`
+names, with a lower or absent `v=`, still work: any field present in the URL is applied,
+and any field *not* present falls back to the app's built-in defaults, not to whatever was previously
 saved locally in that browser. In other words, a partial share link is not merged with
 your existing local settings — it's applied against a clean slate.
 

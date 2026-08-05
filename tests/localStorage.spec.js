@@ -34,7 +34,7 @@ async function waitForPersisted(page, field, value) {
 }
 
 test('changing a setting persists it to localStorage', async ({ page }) => {
-  await page.selectOption('#paletteType', '1');
+  await page.selectOption('#mandelbrotPaletteType', '1');
   await waitForPersisted(page, 'mandelbrotPanel.paletteType', 1);
 
   const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
@@ -42,7 +42,7 @@ test('changing a setting persists it to localStorage', async ({ page }) => {
 });
 
 test('reloading the page restores persisted settings', async ({ page }) => {
-  await page.selectOption('#paletteType', '1');
+  await page.selectOption('#mandelbrotPaletteType', '1');
   await page.click('#showJulia');
   await waitForPersisted(page, 'mandelbrotPanel.paletteType', 1);
   await waitForPersisted(page, 'showJulia', 1);
@@ -51,7 +51,7 @@ test('reloading the page restores persisted settings', async ({ page }) => {
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
-  await expect(page.locator('#paletteType')).toHaveValue('1');
+  await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('1');
   await expect(page.locator('#showJulia')).toBeChecked();
 });
 
@@ -62,8 +62,8 @@ test('the Mandelbrot and Julia panels persist independent palette/iterations acr
   await page.click('#showJulia');
   await page.waitForTimeout(200);
 
-  await page.selectOption('#paletteType', '1');
-  await page.selectOption('#paletteTypeJulia', '2');
+  await page.selectOption('#mandelbrotPaletteType', '1');
+  await page.selectOption('#juliaPaletteType', '2');
   await waitForPersisted(page, 'mandelbrotPanel.paletteType', 1);
   await waitForPersisted(page, 'juliaPanel.paletteType', 2);
 
@@ -71,8 +71,8 @@ test('the Mandelbrot and Julia panels persist independent palette/iterations acr
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
-  await expect(page.locator('#paletteType')).toHaveValue('1');
-  await expect(page.locator('#paletteTypeJulia')).toHaveValue('2');
+  await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('1');
+  await expect(page.locator('#juliaPaletteType')).toHaveValue('2');
 });
 
 test('reloading the page restores the Julia panel\'s own dragged/zoomed position, not just juliaSeed', async ({ page }) => {
@@ -114,13 +114,13 @@ test('reloading the page restores the Julia panel\'s own dragged/zoomed position
 });
 
 test('Reset returns to the original defaults, not the persisted state', async ({ page }) => {
-  await page.selectOption('#paletteType', '1');
+  await page.selectOption('#mandelbrotPaletteType', '1');
   await waitForPersisted(page, 'mandelbrotPanel.paletteType', 1);
   await page.reload();
-  await expect(page.locator('#paletteType')).toHaveValue('1');
+  await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('1');
 
   await page.click('#resetBtn');
-  await expect(page.locator('#paletteType')).toHaveValue('4');
+  await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('4');
 });
 
 test('a corrupted localStorage entry does not break startup', async ({ page }) => {

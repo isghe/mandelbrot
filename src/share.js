@@ -17,7 +17,7 @@
 // v4: localStorage only (URL params unaffected) — `mandelbrotPanelCenter`/
 // `mandelbrotPanelScale` nest under `mandelbrotPanel: { center, scale }`,
 // and `juliaPanelCenter`/`juliaPanelScale` under `juliaPanel: { center,
-// scale }`. `juliaSeed` stays flat: it's the Julia constant, not a panel's
+// scale }`. `juliaSeed` stays flat: it's the Julia seed, not a panel's
 // own view. loadSettingsData() flattens the nested shape back out so every
 // other call site keeps using the flat field names.
 //
@@ -26,15 +26,31 @@
 // `centerMarker`) become independent from the Mandelbrot panel's (see the
 // dual-panel state-symmetry work — Julia gained its own controls and, in
 // Mossa 3, its own undo history). localStorage: these six fields join
-// `center`/`scale` inside `mandelbrotPanel{}`/`juliaPanel{}`; the flat
-// top-level `maxIter`/`paletteType`/`smoothColoring`/`progressiveMode`/
-// `gridOverlay`/`centerMarker` names keep meaning "the Mandelbrot panel's"
-// (unchanged) once flattened back out. v<5 data had no independent Julia
-// values, so those flat legacy fields are promoted onto *both* panels on
-// migration — they used to apply to whichever canvas rendered. URL: new
-// `j`-prefixed params (`jiter`/`jpalette`/`jprogressive`/`jsmooth`, plus
-// `jgrid`/`jcenterMark`) mirror the existing `jscale` for Julia's own view.
-const SCHEMA_VERSION = 5;
+// `center`/`scale` inside `mandelbrotPanel{}`/`juliaPanel{}` (nested keys
+// stay bare — see below). v<5 data had no independent Julia values, so
+// those flat legacy fields are promoted onto *both* panels on migration —
+// they used to apply to whichever canvas rendered. URL: new `j`-prefixed
+// params (`jiter`/`jpalette`/`jprogressive`/`jsmooth`, plus `jgrid`/
+// `jcenterMark`) mirror the existing `jscale` for Julia's own view.
+//
+// Not a wire-format bump (the nested localStorage keys and the URL param
+// names above are untouched): the flat top-level `maxIter`/`paletteType`/
+// `progressiveMode`/`smoothColoring`/`gridOverlay`/`centerMarker` names
+// this module's flat bridging layer (buildShareUrl/parseShareParams/
+// settingsData, and mandelbrot.js's shareState/flattenSnapshotForShare/
+// restoreSettings) exposes for the Mandelbrot side were renamed to
+// `mandelbrotPanelX`, matching `juliaPanelX`. loadSettingsData() renames
+// any surviving bare copies unconditionally at the end, after the v<5/v>=4
+// branches above (see the comment there).
+//
+// v6: URL only (localStorage unaffected) — the six short Mandelbrot URL
+// params `iter`/`palette`/`progressive`/`smooth`/`grid`/`centerMark` become
+// `miter`/`mpalette`/`mprogressive`/`msmooth`/`mgrid`/`mcenterMark`, mirroring
+// the already-prefixed `jiter`/`jpalette`/`jprogressive`/`jsmooth`/`jgrid`/
+// `jcenterMark` and matching `mx`/`my`/`mscale`. parseShareParams() gates on
+// `schemaVersion < 6` (same idiom as the v3 x/y->mx/my rename) so older
+// shared links keep decoding with the bare names.
+const SCHEMA_VERSION = 6;
 
 // Only encodes fields that differ from `initialState`, so the "Reset to
 // initial condition" state always maps to a bare URL and the address bar
@@ -59,23 +75,23 @@ function buildShareUrl(state, initialState, origin, pathname) {
     params.set("jpy", state.juliaPanelCenter.y);
   }
   const changedFields = [
-    ["iter", "maxIter"],
+    ["miter", "mandelbrotPanelMaxIter"],
     ["jscale", "juliaPanelScale"],
     ["jiter", "juliaPanelMaxIter"],
-    ["palette", "paletteType"],
+    ["mpalette", "mandelbrotPanelPaletteType"],
     ["jpalette", "juliaPanelPaletteType"],
-    ["progressive", "progressiveMode"],
+    ["mprogressive", "mandelbrotPanelProgressiveMode"],
     ["jprogressive", "juliaPanelProgressiveMode"],
     ["mscale", "mandelbrotPanelScale"],
-    ["smooth", "smoothColoring"],
+    ["msmooth", "mandelbrotPanelSmoothColoring"],
     ["jsmooth", "juliaPanelSmoothColoring"],
   ];
   changedFields.forEach(([name, field]) => setIfChanged(name, state[field], init[field]));
   // Overlay/panel display preferences aren't part of initialState (see the
   // comment on mandelbrot.js's on*Change handlers); Reset always zeroes them
   // (showMandelbrot back to its default of 1, the rest back to 0).
-  if (state.gridOverlay) params.set("grid", state.gridOverlay);
-  if (state.centerMarker) params.set("centerMark", state.centerMarker);
+  if (state.mandelbrotPanelGridOverlay) params.set("mgrid", state.mandelbrotPanelGridOverlay);
+  if (state.mandelbrotPanelCenterMarker) params.set("mcenterMark", state.mandelbrotPanelCenterMarker);
   if (state.juliaPanelGridOverlay) params.set("jgrid", state.juliaPanelGridOverlay);
   if (state.juliaPanelCenterMarker) params.set("jcenterMark", state.juliaPanelCenterMarker);
   if (state.juliaMarker) params.set("juliaMark", state.juliaMarker);
@@ -123,6 +139,15 @@ function parseShareParams(search) {
   const [xName, yName] = schemaVersion < 3 ? ["x", "y"] : ["mx", "my"];
   const [sxName, syName] = schemaVersion < 3 ? ["jx", "jy"] : ["sx", "sy"];
   const scaleName = schemaVersion < 3 ? "scale" : "mscale";
+  // v6 renamed the six short Mandelbrot params below to be m-prefixed,
+  // mirroring the j-prefixed Julia equivalents; older URLs still use the
+  // pre-rename bare names.
+  const iterName = schemaVersion < 6 ? "iter" : "miter";
+  const paletteName = schemaVersion < 6 ? "palette" : "mpalette";
+  const progressiveName = schemaVersion < 6 ? "progressive" : "mprogressive";
+  const smoothName = schemaVersion < 6 ? "smooth" : "msmooth";
+  const gridName = schemaVersion < 6 ? "grid" : "mgrid";
+  const centerMarkName = schemaVersion < 6 ? "centerMark" : "mcenterMark";
 
   const x = num(xName), y = num(yName);
   if (x !== undefined && y !== undefined) s.mandelbrotPanelCenter = { x, y };
@@ -132,8 +157,8 @@ function parseShareParams(search) {
   if (jpx !== undefined && jpy !== undefined) s.juliaPanelCenter = { x: jpx, y: jpy };
 
   const presentFields = [
-    ["centerMarker", "centerMark"],
-    ["gridOverlay", "grid"],
+    ["mandelbrotPanelCenterMarker", centerMarkName],
+    ["mandelbrotPanelGridOverlay", gridName],
     ["juliaPanelCenterMarker", "jcenterMark"],
     ["juliaPanelGridOverlay", "jgrid"],
     ["juliaMarker", "juliaMark"],
@@ -142,11 +167,11 @@ function parseShareParams(search) {
     ["juliaPanelPaletteType", "jpalette"],
     ["juliaPanelProgressiveMode", "jprogressive"],
     ["juliaPanelSmoothColoring", "jsmooth"],
-    ["maxIter", "iter"],
-    ["paletteType", "palette"],
-    ["progressiveMode", "progressive"],
+    ["mandelbrotPanelMaxIter", iterName],
+    ["mandelbrotPanelPaletteType", paletteName],
+    ["mandelbrotPanelProgressiveMode", progressiveName],
     ["mandelbrotPanelScale", scaleName],
-    ["smoothColoring", "smooth"],
+    ["mandelbrotPanelSmoothColoring", smoothName],
   ];
   presentFields.forEach(([field, paramName]) => setIfPresent(field, paramName));
 
@@ -173,12 +198,12 @@ function settingsData(state) {
     mandelbrotPanel: {
       center: { x: state.mandelbrotPanelCenter.x, y: state.mandelbrotPanelCenter.y },
       scale: state.mandelbrotPanelScale,
-      maxIter: state.maxIter,
-      paletteType: state.paletteType,
-      smoothColoring: state.smoothColoring,
-      progressiveMode: state.progressiveMode,
-      gridOverlay: state.gridOverlay,
-      centerMarker: state.centerMarker,
+      maxIter: state.mandelbrotPanelMaxIter,
+      paletteType: state.mandelbrotPanelPaletteType,
+      smoothColoring: state.mandelbrotPanelSmoothColoring,
+      progressiveMode: state.mandelbrotPanelProgressiveMode,
+      gridOverlay: state.mandelbrotPanelGridOverlay,
+      centerMarker: state.mandelbrotPanelCenterMarker,
     },
     showMandelbrot: state.showMandelbrot,
     showJulia: state.showJulia,
@@ -269,9 +294,9 @@ function loadSettingsData(parsed) {
       ...rest,
       ...flattenPanel(mandelbrotPanel, [
         ["center", "mandelbrotPanelCenter"], ["scale", "mandelbrotPanelScale"],
-        ["maxIter", "maxIter"], ["paletteType", "paletteType"],
-        ["smoothColoring", "smoothColoring"], ["progressiveMode", "progressiveMode"],
-        ["gridOverlay", "gridOverlay"], ["centerMarker", "centerMarker"],
+        ["maxIter", "mandelbrotPanelMaxIter"], ["paletteType", "mandelbrotPanelPaletteType"],
+        ["smoothColoring", "mandelbrotPanelSmoothColoring"], ["progressiveMode", "mandelbrotPanelProgressiveMode"],
+        ["gridOverlay", "mandelbrotPanelGridOverlay"], ["centerMarker", "mandelbrotPanelCenterMarker"],
       ]),
       ...flattenPanel(juliaPanel, [
         ["center", "juliaPanelCenter"], ["scale", "juliaPanelScale"],
@@ -281,6 +306,32 @@ function loadSettingsData(parsed) {
       ]),
     };
   }
+
+  // Not a schema-version migration (the wire format for these six fields
+  // never changes — see below): mandelbrot.js's shareState()/
+  // flattenSnapshotForShare()/restoreSettings() used to consume these under
+  // bare names, matching how they were always written (pre-v5 flat top
+  // level, or v5's flattenPanel above producing bare names). They now
+  // expect mandelbrotPanelX, matching juliaPanelX's naming. Both branches
+  // above already produce mandelbrotPanelX for v>=5 data (via the updated
+  // flattenPanel keyMap); this unconditional final step only has bare
+  // survivors left to rename for v<5 data, where the fields were never
+  // nested (v<4) or where v4 nested just center/scale, not these six
+  // (v<5 promotion above reads them by their true bare legacy name, so it
+  // must run before this step, which it does).
+  const {
+    maxIter, paletteType, progressiveMode, smoothColoring, gridOverlay, centerMarker,
+    ...withoutBareMandelbrotFields
+  } = result;
+  result = {
+    ...withoutBareMandelbrotFields,
+    ...(maxIter !== undefined && { mandelbrotPanelMaxIter: maxIter }),
+    ...(paletteType !== undefined && { mandelbrotPanelPaletteType: paletteType }),
+    ...(progressiveMode !== undefined && { mandelbrotPanelProgressiveMode: progressiveMode }),
+    ...(smoothColoring !== undefined && { mandelbrotPanelSmoothColoring: smoothColoring }),
+    ...(gridOverlay !== undefined && { mandelbrotPanelGridOverlay: gridOverlay }),
+    ...(centerMarker !== undefined && { mandelbrotPanelCenterMarker: centerMarker }),
+  };
   return result;
 }
 

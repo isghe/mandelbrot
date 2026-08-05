@@ -25,14 +25,14 @@ test.beforeEach(async ({ page }) => {
     );
   }
 
-  await expect(page.locator('#gridOverlay')).not.toBeChecked();
-  await expect(page.locator('#centerMarker')).not.toBeChecked();
+  await expect(page.locator('#mandelbrotGridOverlay')).not.toBeChecked();
+  await expect(page.locator('#mandelbrotCenterMarker')).not.toBeChecked();
   await expect(page.locator('#juliaMarker')).not.toBeChecked();
 });
 
 test('the overlay backing store matches the viewport, scaled by devicePixelRatio', async ({ page }) => {
   const dims = await page.evaluate(() => {
-    const c = document.getElementById('overlay');
+    const c = document.getElementById('mandelbrotOverlay');
     return { w: c.width, h: c.height, dpr: window.devicePixelRatio || 1 };
   });
   expect(dims.w).toBe(Math.round(VIEWPORT.width * dims.dpr));
@@ -41,7 +41,7 @@ test('the overlay backing store matches the viewport, scaled by devicePixelRatio
 
 test('enabling the grid draws non-transparent pixels on the overlay canvas', async ({ page }) => {
   const before = await page.evaluate(() => {
-    const c = document.getElementById('overlay');
+    const c = document.getElementById('mandelbrotOverlay');
     const ctx = c.getContext('2d');
     const data = ctx.getImageData(0, 0, c.width, c.height).data;
     let opaque = 0;
@@ -50,11 +50,11 @@ test('enabling the grid draws non-transparent pixels on the overlay canvas', asy
   });
   expect(before).toBe(0);
 
-  await page.check('#gridOverlay');
+  await page.check('#mandelbrotGridOverlay');
   await page.waitForTimeout(200);
 
   const after = await page.evaluate(() => {
-    const c = document.getElementById('overlay');
+    const c = document.getElementById('mandelbrotOverlay');
     const ctx = c.getContext('2d');
     const data = ctx.getImageData(0, 0, c.width, c.height).data;
     let opaque = 0;
@@ -67,11 +67,11 @@ test('enabling the grid draws non-transparent pixels on the overlay canvas', asy
 test('grid checkbox toggles visible pixels and round-trips to baseline', async ({ page }) => {
   const baseline = await fractalShot(page);
 
-  await page.check('#gridOverlay');
+  await page.check('#mandelbrotGridOverlay');
   await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(false);
 
-  await page.uncheck('#gridOverlay');
+  await page.uncheck('#mandelbrotGridOverlay');
   await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
@@ -79,11 +79,11 @@ test('grid checkbox toggles visible pixels and round-trips to baseline', async (
 test('center marker checkbox toggles visible pixels and round-trips to baseline', async ({ page }) => {
   const baseline = await fractalShot(page);
 
-  await page.check('#centerMarker');
+  await page.check('#mandelbrotCenterMarker');
   await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(false);
 
-  await page.uncheck('#centerMarker');
+  await page.uncheck('#mandelbrotCenterMarker');
   await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
@@ -104,19 +104,19 @@ test('Julia marker checkbox toggles visible pixels with the Julia panel hidden t
 test('toggling overlay checkboxes does not enable Back/Forward', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
 
-  await page.check('#gridOverlay');
-  await page.check('#centerMarker');
+  await page.check('#mandelbrotGridOverlay');
+  await page.check('#mandelbrotCenterMarker');
   await page.check('#juliaMarker');
-  await page.uncheck('#gridOverlay');
+  await page.uncheck('#mandelbrotGridOverlay');
   await page.waitForTimeout(200);
 
   await expect(backBtn).toBeDisabled();
 });
 
 test('the grid overlay redraws to match a new view after pan/zoom', async ({ page }) => {
-  await page.check('#gridOverlay');
+  await page.check('#mandelbrotGridOverlay');
   await page.waitForTimeout(200);
-  const box = await page.locator('#gfx').boundingBox();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
@@ -132,15 +132,15 @@ test('the grid overlay redraws to match a new view after pan/zoom', async ({ pag
 });
 
 test('Reset unchecks the grid/marker overlay checkboxes', async ({ page }) => {
-  await page.check('#gridOverlay');
-  await page.check('#centerMarker');
+  await page.check('#mandelbrotGridOverlay');
+  await page.check('#mandelbrotCenterMarker');
   await page.check('#juliaMarker');
   await page.waitForTimeout(200);
 
   await page.click('#resetBtn');
   await page.waitForTimeout(200);
 
-  await expect(page.locator('#gridOverlay')).not.toBeChecked();
-  await expect(page.locator('#centerMarker')).not.toBeChecked();
+  await expect(page.locator('#mandelbrotGridOverlay')).not.toBeChecked();
+  await expect(page.locator('#mandelbrotCenterMarker')).not.toBeChecked();
   await expect(page.locator('#juliaMarker')).not.toBeChecked();
 });
