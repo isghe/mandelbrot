@@ -111,13 +111,15 @@ Mandelbrot/Julia panel visibility) is persisted to `localStorage` and restored o
 next page load, so the app reopens where you left it. Settings-panel visibility (the ☰
 toggle / **H** key) is a session-only preference and is not persisted.
 
-Opening a URL with share parameters (`?mx=...&my=...&mscale=...&v=6`, etc. — a `v` of at
-least 6 is required for the current `miter`/`mpalette`/`mprogressive`/`msmooth`/`mgrid`/
-`mcenterMark` param names to be recognized; older links using the pre-rename
-`?iter=...&palette=...` (and even older `?x=...&y=...&scale=...`) names, with a lower or
-absent `v=`, still work) always takes
-precedence over `localStorage`: any field present in the URL is applied, and any field
-*not* present falls back to the app's built-in defaults, not to whatever was previously
+Opening a URL with share parameters (`?mx=...&my=...&mscale=...&v=6`, etc.) always takes
+precedence over `localStorage`. Param names have been renamed as the app grew, gated on
+`v`: the pan/zoom names `mx`/`my`/`mscale` (and Julia's `sx`/`sy`/`jscale`) need `v` ≥ 3;
+the Mandelbrot quality/look/overlay names `miter`/`mpalette`/`mprogressive`/`msmooth`/
+`mgrid`/`mcenterMark` need `v` ≥ 6 — their Julia counterparts `jiter`/`jpalette`/
+`jprogressive`/`jsmooth`/`jgrid`/`jcenterMark` have always used this prefix. Older links
+using the pre-rename `?iter=...&palette=...` (Mandelbrot) or `?x=...&y=...&scale=...`
+names, with a lower or absent `v=`, still work: any field present in the URL is applied,
+and any field *not* present falls back to the app's built-in defaults, not to whatever was previously
 saved locally in that browser. In other words, a partial share link is not merged with
 your existing local settings — it's applied against a clean slate.
 
