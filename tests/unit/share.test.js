@@ -5,7 +5,7 @@ import { share } from '../../src/share.js';
 const initialState = {
   mandelbrotPanelCenter: { x: -0.5, y: 0 },
   mandelbrotPanelScale: 3.0,
-  maxIter: 256,
+  mandelbrotPanelMaxIter: 256,
   juliaSeed: { x: -0.8, y: 0.156 },
   juliaPanelCenter: { x: -0.8, y: 0.156 },
   juliaPanelScale: 3.0,
@@ -13,9 +13,9 @@ const initialState = {
   juliaPanelPaletteType: 4,
   juliaPanelProgressiveMode: 0,
   juliaPanelSmoothColoring: 0,
-  paletteType: 4,
-  progressiveMode: 0,
-  smoothColoring: 0,
+  mandelbrotPanelPaletteType: 4,
+  mandelbrotPanelProgressiveMode: 0,
+  mandelbrotPanelSmoothColoring: 0,
 };
 
 function baseState(overrides = {}) {
@@ -24,8 +24,8 @@ function baseState(overrides = {}) {
     mandelbrotPanelCenter: { ...initialState.mandelbrotPanelCenter },
     juliaSeed: { ...initialState.juliaSeed },
     juliaPanelCenter: { ...initialState.juliaPanelCenter },
-    gridOverlay: 0,
-    centerMarker: 0,
+    mandelbrotPanelGridOverlay: 0,
+    mandelbrotPanelCenterMarker: 0,
     juliaPanelGridOverlay: 0,
     juliaPanelCenterMarker: 0,
     juliaMarker: 0,
@@ -74,7 +74,7 @@ test('buildShareUrl encodes juliaSeed as sx/sy when it differs', () => {
 
 test('buildShareUrl encodes overlay display flags whenever truthy, regardless of initialState', () => {
   const url = share.buildShareUrl(
-    baseState({ gridOverlay: 1, centerMarker: 1, juliaMarker: 1 }),
+    baseState({ mandelbrotPanelGridOverlay: 1, mandelbrotPanelCenterMarker: 1, juliaMarker: 1 }),
     initialState,
     'https://example.com',
     '/'
@@ -187,14 +187,14 @@ test('buildShareUrl encodes the Julia panel\'s own grid/center-marker overlay fl
 test('parseShareParams (v3) maps scalar params to their field names', () => {
   const s = share.parseShareParams('?v=3&iter=999&mandelbrot=0&julia=1&palette=2&progressive=1&smooth=1&grid=1&centerMark=1&juliaMark=1&mscale=1.5');
   assert.deepStrictEqual(s, {
-    maxIter: 999,
+    mandelbrotPanelMaxIter: 999,
     showMandelbrot: 0,
     showJulia: 1,
-    paletteType: 2,
-    progressiveMode: 1,
-    smoothColoring: 1,
-    gridOverlay: 1,
-    centerMarker: 1,
+    mandelbrotPanelPaletteType: 2,
+    mandelbrotPanelProgressiveMode: 1,
+    mandelbrotPanelSmoothColoring: 1,
+    mandelbrotPanelGridOverlay: 1,
+    mandelbrotPanelCenterMarker: 1,
     juliaMarker: 1,
     mandelbrotPanelScale: 1.5,
   });
@@ -257,13 +257,13 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
   const state = baseState({
     mandelbrotPanelCenter: { x: -1.25, y: 0.1 },
     mandelbrotPanelScale: 1.5,
-    maxIter: 999,
+    mandelbrotPanelMaxIter: 999,
     juliaSeed: { x: -0.3, y: 0.9 },
-    paletteType: 2,
-    progressiveMode: 1,
-    smoothColoring: 1,
-    gridOverlay: 1,
-    centerMarker: 1,
+    mandelbrotPanelPaletteType: 2,
+    mandelbrotPanelProgressiveMode: 1,
+    mandelbrotPanelSmoothColoring: 1,
+    mandelbrotPanelGridOverlay: 1,
+    mandelbrotPanelCenterMarker: 1,
     juliaMarker: 1,
     showMandelbrot: 0,
     showJulia: 1,
@@ -274,13 +274,13 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
   assert.deepStrictEqual(parsed, {
     mandelbrotPanelCenter: { x: -1.25, y: 0.1 },
     mandelbrotPanelScale: 1.5,
-    maxIter: 999,
+    mandelbrotPanelMaxIter: 999,
     juliaSeed: { x: -0.3, y: 0.9 },
-    paletteType: 2,
-    progressiveMode: 1,
-    smoothColoring: 1,
-    gridOverlay: 1,
-    centerMarker: 1,
+    mandelbrotPanelPaletteType: 2,
+    mandelbrotPanelProgressiveMode: 1,
+    mandelbrotPanelSmoothColoring: 1,
+    mandelbrotPanelGridOverlay: 1,
+    mandelbrotPanelCenterMarker: 1,
     juliaMarker: 1,
     showMandelbrot: 0,
     showJulia: 1,
@@ -288,7 +288,7 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
 });
 
 test('settingsData produces a plain JSON-serializable snapshot of state', () => {
-  const state = baseState({ mandelbrotPanelScale: 1.5, gridOverlay: 1 });
+  const state = baseState({ mandelbrotPanelScale: 1.5, mandelbrotPanelGridOverlay: 1 });
   const data = share.settingsData(state);
   assert.deepStrictEqual(data, {
     v: 5,
@@ -414,18 +414,67 @@ test('loadSettingsData (v<5) promotes the old shared flat maxIter/paletteType/et
     showJulia: 0,
   };
   const loaded = share.loadSettingsData(v4);
-  assert.strictEqual(loaded.maxIter, 999);
   assert.strictEqual(loaded.juliaPanelMaxIter, 999);
-  assert.strictEqual(loaded.paletteType, 2);
   assert.strictEqual(loaded.juliaPanelPaletteType, 2);
-  assert.strictEqual(loaded.smoothColoring, 1);
   assert.strictEqual(loaded.juliaPanelSmoothColoring, 1);
-  assert.strictEqual(loaded.progressiveMode, 1);
   assert.strictEqual(loaded.juliaPanelProgressiveMode, 1);
-  assert.strictEqual(loaded.gridOverlay, 1);
   assert.strictEqual(loaded.juliaPanelGridOverlay, 1);
-  assert.strictEqual(loaded.centerMarker, 1);
   assert.strictEqual(loaded.juliaPanelCenterMarker, 1);
+});
+
+test('loadSettingsData (v<5 data, pre-mandelbrotPanelX rename) renames the surviving bare top-level fields to mandelbrotPanelX', () => {
+  const v4 = {
+    v: 4,
+    mandelbrotPanel: { center: { x: -0.5, y: 0 }, scale: 3.0 },
+    juliaPanel: { center: { x: -0.8, y: 0.156 }, scale: 3.0 },
+    juliaSeed: { x: -0.8, y: 0.156 },
+    maxIter: 999,
+    paletteType: 2,
+    smoothColoring: 1,
+    progressiveMode: 1,
+    gridOverlay: 1,
+    centerMarker: 1,
+    showMandelbrot: 1,
+    showJulia: 0,
+  };
+  const loaded = share.loadSettingsData(v4);
+  assert.strictEqual(loaded.mandelbrotPanelMaxIter, 999);
+  assert.strictEqual(loaded.mandelbrotPanelPaletteType, 2);
+  assert.strictEqual(loaded.mandelbrotPanelSmoothColoring, 1);
+  assert.strictEqual(loaded.mandelbrotPanelProgressiveMode, 1);
+  assert.strictEqual(loaded.mandelbrotPanelGridOverlay, 1);
+  assert.strictEqual(loaded.mandelbrotPanelCenterMarker, 1);
+  assert.strictEqual(loaded.maxIter, undefined);
+  assert.strictEqual(loaded.paletteType, undefined);
+  assert.strictEqual(loaded.smoothColoring, undefined);
+  assert.strictEqual(loaded.progressiveMode, undefined);
+  assert.strictEqual(loaded.gridOverlay, undefined);
+  assert.strictEqual(loaded.centerMarker, undefined);
+});
+
+test('loadSettingsData (ancient unnested legacy blob) renames the bare top-level fields to mandelbrotPanelX too', () => {
+  const loaded = share.loadSettingsData(legacyV1Blob(0));
+  assert.strictEqual(loaded.mandelbrotPanelMaxIter, 256);
+  assert.strictEqual(loaded.mandelbrotPanelPaletteType, 4);
+  assert.strictEqual(loaded.mandelbrotPanelSmoothColoring, 0);
+  assert.strictEqual(loaded.mandelbrotPanelProgressiveMode, 0);
+  assert.strictEqual(loaded.mandelbrotPanelGridOverlay, 0);
+  assert.strictEqual(loaded.mandelbrotPanelCenterMarker, 0);
+  assert.strictEqual(loaded.maxIter, undefined);
+  assert.strictEqual(loaded.paletteType, undefined);
+});
+
+test('settingsData -> loadSettingsData round-trips the Mandelbrot side under mandelbrotPanelX with no stray bare fields', () => {
+  const stored = share.settingsData(baseState({ mandelbrotPanelMaxIter: 999, mandelbrotPanelPaletteType: 2 }));
+  const loaded = share.loadSettingsData(stored);
+  assert.strictEqual(loaded.mandelbrotPanelMaxIter, 999);
+  assert.strictEqual(loaded.mandelbrotPanelPaletteType, 2);
+  assert.strictEqual(loaded.maxIter, undefined);
+  assert.strictEqual(loaded.paletteType, undefined);
+  assert.strictEqual(loaded.progressiveMode, undefined);
+  assert.strictEqual(loaded.smoothColoring, undefined);
+  assert.strictEqual(loaded.gridOverlay, undefined);
+  assert.strictEqual(loaded.centerMarker, undefined);
 });
 
 test('loadSettingsData rejects an unknown future version', () => {

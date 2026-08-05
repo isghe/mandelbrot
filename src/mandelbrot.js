@@ -352,12 +352,12 @@ class MandelbrotApp {
     return {
       mandelbrotPanelCenter: this.mandelbrotPanel.center,
       mandelbrotPanelScale: this.mandelbrotPanel.scale,
-      maxIter: this.mandelbrotPanel.maxIter,
-      paletteType: this.mandelbrotPanel.paletteType,
-      progressiveMode: this.mandelbrotPanel.progressiveMode,
-      smoothColoring: this.mandelbrotPanel.smoothColoring,
-      gridOverlay: this.mandelbrotPanel.gridOverlay,
-      centerMarker: this.mandelbrotPanel.centerMarker,
+      mandelbrotPanelMaxIter: this.mandelbrotPanel.maxIter,
+      mandelbrotPanelPaletteType: this.mandelbrotPanel.paletteType,
+      mandelbrotPanelProgressiveMode: this.mandelbrotPanel.progressiveMode,
+      mandelbrotPanelSmoothColoring: this.mandelbrotPanel.smoothColoring,
+      mandelbrotPanelGridOverlay: this.mandelbrotPanel.gridOverlay,
+      mandelbrotPanelCenterMarker: this.mandelbrotPanel.centerMarker,
       juliaSeed: this.juliaSeed,
       juliaPanelCenter: this.juliaPanelCenter,
       juliaPanelScale: this.juliaPanelScale,
@@ -445,10 +445,10 @@ class MandelbrotApp {
     return {
       mandelbrotPanelCenter: s.mandelbrotPanel.center,
       mandelbrotPanelScale: s.mandelbrotPanel.scale,
-      maxIter: s.mandelbrotPanel.maxIter,
-      paletteType: s.mandelbrotPanel.paletteType,
-      progressiveMode: s.mandelbrotPanel.progressiveMode,
-      smoothColoring: s.mandelbrotPanel.smoothColoring,
+      mandelbrotPanelMaxIter: s.mandelbrotPanel.maxIter,
+      mandelbrotPanelPaletteType: s.mandelbrotPanel.paletteType,
+      mandelbrotPanelProgressiveMode: s.mandelbrotPanel.progressiveMode,
+      mandelbrotPanelSmoothColoring: s.mandelbrotPanel.smoothColoring,
       juliaSeed: s.juliaSeed,
       juliaPanelCenter: s.juliaPanel.center,
       juliaPanelScale: s.juliaPanel.scale,
@@ -477,8 +477,8 @@ class MandelbrotApp {
         this[field] = new DOMPointReadOnly(p.x, p.y);
       }
     };
-    const restorePanelNumber = (field) => {
-      if (typeof s[field] === "number") this.mandelbrotPanel[field] = s[field];
+    const restorePanelNumber = (field, panelField) => {
+      if (typeof s[field] === "number") this.mandelbrotPanel[panelField] = s[field];
     };
 
     // "mandelbrotPanelCenter"/"mandelbrotPanelScale" (and the per-panel
@@ -500,11 +500,16 @@ class MandelbrotApp {
       "juliaPanelSmoothColoring", "juliaPanelGridOverlay", "juliaPanelCenterMarker",
     ];
     const panelNumberFields = [
-      "centerMarker", "gridOverlay", "maxIter", "paletteType", "progressiveMode", "smoothColoring",
+      ["mandelbrotPanelCenterMarker", "centerMarker"],
+      ["mandelbrotPanelGridOverlay", "gridOverlay"],
+      ["mandelbrotPanelMaxIter", "maxIter"],
+      ["mandelbrotPanelPaletteType", "paletteType"],
+      ["mandelbrotPanelProgressiveMode", "progressiveMode"],
+      ["mandelbrotPanelSmoothColoring", "smoothColoring"],
     ];
     pointFields.forEach(restorePoint);
     numberFields.forEach(restoreNumber);
-    panelNumberFields.forEach(restorePanelNumber);
+    panelNumberFields.forEach(([field, panelField]) => restorePanelNumber(field, panelField));
 
     this.mandelbrotPanel.pivot = this.mandelbrotPanel.center;
 
