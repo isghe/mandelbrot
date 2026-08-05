@@ -384,7 +384,7 @@ test('loadSettingsData (v3) passes flat mandelbrotPanelCenter/Scale and juliaPan
   assert.strictEqual(loaded.juliaPanel, undefined);
 });
 
-test('loadSettingsData (v5) flattens mandelbrotPanel/juliaPanel back into the pre-v4 field names, including the new per-panel quality/look fields', () => {
+test('loadSettingsData (v5) flattens mandelbrotPanel/juliaPanel back into the flat mandelbrotPanelX/juliaPanelX field names, including the per-panel quality/look fields', () => {
   const stored = share.settingsData(baseState({ mandelbrotPanelScale: 1.5, juliaPanelPaletteType: 2 }));
   const loaded = share.loadSettingsData(stored);
   assert.deepStrictEqual(loaded.mandelbrotPanelCenter, { x: -0.5, y: 0 });
