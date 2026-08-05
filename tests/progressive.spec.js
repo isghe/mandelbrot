@@ -24,8 +24,12 @@ test.beforeEach(async ({ page }) => {
 // next frame, so the frame that would render at exactly maxIter was skipped
 // and the ramp visibly stalled just short of the target iteration count.
 test('progressive mode ramp actually renders a frame at maxIter', async ({ page }) => {
+  // window.app.lastDisplayIter reflects whichever panel rendered last each
+  // frame — with both panels shown by default, that's ambiguous (it'd track
+  // Julia's own ramp, not Mandelbrot's, since Julia renders after Mandelbrot
+  // each frame). Read Mandelbrot's own field directly instead.
   await expect.poll(async () => {
-    return page.evaluate(() => window.app.lastDisplayIter);
+    return page.evaluate(() => window.app.mandelbrotPanel.lastDisplayIter);
   }, { timeout: 15000 }).toBe(64);
 });
 

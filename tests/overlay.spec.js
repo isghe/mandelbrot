@@ -28,6 +28,12 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#mandelbrotGridOverlay')).not.toBeChecked();
   await expect(page.locator('#mandelbrotCenterMarker')).not.toBeChecked();
   await expect(page.locator('#juliaMarker')).not.toBeChecked();
+
+  // Every test in this file targets the Mandelbrot panel/overlay alone
+  // (full-viewport geometry, fractalShot()'s clip assumes full width) — hide
+  // Julia explicitly rather than relying on the app's default visibility, so
+  // this file doesn't need rewriting again if that default changes later.
+  await page.uncheck('#showJulia');
 });
 
 test('the overlay backing store matches the viewport, scaled by devicePixelRatio', async ({ page }) => {

@@ -50,7 +50,19 @@
 // `jcenterMark` and matching `mx`/`my`/`mscale`. parseShareParams() gates on
 // `schemaVersion < 6` (same idiom as the v3 x/y->mx/my rename) so older
 // shared links keep decoding with the bare names.
-const SCHEMA_VERSION = 6;
+//
+// v7: URL only (localStorage unaffected — it always writes showMandelbrot/
+// showJulia explicitly, never defaults them) — the app's own built-in
+// default for showJulia changed from 0 to 1 (both panels shown by default,
+// split-screen, now that the Julia panel is constructed eagerly rather than
+// lazily). buildShareUrl() now only emits `julia` when it's off (mirroring
+// `mandelbrot`, only emitted when off), instead of only when on. Absence of
+// `julia` in a v<7 URL still means the *old* default (Mandelbrot-only) —
+// parseShareParams() gates on `schemaVersion < 7` to fill that in explicitly,
+// so links generated before this change keep opening the view they actually
+// captured. Absence in a v>=7 URL defers to the app's current default, as
+// usual.
+const SCHEMA_VERSION = 7;
 
 // Only encodes fields that differ from `initialState`, so the "Reset to
 // initial condition" state always maps to a bare URL and the address bar
@@ -89,14 +101,15 @@ function buildShareUrl(state, initialState, origin, pathname) {
   changedFields.forEach(([name, field]) => setIfChanged(name, state[field], init[field]));
   // Overlay/panel display preferences aren't part of initialState (see the
   // comment on mandelbrot.js's on*Change handlers); Reset always zeroes them
-  // (showMandelbrot back to its default of 1, the rest back to 0).
+  // back to their built-in defaults (showMandelbrot/showJulia both 1 — split
+  // screen — the rest 0), so only their off/on state is ever encoded.
   if (state.mandelbrotPanelGridOverlay) params.set("mgrid", state.mandelbrotPanelGridOverlay);
   if (state.mandelbrotPanelCenterMarker) params.set("mcenterMark", state.mandelbrotPanelCenterMarker);
   if (state.juliaPanelGridOverlay) params.set("jgrid", state.juliaPanelGridOverlay);
   if (state.juliaPanelCenterMarker) params.set("jcenterMark", state.juliaPanelCenterMarker);
   if (state.juliaMarker) params.set("juliaMark", state.juliaMarker);
   if (!state.showMandelbrot) params.set("mandelbrot", 0);
-  if (state.showJulia) params.set("julia", state.showJulia);
+  if (!state.showJulia) params.set("julia", 0);
 
   // `julia`'s meaning changed in v2 (see SCHEMA_VERSION comment above), so
   // any URL that actually encodes state must be stamped with the current
@@ -177,11 +190,32 @@ function parseShareParams(search) {
 
   if (schemaVersion < 2) {
     // Legacy `julia=1` meant an exclusive full-screen Julia render; map it
-    // onto the new independent Mandelbrot/Julia visibility flags.
+    // onto the new independent Mandelbrot/Julia visibility flags. Absence of
+    // `julia` meant the app's default at the time (Mandelbrot-only) — same
+    // v<7 concern as the branch below, fill that in explicitly too (only
+    // when this URL carries other real state — see the guard there).
     const legacyJulia = num("julia");
     if (legacyJulia !== undefined) {
       s.showJulia = legacyJulia ? 1 : 0;
       s.showMandelbrot = legacyJulia ? 0 : 1;
+    } else if (Object.keys(s).length > 0) {
+      s.showMandelbrot = 1;
+      s.showJulia = 0;
+    }
+  } else if (schemaVersion < 7) {
+    // v2-v6: absence of `mandelbrot`/`julia` meant the app's default at the
+    // time (Mandelbrot-only, showJulia=0) — fill that in explicitly rather
+    // than deferring to the app's *current* default (showJulia=1 as of v7),
+    // so links generated before v7 keep opening the view they captured.
+    // Only when this URL actually carries some real state, though (either
+    // field present, or some other field already parsed above) — an
+    // incomplete/malformed URL (e.g. `v=3&mx=...` with no `my`) must still
+    // resolve to null rather than manufacture visibility state from nothing.
+    const mandelbrotParam = num("mandelbrot");
+    const juliaParam = num("julia");
+    if (mandelbrotParam !== undefined || juliaParam !== undefined || Object.keys(s).length > 0) {
+      s.showMandelbrot = mandelbrotParam ?? 1;
+      s.showJulia = juliaParam ?? 0;
     }
   } else {
     setIfPresent("showMandelbrot", "mandelbrot");

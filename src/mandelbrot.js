@@ -40,9 +40,11 @@ class MandelbrotApp {
   // independently shown/hidden. Both on = split screen; either alone =
   // that panel full-screen; both off = a black screen. Both panels' JS
   // wrappers always exist (constructed eagerly); visibility is just a CSS
-  // class toggled by updatePanelVisibility().
+  // class toggled by updatePanelVisibility(). Both shown by default
+  // (split-screen) so the two GPU contexts constructed eagerly are both
+  // actually put to use from the first frame.
   showMandelbrot = 1;
-  showJulia = 0;
+  showJulia = 1;
 
   // Set once the shared WebGPU device is lost; blocks further render
   // attempts on both panels (the device, not the canvas, was lost).

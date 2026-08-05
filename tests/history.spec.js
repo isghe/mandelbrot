@@ -66,6 +66,9 @@ test('Back/Forward are disabled with an empty history', async ({ page }) => {
 test('pan can be undone and redone', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const forwardBtn = page.locator('#forwardBtn');
+  // fractalShot()'s clip spans past the split-screen divider into the Julia
+  // panel; hide it so the comparison only ever sees Mandelbrot's own pixels.
+  await page.uncheck('#showJulia');
   const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -95,6 +98,9 @@ test('pan can be undone and redone', async ({ page }) => {
 
 test('wheel-zoom, palette, and smooth coloring changes undo in order', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
+  // fractalShot()'s clip spans past the split-screen divider into the Julia
+  // panel; hide it so the comparison only ever sees Mandelbrot's own pixels.
+  await page.uncheck('#showJulia');
   const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -135,6 +141,9 @@ test('wheel-zoom, palette, and smooth coloring changes undo in order', async ({ 
 
 test('a burst of wheel events coalesces into a single history entry', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
+  // fractalShot()'s clip spans past the split-screen divider into the Julia
+  // panel; hide it so the comparison only ever sees Mandelbrot's own pixels.
+  await page.uncheck('#showJulia');
   const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -154,6 +163,9 @@ test('a burst of wheel events coalesces into a single history entry', async ({ p
 
 test('wheel followed by pan preserves undo order', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
+  // fractalShot()'s clip spans past the split-screen divider into the Julia
+  // panel; hide it so the comparison only ever sees Mandelbrot's own pixels.
+  await page.uncheck('#showJulia');
   const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -180,6 +192,9 @@ test('wheel followed by pan preserves undo order', async ({ page }) => {
 
 test('Back mid-debounce flushes the pending wheel entry immediately', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
+  // fractalShot()'s clip spans past the split-screen divider into the Julia
+  // panel; hide it so the comparison only ever sees Mandelbrot's own pixels.
+  await page.uncheck('#showJulia');
   const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -197,6 +212,9 @@ test('Back mid-debounce flushes the pending wheel entry immediately', async ({ p
 
 test('keyboard steps on a slider are undoable', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
+  // fractalShot()'s clip spans past the split-screen divider into the Julia
+  // panel; hide it so the comparison only ever sees Mandelbrot's own pixels.
+  await page.uncheck('#showJulia');
   const baseline = await fractalShot(page);
 
   await page.locator('#mandelbrotZoomSlider').focus();
@@ -243,6 +261,9 @@ test('progressive mode and smooth coloring toggles are undoable', async ({ page 
 
 test('Reset mid-slider-drag discards the pending snapshot without a spurious push', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
+  // fractalShot()'s clip spans past the split-screen divider into the Julia
+  // panel; hide it so the comparison only ever sees Mandelbrot's own pixels.
+  await page.uncheck('#showJulia');
   const baseline = await fractalShot(page);
 
   const box = await page.locator('#mandelbrotZoomSlider').boundingBox();
@@ -261,6 +282,9 @@ test('Reset mid-slider-drag discards the pending snapshot without a spurious pus
   await page.mouse.up(); // fires `change` now, after Reset already discarded the pending snapshot
 
   await page.waitForTimeout(300);
+  // Reset restores the default split-screen view — hide Julia again before
+  // the final comparison, same reason as the initial uncheck above.
+  await page.uncheck('#showJulia');
   await expect(backBtn).toBeDisabled();
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
@@ -269,8 +293,10 @@ test('clicking sets the Julia seed and is undoable, even with the Julia panel hi
   const backBtn = page.locator('#backBtn');
 
   // The Julia seed only affects the rendered fractal when the Julia panel
-  // is shown, so show its overlay marker instead to get a visible signal of
-  // the click's effect while the Julia panel stays hidden.
+  // is shown, so hide it explicitly (both panels are shown by default) and
+  // show its overlay marker instead, to get a visible signal of the click's
+  // effect while the Julia panel stays hidden.
+  await page.uncheck('#showJulia');
   await page.check('#juliaMarker');
   await page.waitForTimeout(200);
   const baseline = await fractalShot(page);
@@ -294,8 +320,6 @@ test('clicking sets the Julia seed and is undoable, even with the Julia panel hi
 // history; it's now Tier 1, symmetric with the Mandelbrot panel.
 test('zooming the Julia panel enables Back/Forward and is undoable', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
-  await page.check('#showJulia');
-  await page.waitForTimeout(200);
   await expect(backBtn).toBeDisabled();
 
   const scaleBefore = await page.evaluate(() => window.app.juliaPanel.scale);
@@ -345,6 +369,9 @@ test('wheel-zoom after panning centers on the new position, not the stale pivot'
 test('Reset clears history and discards pending sessions without spurious entries', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const forwardBtn = page.locator('#forwardBtn');
+  // fractalShot()'s clip spans past the split-screen divider into the Julia
+  // panel; hide it so the comparison only ever sees Mandelbrot's own pixels.
+  await page.uncheck('#showJulia');
   const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -356,6 +383,9 @@ test('Reset clears history and discards pending sessions without spurious entrie
   await page.waitForTimeout(30);
   await page.locator('#resetBtn').click();
   await page.waitForTimeout(200);
+  // Reset restores the default split-screen view — hide Julia again before
+  // the final comparison, same reason as the initial uncheck above.
+  await page.uncheck('#showJulia');
 
   await expect(backBtn).toBeDisabled();
   await expect(forwardBtn).toBeDisabled();

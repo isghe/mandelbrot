@@ -24,7 +24,7 @@ test('Copy URL puts a URL with only the changed settings on the clipboard', asyn
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await page.selectOption('#mandelbrotPaletteType', '1');
-  await page.click('#showJulia');
+  await page.click('#showJulia'); // unchecks it — Julia is shown by default
   await page.click('#mandelbrotGridOverlay');
   await page.click('#shareBtn');
 
@@ -33,7 +33,7 @@ test('Copy URL puts a URL with only the changed settings on the clipboard', asyn
   const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
   const url = new URL(clipboardText);
   expect(url.searchParams.get('mpalette')).toBe('1');
-  expect(url.searchParams.get('julia')).toBe('1');
+  expect(url.searchParams.get('julia')).toBe('0');
   expect(url.searchParams.get('mgrid')).toBe('1');
   // center/scale/iter were never touched, so they stay off the URL entirely.
   expect(url.searchParams.get('x')).toBeNull();
@@ -64,7 +64,7 @@ test('Reset clears every parameter back to a bare URL', async ({ page }) => {
 
 test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device lost)', async ({ page }) => {
   await page.selectOption('#mandelbrotPaletteType', '1');
-  await page.click('#showJulia');
+  await page.click('#showJulia'); // unchecks it — Julia is shown by default
   await expect.poll(() => new URL(page.url()).searchParams.get('mpalette')).toBe('1');
 
   // Simulate the post-device-lost/no-adapter state: app alive, no renderer.
@@ -73,7 +73,7 @@ test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device l
   await page.click('#resetBtn');
   await expect.poll(() => new URL(page.url()).search).toBe('');
   await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('4');
-  await expect(page.locator('#showJulia')).not.toBeChecked();
+  await expect(page.locator('#showJulia')).toBeChecked(); // Reset restores the default (split-screen)
 });
 
 test('opening a share URL overrides both defaults and localStorage', async ({ page }) => {
@@ -132,6 +132,11 @@ test('a param present but empty (e.g. ?iter=) is treated as absent, not zero', a
   expect(maxIter).toBe(256);
 });
 
+// These SINGLE_PARAM_CASES URLs below are all bare (no `v=`), i.e. legacy
+// v1 — parseShareParams() explicitly preserves the *old* default
+// (Mandelbrot-only) for those, per the v7 migration (see share.js's
+// SCHEMA_VERSION comment), so showJulia stays 0 here even though the app's
+// own current built-in default is now 1 (split-screen).
 const DEFAULTS = {
   maxIter: 256, showMandelbrot: 1, showJulia: 0, paletteType: 4, progressiveMode: 0, smoothColoring: 0,
   gridOverlay: 0, centerMarker: 0, juliaMarker: 0,
@@ -217,7 +222,10 @@ test('opening a share URL persists the shared settings to localStorage', async (
 // a real pan/zoom/click through the browser and check the *fresh* encoding.
 // This is that missing case: a genuine user interaction should produce a
 // current-schema (v6) URL, not just accept legacy input.
-test('a real pan, zoom, and click-to-set-seed stamp v=6, using the unchanged-since-v3 pan/zoom/seed param names (mx/my/mscale/sx/sy) — this test doesn\'t touch the v6-renamed quality/look params', async ({ page }) => {
+test('a real pan, zoom, and click-to-set-seed stamp v=7, using the unchanged-since-v3 pan/zoom/seed param names (mx/my/mscale/sx/sy) — this test doesn\'t touch the v6-renamed quality/look params', async ({ page }) => {
+  // Mandelbrot-only, so the fixed coordinates below land on its own canvas
+  // rather than Julia's (both panels are shown, split-screen, by default).
+  await page.uncheck('#showJulia');
   const cx = 900, cy = 400; // well clear of the #ui panel (see panelVisibility.spec.js)
 
   await page.mouse.move(cx, cy);
@@ -239,7 +247,7 @@ test('a real pan, zoom, and click-to-set-seed stamp v=6, using the unchanged-sin
   const url = new URL(page.url());
   // SCHEMA_VERSION lives in share.js, not exposed on window.app; bumping it
   // means updating this literal too.
-  expect(url.searchParams.get('v')).toBe('6');
+  expect(url.searchParams.get('v')).toBe('7');
   expect(url.searchParams.get('my')).not.toBeNull();
   expect(url.searchParams.get('mscale')).not.toBeNull();
   expect(url.searchParams.get('sx')).not.toBeNull();
