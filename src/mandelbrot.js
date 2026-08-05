@@ -352,12 +352,12 @@ class MandelbrotApp {
   snapshotView() {
     return {
       mandelbrotPanel: {
-        center: this.mandelbrotPanel.center,
-        scale: this.mandelbrotPanel.scale,
-        maxIter: this.mandelbrotPanel.maxIter,
-        paletteType: this.mandelbrotPanel.paletteType,
-        smoothColoring: this.mandelbrotPanel.smoothColoring,
-        progressiveMode: this.mandelbrotPanel.progressiveMode,
+        center: this.mandelbrotPanelCenter,
+        scale: this.mandelbrotPanelScale,
+        maxIter: this.mandelbrotPanelMaxIter,
+        paletteType: this.mandelbrotPanelPaletteType,
+        smoothColoring: this.mandelbrotPanelSmoothColoring,
+        progressiveMode: this.mandelbrotPanelProgressiveMode,
       },
       juliaPanel: {
         center: this.juliaPanelCenter,
@@ -376,14 +376,14 @@ class MandelbrotApp {
   // flattenSnapshotForShare() below for the bridge between the two.
   shareState() {
     return {
-      mandelbrotPanelCenter: this.mandelbrotPanel.center,
-      mandelbrotPanelScale: this.mandelbrotPanel.scale,
-      mandelbrotPanelMaxIter: this.mandelbrotPanel.maxIter,
-      mandelbrotPanelPaletteType: this.mandelbrotPanel.paletteType,
-      mandelbrotPanelProgressiveMode: this.mandelbrotPanel.progressiveMode,
-      mandelbrotPanelSmoothColoring: this.mandelbrotPanel.smoothColoring,
-      mandelbrotPanelGridOverlay: this.mandelbrotPanel.gridOverlay,
-      mandelbrotPanelCenterMarker: this.mandelbrotPanel.centerMarker,
+      mandelbrotPanelCenter: this.mandelbrotPanelCenter,
+      mandelbrotPanelScale: this.mandelbrotPanelScale,
+      mandelbrotPanelMaxIter: this.mandelbrotPanelMaxIter,
+      mandelbrotPanelPaletteType: this.mandelbrotPanelPaletteType,
+      mandelbrotPanelProgressiveMode: this.mandelbrotPanelProgressiveMode,
+      mandelbrotPanelSmoothColoring: this.mandelbrotPanelSmoothColoring,
+      mandelbrotPanelGridOverlay: this.mandelbrotPanelGridOverlay,
+      mandelbrotPanelCenterMarker: this.mandelbrotPanelCenterMarker,
       juliaSeed: this.juliaSeed,
       juliaPanelCenter: this.juliaPanelCenter,
       juliaPanelScale: this.juliaPanelScale,
@@ -406,8 +406,8 @@ class MandelbrotApp {
   // meaningless on Julia's own view — see drawOverlayForPanel).
   captureDisplayPrefs() {
     return {
-      mandelbrotPanelGridOverlay: this.mandelbrotPanel.gridOverlay,
-      mandelbrotPanelCenterMarker: this.mandelbrotPanel.centerMarker,
+      mandelbrotPanelGridOverlay: this.mandelbrotPanelGridOverlay,
+      mandelbrotPanelCenterMarker: this.mandelbrotPanelCenterMarker,
       juliaPanelGridOverlay: this.juliaPanelGridOverlay,
       juliaPanelCenterMarker: this.juliaPanelCenterMarker,
       juliaMarker: this.juliaMarker,
