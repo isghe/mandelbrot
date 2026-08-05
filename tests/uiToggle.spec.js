@@ -51,7 +51,7 @@ test('H key toggles the settings panel', async ({ page }) => {
 });
 
 test('H key is ignored while a form control has focus', async ({ page }) => {
-  await page.focus('#iterSlider');
+  await page.focus('#mandelbrotIterSlider');
   await page.keyboard.press('h');
   await expect(page.locator('#ui')).toBeVisible();
 });

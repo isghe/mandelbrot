@@ -4,12 +4,12 @@ body { margin:0; overflow:hidden; background:#000; }
    drops a panel's own z-index to 0 for the duration of a drag, so whichever
    panel is actively being dragged always slides *under* the stationary one
    in dual view, regardless of which side it's on or DOM order. */
-#gfx, #overlay, #gfxJulia, #overlayJulia { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; z-index:1; }
-#overlay, #overlayJulia { pointer-events:none; }
+#mandelbrotGfx, #mandelbrotOverlay, #juliaGfx, #juliaOverlay { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; z-index:1; }
+#mandelbrotOverlay, #juliaOverlay { pointer-events:none; }
 
 /* Each panel is independently shown/hidden (toggled in JS from the
    Mandelbrot/Julia checkboxes); if both are hidden, the screen is black.
-   !important: this override must beat the #gfx/#overlay/#gfxJulia/#overlayJulia
+   !important: this override must beat the #mandelbrotGfx/#mandelbrotOverlay/#juliaGfx/#juliaOverlay
    ID selector above, which a same-specificity class selector cannot do —
    a hidden-but-undisplayed canvas would otherwise still sit on top and
    silently swallow pointer events meant for the visible one underneath. */
@@ -18,15 +18,15 @@ body { margin:0; overflow:hidden; background:#000; }
 /* When both panels are visible: Mandelbrot on the left half, Julia on the
    right half. When only one is visible it keeps the full 100vw/100vh from
    the rule above. */
-body.dual-view #gfx, body.dual-view #overlay { width:50vw; }
-body.dual-view #gfxJulia, body.dual-view #overlayJulia { left:50vw; width:50vw; }
+body.dual-view #mandelbrotGfx, body.dual-view #mandelbrotOverlay { width:50vw; }
+body.dual-view #juliaGfx, body.dual-view #juliaOverlay { left:50vw; width:50vw; }
 #uiToggleBtn {
   position:fixed; top:10px; left:10px; z-index:2;
   width:36px; height:36px;
   background:#0008; color:white; border:none; border-radius:8px;
   font-size:1.1em; cursor:pointer;
 }
-/* z-index:2 on all of the below: #gfx picks up z-index:1 in dual view (see
+/* z-index:2 on all of the below: #mandelbrotGfx picks up z-index:1 in dual view (see
    above), which would otherwise put these behind it — position+z-index
    siblings stack by z-index regardless of DOM order, so without an
    explicit value here these default to z-index:auto (~0) and lose to it. */

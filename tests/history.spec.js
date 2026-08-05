@@ -66,7 +66,7 @@ test('Back/Forward are disabled with an empty history', async ({ page }) => {
 test('pan can be undone and redone', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const forwardBtn = page.locator('#forwardBtn');
-  const box = await page.locator('#gfx').boundingBox();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
@@ -95,7 +95,7 @@ test('pan can be undone and redone', async ({ page }) => {
 
 test('wheel-zoom, palette, and smooth coloring changes undo in order', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
-  const box = await page.locator('#gfx').boundingBox();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
@@ -107,24 +107,24 @@ test('wheel-zoom, palette, and smooth coloring changes undo in order', async ({ 
   const afterZoom = await fractalShot(page);
   expect(afterZoom.equals(baseline)).toBe(false);
 
-  await page.selectOption('#paletteType', '1'); // Fire
+  await page.selectOption('#mandelbrotPaletteType', '1'); // Fire
   await page.waitForTimeout(200);
   const afterPalette = await fractalShot(page);
   expect(afterPalette.equals(afterZoom)).toBe(false);
 
-  await page.check('#smoothColoring');
+  await page.check('#mandelbrotSmoothColoring');
   await page.waitForTimeout(200);
   const afterSmooth = await fractalShot(page);
   expect(afterSmooth.equals(afterPalette)).toBe(false);
 
   await backBtn.click(); // undo smooth coloring
   await page.waitForTimeout(200);
-  await expect(page.locator('#smoothColoring')).not.toBeChecked();
+  await expect(page.locator('#mandelbrotSmoothColoring')).not.toBeChecked();
   expect((await fractalShot(page)).equals(afterPalette)).toBe(true);
 
   await backBtn.click(); // undo palette
   await page.waitForTimeout(200);
-  await expect(page.locator('#paletteType')).toHaveValue('4'); // Apple II
+  await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('4'); // Apple II
   expect((await fractalShot(page)).equals(afterZoom)).toBe(true);
 
   await backBtn.click(); // undo zoom
@@ -135,7 +135,7 @@ test('wheel-zoom, palette, and smooth coloring changes undo in order', async ({ 
 
 test('a burst of wheel events coalesces into a single history entry', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
-  const box = await page.locator('#gfx').boundingBox();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
@@ -154,7 +154,7 @@ test('a burst of wheel events coalesces into a single history entry', async ({ p
 
 test('wheel followed by pan preserves undo order', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
-  const box = await page.locator('#gfx').boundingBox();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
@@ -180,7 +180,7 @@ test('wheel followed by pan preserves undo order', async ({ page }) => {
 
 test('Back mid-debounce flushes the pending wheel entry immediately', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
-  const box = await page.locator('#gfx').boundingBox();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
@@ -199,7 +199,7 @@ test('keyboard steps on a slider are undoable', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const baseline = await fractalShot(page);
 
-  await page.locator('#zoomSlider').focus();
+  await page.locator('#mandelbrotZoomSlider').focus();
   await page.keyboard.press('ArrowRight');
   await page.waitForTimeout(200);
 
@@ -214,8 +214,8 @@ test('keyboard steps on a slider are undoable', async ({ page }) => {
 
 test('progressive mode and smooth coloring toggles are undoable', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
-  const progressiveChk = page.locator('#progressiveMode');
-  const smoothChk = page.locator('#smoothColoring');
+  const progressiveChk = page.locator('#mandelbrotProgressiveMode');
+  const smoothChk = page.locator('#mandelbrotSmoothColoring');
 
   // Note: this test checks checkbox state, not screenshots. Progressive mode
   // reveals the fractal over several animation frames (see resetProgressive()/
@@ -245,7 +245,7 @@ test('Reset mid-slider-drag discards the pending snapshot without a spurious pus
   const backBtn = page.locator('#backBtn');
   const baseline = await fractalShot(page);
 
-  const box = await page.locator('#zoomSlider').boundingBox();
+  const box = await page.locator('#mandelbrotZoomSlider').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down(); // starts a pointer-drag session (sets pendingZoomSnapshot on the first `input`)
   await page.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2, { steps: 5 });
@@ -316,7 +316,7 @@ test('zooming the Julia panel enables Back/Forward and is undoable', async ({ pa
 });
 
 test('wheel-zoom after panning centers on the new position, not the stale pivot', async ({ page }) => {
-  const box = await page.locator('#gfx').boundingBox();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
@@ -345,7 +345,7 @@ test('wheel-zoom after panning centers on the new position, not the stale pivot'
 test('Reset clears history and discards pending sessions without spurious entries', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const forwardBtn = page.locator('#forwardBtn');
-  const box = await page.locator('#gfx').boundingBox();
+  const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
   const baseline = await fractalShot(page);

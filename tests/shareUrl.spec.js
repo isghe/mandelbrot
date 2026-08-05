@@ -23,9 +23,9 @@ test.beforeEach(async ({ page }) => {
 test('Copy URL puts a URL with only the changed settings on the clipboard', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
-  await page.selectOption('#paletteType', '1');
+  await page.selectOption('#mandelbrotPaletteType', '1');
   await page.click('#showJulia');
-  await page.click('#gridOverlay');
+  await page.click('#mandelbrotGridOverlay');
   await page.click('#shareBtn');
 
   await expect(page.locator('#shareBtn')).toHaveText('Copied!');
@@ -44,7 +44,7 @@ test('Copy URL puts a URL with only the changed settings on the clipboard', asyn
 test('the address bar URL updates live as settings change, omitting untouched fields', async ({ page }) => {
   const initialUrl = page.url();
 
-  await page.selectOption('#paletteType', '1');
+  await page.selectOption('#mandelbrotPaletteType', '1');
   await expect.poll(() => page.url()).not.toBe(initialUrl);
 
   const url = new URL(page.url());
@@ -53,9 +53,9 @@ test('the address bar URL updates live as settings change, omitting untouched fi
 });
 
 test('Reset clears every parameter back to a bare URL', async ({ page }) => {
-  await page.selectOption('#paletteType', '1');
+  await page.selectOption('#mandelbrotPaletteType', '1');
   await page.click('#showJulia');
-  await page.click('#gridOverlay');
+  await page.click('#mandelbrotGridOverlay');
   await expect.poll(() => new URL(page.url()).searchParams.get('palette')).toBe('1');
 
   await page.click('#resetBtn');
@@ -63,7 +63,7 @@ test('Reset clears every parameter back to a bare URL', async ({ page }) => {
 });
 
 test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device lost)', async ({ page }) => {
-  await page.selectOption('#paletteType', '1');
+  await page.selectOption('#mandelbrotPaletteType', '1');
   await page.click('#showJulia');
   await expect.poll(() => new URL(page.url()).searchParams.get('palette')).toBe('1');
 
@@ -72,12 +72,12 @@ test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device l
 
   await page.click('#resetBtn');
   await expect.poll(() => new URL(page.url()).search).toBe('');
-  await expect(page.locator('#paletteType')).toHaveValue('4');
+  await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('4');
   await expect(page.locator('#showJulia')).not.toBeChecked();
 });
 
 test('opening a share URL overrides both defaults and localStorage', async ({ page }) => {
-  await page.selectOption('#paletteType', '2');
+  await page.selectOption('#mandelbrotPaletteType', '2');
   await expect.poll(async () => {
     const raw = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
     return raw ? JSON.parse(raw).mandelbrotPanel.paletteType : null;
@@ -91,12 +91,12 @@ test('opening a share URL overrides both defaults and localStorage', async ({ pa
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
-  await expect(page.locator('#paletteType')).toHaveValue('3');
+  await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('3');
   await expect(page.locator('#showJulia')).toBeChecked();
   await expect(page.locator('#showMandelbrot')).not.toBeChecked();
-  await expect(page.locator('#smoothColoring')).toBeChecked();
-  await expect(page.locator('#gridOverlay')).toBeChecked();
-  await expect(page.locator('#iterLabel')).toHaveText('512');
+  await expect(page.locator('#mandelbrotSmoothColoring')).toBeChecked();
+  await expect(page.locator('#mandelbrotGridOverlay')).toBeChecked();
+  await expect(page.locator('#mandelbrotIterLabel')).toHaveText('512');
 });
 
 test('a share URL with only some params leaves the rest at their defaults', async ({ page }) => {

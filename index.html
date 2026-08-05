@@ -12,10 +12,10 @@
 </head>
 <body>
 
-<canvas id="gfx"></canvas>
-<canvas id="overlay"></canvas>
-<canvas id="gfxJulia"></canvas>
-<canvas id="overlayJulia"></canvas>
+<canvas id="mandelbrotGfx"></canvas>
+<canvas id="mandelbrotOverlay"></canvas>
+<canvas id="juliaGfx"></canvas>
+<canvas id="juliaOverlay"></canvas>
 <div id="noVizMessage">No visualization mode selected</div>
 <div id="selectionBox"></div>
 <div id="gpuError">
@@ -43,14 +43,14 @@
   <div id="uiPanels">
     <fieldset id="uiMandelbrot">
       <legend>Mandelbrot</legend>
-      <label>Iterations: <span id="iterLabel">256</span></label>
-      <input type="range" id="iterSlider" step="0.01">
+      <label>Iterations: <span id="mandelbrotIterLabel">256</span></label>
+      <input type="range" id="mandelbrotIterSlider" step="0.01">
 
-      <label>Zoom: <span id="zoomLabel">3</span></label>
-      <input type="range" id="zoomSlider" step="0.01">
+      <label>Zoom: <span id="mandelbrotZoomLabel">3</span></label>
+      <input type="range" id="mandelbrotZoomSlider" step="0.01">
 
       <label>Palette:</label>
-      <select id="paletteType">
+      <select id="mandelbrotPaletteType">
         <option value="0">Viridis</option>
         <option value="1">Fire</option>
         <option value="2">Ocean</option>
@@ -58,23 +58,23 @@
         <option value="4" selected>Apple II</option>
       </select>
 
-      <label><input type="checkbox" id="progressiveMode"> Progressive mode</label>
-      <label><input type="checkbox" id="smoothColoring"> Smooth coloring</label>
-      <label><input type="checkbox" id="gridOverlay"> Show grid</label>
-      <label><input type="checkbox" id="centerMarker"> Show center marker</label>
+      <label><input type="checkbox" id="mandelbrotProgressiveMode"> Progressive mode</label>
+      <label><input type="checkbox" id="mandelbrotSmoothColoring"> Smooth coloring</label>
+      <label><input type="checkbox" id="mandelbrotGridOverlay"> Show grid</label>
+      <label><input type="checkbox" id="mandelbrotCenterMarker"> Show center marker</label>
       <label><input type="checkbox" id="juliaMarker"> Show Julia seed marker</label>
     </fieldset>
 
     <fieldset id="uiJulia">
       <legend>Julia</legend>
-      <label>Iterations: <span id="iterLabelJulia">256</span></label>
-      <input type="range" id="iterSliderJulia" step="0.01">
+      <label>Iterations: <span id="juliaIterLabel">256</span></label>
+      <input type="range" id="juliaIterSlider" step="0.01">
 
-      <label>Zoom: <span id="zoomLabelJulia">3</span></label>
-      <input type="range" id="zoomSliderJulia" step="0.01">
+      <label>Zoom: <span id="juliaZoomLabel">3</span></label>
+      <input type="range" id="juliaZoomSlider" step="0.01">
 
       <label>Palette:</label>
-      <select id="paletteTypeJulia">
+      <select id="juliaPaletteType">
         <option value="0">Viridis</option>
         <option value="1">Fire</option>
         <option value="2">Ocean</option>
@@ -82,10 +82,10 @@
         <option value="4" selected>Apple II</option>
       </select>
 
-      <label><input type="checkbox" id="progressiveModeJulia"> Progressive mode</label>
-      <label><input type="checkbox" id="smoothColoringJulia"> Smooth coloring</label>
-      <label><input type="checkbox" id="gridOverlayJulia"> Show grid</label>
-      <label><input type="checkbox" id="centerMarkerJulia"> Show center marker</label>
+      <label><input type="checkbox" id="juliaProgressiveMode"> Progressive mode</label>
+      <label><input type="checkbox" id="juliaSmoothColoring"> Smooth coloring</label>
+      <label><input type="checkbox" id="juliaGridOverlay"> Show grid</label>
+      <label><input type="checkbox" id="juliaCenterMarker"> Show center marker</label>
     </fieldset>
   </div>
 </div>
