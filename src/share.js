@@ -42,7 +42,15 @@
 // `mandelbrotPanelX`, matching `juliaPanelX`. loadSettingsData() renames
 // any surviving bare copies unconditionally at the end, after the v<5/v>=4
 // branches above (see the comment there).
-const SCHEMA_VERSION = 5;
+//
+// v6: URL only (localStorage unaffected) — the six short Mandelbrot URL
+// params `iter`/`palette`/`progressive`/`smooth`/`grid`/`centerMark` become
+// `miter`/`mpalette`/`mprogressive`/`msmooth`/`mgrid`/`mcenterMark`, mirroring
+// the already-prefixed `jiter`/`jpalette`/`jprogressive`/`jsmooth`/`jgrid`/
+// `jcenterMark` and matching `mx`/`my`/`mscale`. parseShareParams() gates on
+// `schemaVersion < 6` (same idiom as the v3 x/y->mx/my rename) so older
+// shared links keep decoding with the bare names.
+const SCHEMA_VERSION = 6;
 
 // Only encodes fields that differ from `initialState`, so the "Reset to
 // initial condition" state always maps to a bare URL and the address bar
@@ -67,23 +75,23 @@ function buildShareUrl(state, initialState, origin, pathname) {
     params.set("jpy", state.juliaPanelCenter.y);
   }
   const changedFields = [
-    ["iter", "mandelbrotPanelMaxIter"],
+    ["miter", "mandelbrotPanelMaxIter"],
     ["jscale", "juliaPanelScale"],
     ["jiter", "juliaPanelMaxIter"],
-    ["palette", "mandelbrotPanelPaletteType"],
+    ["mpalette", "mandelbrotPanelPaletteType"],
     ["jpalette", "juliaPanelPaletteType"],
-    ["progressive", "mandelbrotPanelProgressiveMode"],
+    ["mprogressive", "mandelbrotPanelProgressiveMode"],
     ["jprogressive", "juliaPanelProgressiveMode"],
     ["mscale", "mandelbrotPanelScale"],
-    ["smooth", "mandelbrotPanelSmoothColoring"],
+    ["msmooth", "mandelbrotPanelSmoothColoring"],
     ["jsmooth", "juliaPanelSmoothColoring"],
   ];
   changedFields.forEach(([name, field]) => setIfChanged(name, state[field], init[field]));
   // Overlay/panel display preferences aren't part of initialState (see the
   // comment on mandelbrot.js's on*Change handlers); Reset always zeroes them
   // (showMandelbrot back to its default of 1, the rest back to 0).
-  if (state.mandelbrotPanelGridOverlay) params.set("grid", state.mandelbrotPanelGridOverlay);
-  if (state.mandelbrotPanelCenterMarker) params.set("centerMark", state.mandelbrotPanelCenterMarker);
+  if (state.mandelbrotPanelGridOverlay) params.set("mgrid", state.mandelbrotPanelGridOverlay);
+  if (state.mandelbrotPanelCenterMarker) params.set("mcenterMark", state.mandelbrotPanelCenterMarker);
   if (state.juliaPanelGridOverlay) params.set("jgrid", state.juliaPanelGridOverlay);
   if (state.juliaPanelCenterMarker) params.set("jcenterMark", state.juliaPanelCenterMarker);
   if (state.juliaMarker) params.set("juliaMark", state.juliaMarker);
@@ -131,6 +139,15 @@ function parseShareParams(search) {
   const [xName, yName] = schemaVersion < 3 ? ["x", "y"] : ["mx", "my"];
   const [sxName, syName] = schemaVersion < 3 ? ["jx", "jy"] : ["sx", "sy"];
   const scaleName = schemaVersion < 3 ? "scale" : "mscale";
+  // v6 renamed the six short Mandelbrot params below to be m-prefixed,
+  // mirroring the j-prefixed Julia equivalents; older URLs still use the
+  // pre-rename bare names.
+  const iterName = schemaVersion < 6 ? "iter" : "miter";
+  const paletteName = schemaVersion < 6 ? "palette" : "mpalette";
+  const progressiveName = schemaVersion < 6 ? "progressive" : "mprogressive";
+  const smoothName = schemaVersion < 6 ? "smooth" : "msmooth";
+  const gridName = schemaVersion < 6 ? "grid" : "mgrid";
+  const centerMarkName = schemaVersion < 6 ? "centerMark" : "mcenterMark";
 
   const x = num(xName), y = num(yName);
   if (x !== undefined && y !== undefined) s.mandelbrotPanelCenter = { x, y };
@@ -140,8 +157,8 @@ function parseShareParams(search) {
   if (jpx !== undefined && jpy !== undefined) s.juliaPanelCenter = { x: jpx, y: jpy };
 
   const presentFields = [
-    ["mandelbrotPanelCenterMarker", "centerMark"],
-    ["mandelbrotPanelGridOverlay", "grid"],
+    ["mandelbrotPanelCenterMarker", centerMarkName],
+    ["mandelbrotPanelGridOverlay", gridName],
     ["juliaPanelCenterMarker", "jcenterMark"],
     ["juliaPanelGridOverlay", "jgrid"],
     ["juliaMarker", "juliaMark"],
@@ -150,11 +167,11 @@ function parseShareParams(search) {
     ["juliaPanelPaletteType", "jpalette"],
     ["juliaPanelProgressiveMode", "jprogressive"],
     ["juliaPanelSmoothColoring", "jsmooth"],
-    ["mandelbrotPanelMaxIter", "iter"],
-    ["mandelbrotPanelPaletteType", "palette"],
-    ["mandelbrotPanelProgressiveMode", "progressive"],
+    ["mandelbrotPanelMaxIter", iterName],
+    ["mandelbrotPanelPaletteType", paletteName],
+    ["mandelbrotPanelProgressiveMode", progressiveName],
     ["mandelbrotPanelScale", scaleName],
-    ["mandelbrotPanelSmoothColoring", "smooth"],
+    ["mandelbrotPanelSmoothColoring", smoothName],
   ];
   presentFields.forEach(([field, paramName]) => setIfPresent(field, paramName));
 

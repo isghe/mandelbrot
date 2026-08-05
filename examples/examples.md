@@ -6,7 +6,7 @@ Live share-URLs into the [demo](https://isghe.github.io/mandelbrot/) worth revis
 
 Pubblicato: 2026-08-04 23:55:15
 
-https://isghe.github.io/mandelbrot/?mx=-1.859401731016781&my=-0.001809058061010546&sx=-1.8594016853129103&sy=-0.0018090766053930985&jpx=0.00000675443222884764&jpy=0.00003088196423953486&iter=1549&jscale=0.0018197008586099826&jiter=245&mscale=2.899932872038949e-7&grid=1&jgrid=1&juliaMark=1&julia=1&v=5
+https://isghe.github.io/mandelbrot/?mx=-1.859401731016781&my=-0.001809058061010546&sx=-1.8594016853129103&sy=-0.0018090766053930985&jpx=0.00000675443222884764&jpy=0.00003088196423953486&miter=1549&jscale=0.0018197008586099826&jiter=245&mscale=2.899932872038949e-7&mgrid=1&jgrid=1&juliaMark=1&julia=1&v=6
 
 ![Dual-panel view with both panels' grids on](dual-panel-view.png)
 

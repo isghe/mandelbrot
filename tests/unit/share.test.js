@@ -44,7 +44,7 @@ test('buildShareUrl only encodes fields that differ from initialState', () => {
   const url = share.buildShareUrl(baseState({ mandelbrotPanelScale: 1.5 }), initialState, 'https://example.com', '/');
   const params = new URL(url).searchParams;
   assert.strictEqual(params.get('mscale'), '1.5');
-  assert.strictEqual(params.has('iter'), false);
+  assert.strictEqual(params.has('miter'), false);
   assert.strictEqual(params.has('mx'), false);
 });
 
@@ -80,16 +80,16 @@ test('buildShareUrl encodes overlay display flags whenever truthy, regardless of
     '/'
   );
   const params = new URL(url).searchParams;
-  assert.strictEqual(params.get('grid'), '1');
-  assert.strictEqual(params.get('centerMark'), '1');
+  assert.strictEqual(params.get('mgrid'), '1');
+  assert.strictEqual(params.get('mcenterMark'), '1');
   assert.strictEqual(params.get('juliaMark'), '1');
 });
 
 test('buildShareUrl omits falsy overlay display flags', () => {
   const url = share.buildShareUrl(baseState(), initialState, 'https://example.com', '/');
   const params = new URL(url).searchParams;
-  assert.strictEqual(params.has('grid'), false);
-  assert.strictEqual(params.has('centerMark'), false);
+  assert.strictEqual(params.has('mgrid'), false);
+  assert.strictEqual(params.has('mcenterMark'), false);
   assert.strictEqual(params.has('juliaMark'), false);
 });
 
@@ -200,6 +200,49 @@ test('parseShareParams (v3) maps scalar params to their field names', () => {
   });
 });
 
+test('buildShareUrl (v6) emits the m-prefixed short param names, and parseShareParams round-trips them', () => {
+  const url = share.buildShareUrl(
+    baseState({
+      mandelbrotPanelMaxIter: 999,
+      mandelbrotPanelPaletteType: 2,
+      mandelbrotPanelProgressiveMode: 1,
+      mandelbrotPanelSmoothColoring: 1,
+    }),
+    initialState,
+    'https://example.com',
+    '/'
+  );
+  const params = new URL(url).searchParams;
+  assert.strictEqual(params.get('miter'), '999');
+  assert.strictEqual(params.get('mpalette'), '2');
+  assert.strictEqual(params.get('mprogressive'), '1');
+  assert.strictEqual(params.get('msmooth'), '1');
+  assert.strictEqual(params.has('iter'), false);
+
+  const s = share.parseShareParams(new URL(url).search);
+  assert.strictEqual(s.mandelbrotPanelMaxIter, 999);
+  assert.strictEqual(s.mandelbrotPanelPaletteType, 2);
+  assert.strictEqual(s.mandelbrotPanelProgressiveMode, 1);
+  assert.strictEqual(s.mandelbrotPanelSmoothColoring, 1);
+});
+
+test('parseShareParams (v5) still reads the pre-v6 bare short param names', () => {
+  const s = share.parseShareParams('?v=5&iter=999&palette=2&progressive=1&smooth=1&grid=1&centerMark=1');
+  assert.deepStrictEqual(s, {
+    mandelbrotPanelMaxIter: 999,
+    mandelbrotPanelPaletteType: 2,
+    mandelbrotPanelProgressiveMode: 1,
+    mandelbrotPanelSmoothColoring: 1,
+    mandelbrotPanelGridOverlay: 1,
+    mandelbrotPanelCenterMarker: 1,
+  });
+});
+
+test('parseShareParams (v6) does not accept the old bare short param names', () => {
+  const s = share.parseShareParams('?v=6&iter=999');
+  assert.strictEqual(s, null);
+});
+
 test('parseShareParams (legacy v2) reads the old x/y/jx/jy/scale param names into the renamed fields', () => {
   const s = share.parseShareParams('?v=2&x=-1.25&y=0.1&jx=-0.3&jy=0.9&scale=1.5');
   assert.deepStrictEqual(s.mandelbrotPanelCenter, { x: -1.25, y: 0.1 });
@@ -244,7 +287,7 @@ test('parseShareParams accepts v=1 explicitly (legacy julia semantics, old "scal
 });
 
 test('parseShareParams rejects an unknown future version', () => {
-  const s = share.parseShareParams('?v=6&mscale=1.5');
+  const s = share.parseShareParams('?v=7&mscale=1.5');
   assert.strictEqual(s, null);
 });
 
@@ -291,7 +334,7 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
   const state = baseState({ mandelbrotPanelScale: 1.5, mandelbrotPanelGridOverlay: 1 });
   const data = share.settingsData(state);
   assert.deepStrictEqual(data, {
-    v: 5,
+    v: 6,
     mandelbrotPanel: {
       center: { x: -0.5, y: 0 }, scale: 1.5,
       maxIter: 256, paletteType: 4, smoothColoring: 0, progressiveMode: 0,
@@ -478,12 +521,12 @@ test('settingsData -> loadSettingsData round-trips the Mandelbrot side under man
 });
 
 test('loadSettingsData rejects an unknown future version', () => {
-  const future = { ...share.settingsData(baseState()), v: 6 };
+  const future = { ...share.settingsData(baseState()), v: 7 };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 
 test('loadSettingsData rejects a future version given as a string, not treated as legacy', () => {
-  const future = { ...share.settingsData(baseState()), v: "6" };
+  const future = { ...share.settingsData(baseState()), v: "7" };
   assert.strictEqual(share.loadSettingsData(future), null);
 });
 
