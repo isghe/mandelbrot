@@ -10,6 +10,14 @@ https://isghe.github.io/mandelbrot/?mx=-1.859401731016781&my=-0.0018090580610105
 
 ![Dual-panel view with both panels' grids on](dual-panel-view.png)
 
+## Deep zoom, Mandelbrot only
+
+Pubblicato: 2026-08-06
+
+https://isghe.github.io/mandelbrot/?mx=-0.738796021540667&my=0.16423594565505903&miter=2344&mscale=0.0023387257293825403&julia=0&v=7
+
+![Deep zoom, Mandelbrot-only view](deep-zoom-mandelbrot.png)
+
 ## Spiral view
 
 Pubblicato: 2026-08-01 19:06:14
