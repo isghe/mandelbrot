@@ -68,7 +68,7 @@ test('Reset still clears the URL when the renderer is gone (e.g. WebGPU device l
   await expect.poll(() => new URL(page.url()).searchParams.get('mpalette')).toBe('1');
 
   // Simulate the post-device-lost/no-adapter state: app alive, no renderer.
-  await page.evaluate(() => { window.app.mandelbrotPanel.renderer = undefined; });
+  await page.evaluate(() => { window.app.mandelbrot.panel.renderer = undefined; });
 
   await page.click('#resetBtn');
   await expect.poll(() => new URL(page.url()).search).toBe('');
@@ -106,9 +106,9 @@ test('a share URL with only some params leaves the rest at their defaults', asyn
   await expect(gpuError).toBeHidden();
 
   const state = await page.evaluate(() => ({
-    maxIter: window.app.mandelbrotPanel.maxIter,
+    maxIter: window.app.mandelbrot.panel.maxIter,
     juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
-    paletteType: window.app.mandelbrotPanel.paletteType,
+    paletteType: window.app.mandelbrot.panel.paletteType,
   }));
   expect(state.maxIter).toBe(256);
   expect(state.juliaSeed).toEqual({ x: -0.8, y: 0.156 });
@@ -128,7 +128,7 @@ test('a param present but empty (e.g. ?iter=) is treated as absent, not zero', a
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
 
-  const maxIter = await page.evaluate(() => window.app.mandelbrotPanel.maxIter);
+  const maxIter = await page.evaluate(() => window.app.mandelbrot.panel.maxIter);
   expect(maxIter).toBe(256);
 });
 
@@ -168,18 +168,18 @@ for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
     await expect(gpuError).toBeHidden();
 
     const state = await page.evaluate(() => ({
-      maxIter: window.app.mandelbrotPanel.maxIter,
+      maxIter: window.app.mandelbrot.panel.maxIter,
       showMandelbrot: window.app.showMandelbrot,
       showJulia: window.app.showJulia,
-      paletteType: window.app.mandelbrotPanel.paletteType,
-      progressiveMode: window.app.mandelbrotPanel.progressiveMode,
-      smoothColoring: window.app.mandelbrotPanel.smoothColoring,
-      gridOverlay: window.app.mandelbrotPanel.gridOverlay,
-      centerMarker: window.app.mandelbrotPanel.centerMarker,
+      paletteType: window.app.mandelbrot.panel.paletteType,
+      progressiveMode: window.app.mandelbrot.panel.progressiveMode,
+      smoothColoring: window.app.mandelbrot.panel.smoothColoring,
+      gridOverlay: window.app.mandelbrot.panel.gridOverlay,
+      centerMarker: window.app.mandelbrot.panel.centerMarker,
       juliaMarker: window.app.juliaMarker,
-      mandelbrotPanelCenter: { x: window.app.mandelbrotPanel.center.x, y: window.app.mandelbrotPanel.center.y },
+      mandelbrotPanelCenter: { x: window.app.mandelbrot.panel.center.x, y: window.app.mandelbrot.panel.center.y },
       juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
-      mandelbrotPanelScale: window.app.mandelbrotPanel.scale,
+      mandelbrotPanelScale: window.app.mandelbrot.panel.scale,
     }));
 
     expect(state[field]).toEqual(expected);
