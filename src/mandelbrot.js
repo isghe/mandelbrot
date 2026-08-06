@@ -142,6 +142,10 @@ class MandelbrotApp {
     // UI
     this.uiToggleBtn = document.getElementById("uiToggleBtn");
     this.uiPanel = document.getElementById("ui");
+    // this.mandelbrot / this.julia below hold DOM control refs only (sliders,
+    // labels, selects, checkboxes) — the corresponding view/quality state
+    // lives on this.mandelbrotPanel / this.juliaPanel (FractalPanel), a
+    // separate object.
     this.mandelbrot = {
       iter: { slider: document.getElementById("mandelbrotIterSlider"), label: document.getElementById("mandelbrotIterLabel") },
       zoom: { slider: document.getElementById("mandelbrotZoomSlider"), label: document.getElementById("mandelbrotZoomLabel") },
@@ -183,6 +187,10 @@ class MandelbrotApp {
     ];
     checkboxFields.forEach(([chk, field]) => { this[chk].checked = !!this[field]; });
     this.julia.marker.chk.checked = !!this.juliaMarker;
+    // [UI group key, FractalPanel field name] — mostly identical, except
+    // "progressive" (UI) vs "progressiveMode" (FractalPanel), kept short on
+    // the UI side since this.mandelbrot.progressive/this.julia.progressive
+    // already reads unambiguously as the progressive-mode control.
     const panelCheckboxFields = [
       ["centerMarker", "centerMarker"],
       ["gridOverlay", "gridOverlay"],
