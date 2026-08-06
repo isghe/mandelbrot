@@ -142,61 +142,55 @@ class MandelbrotApp {
     // UI
     this.uiToggleBtn = document.getElementById("uiToggleBtn");
     this.uiPanel = document.getElementById("ui");
-    this.mandelbrotIterSlider = document.getElementById("mandelbrotIterSlider");
-    this.mandelbrotIterLabel  = document.getElementById("mandelbrotIterLabel");
-    this.mandelbrotIterSlider.min = Math.log10(MandelbrotApp.MIN_ITER);
-    this.mandelbrotIterSlider.max = Math.log10(MandelbrotApp.MAX_ITER);
-    this.mandelbrotZoomSlider = document.getElementById("mandelbrotZoomSlider");
-    this.mandelbrotZoomLabel  = document.getElementById("mandelbrotZoomLabel");
-    this.mandelbrotZoomSlider.min = Math.log10(MandelbrotApp.MIN_SCALE);
-    this.mandelbrotZoomSlider.max = Math.log10(MandelbrotApp.MAX_SCALE);
-    this.mandelbrotPaletteSel = document.getElementById("mandelbrotPaletteType");
+    this.mandelbrot = {
+      iter: { slider: document.getElementById("mandelbrotIterSlider"), label: document.getElementById("mandelbrotIterLabel") },
+      zoom: { slider: document.getElementById("mandelbrotZoomSlider"), label: document.getElementById("mandelbrotZoomLabel") },
+      palette: { sel: document.getElementById("mandelbrotPaletteType") },
+      progressive: { chk: document.getElementById("mandelbrotProgressiveMode") },
+      smoothColoring: { chk: document.getElementById("mandelbrotSmoothColoring") },
+      gridOverlay: { chk: document.getElementById("mandelbrotGridOverlay") },
+      centerMarker: { chk: document.getElementById("mandelbrotCenterMarker") },
+    };
+    this.mandelbrot.iter.slider.min = Math.log10(MandelbrotApp.MIN_ITER);
+    this.mandelbrot.iter.slider.max = Math.log10(MandelbrotApp.MAX_ITER);
+    this.mandelbrot.zoom.slider.min = Math.log10(MandelbrotApp.MIN_SCALE);
+    this.mandelbrot.zoom.slider.max = Math.log10(MandelbrotApp.MAX_SCALE);
     this.showMandelbrotChk = document.getElementById("showMandelbrot");
     this.showJuliaChk = document.getElementById("showJulia");
-    this.mandelbrotProgressiveChk = document.getElementById("mandelbrotProgressiveMode");
-    this.mandelbrotSmoothColoringChk = document.getElementById("mandelbrotSmoothColoring");
-    this.mandelbrotGridOverlayChk = document.getElementById("mandelbrotGridOverlay");
-    this.mandelbrotCenterMarkerChk = document.getElementById("mandelbrotCenterMarker");
-    this.juliaMarkerChk = document.getElementById("juliaMarker");
 
     // Julia's own controls, independent of the Mandelbrot ones above —
     // synced to the live juliaPanel's field values further down in this
     // constructor (juliaPanelCheckboxFields, setJuliaMaxIter/
     // syncJuliaZoomSliderUI/juliaPaletteSel), symmetric with Mandelbrot's.
-    this.juliaIterSlider = document.getElementById("juliaIterSlider");
-    this.juliaIterLabel  = document.getElementById("juliaIterLabel");
-    this.juliaIterSlider.min = Math.log10(MandelbrotApp.MIN_ITER);
-    this.juliaIterSlider.max = Math.log10(MandelbrotApp.MAX_ITER);
-    this.juliaZoomSlider = document.getElementById("juliaZoomSlider");
-    this.juliaZoomLabel  = document.getElementById("juliaZoomLabel");
-    this.juliaZoomSlider.min = Math.log10(MandelbrotApp.MIN_SCALE);
-    this.juliaZoomSlider.max = Math.log10(MandelbrotApp.MAX_SCALE);
-    this.juliaPaletteSel = document.getElementById("juliaPaletteType");
-    this.juliaProgressiveChk = document.getElementById("juliaProgressiveMode");
-    this.juliaSmoothColoringChk = document.getElementById("juliaSmoothColoring");
-    this.juliaGridOverlayChk = document.getElementById("juliaGridOverlay");
-    this.juliaCenterMarkerChk = document.getElementById("juliaCenterMarker");
+    this.julia = {
+      iter: { slider: document.getElementById("juliaIterSlider"), label: document.getElementById("juliaIterLabel") },
+      zoom: { slider: document.getElementById("juliaZoomSlider"), label: document.getElementById("juliaZoomLabel") },
+      palette: { sel: document.getElementById("juliaPaletteType") },
+      progressive: { chk: document.getElementById("juliaProgressiveMode") },
+      smoothColoring: { chk: document.getElementById("juliaSmoothColoring") },
+      gridOverlay: { chk: document.getElementById("juliaGridOverlay") },
+      centerMarker: { chk: document.getElementById("juliaCenterMarker") },
+      marker: { chk: document.getElementById("juliaMarker") },
+    };
+    this.julia.iter.slider.min = Math.log10(MandelbrotApp.MIN_ITER);
+    this.julia.iter.slider.max = Math.log10(MandelbrotApp.MAX_ITER);
+    this.julia.zoom.slider.min = Math.log10(MandelbrotApp.MIN_SCALE);
+    this.julia.zoom.slider.max = Math.log10(MandelbrotApp.MAX_SCALE);
 
     const checkboxFields = [
-      ["juliaMarkerChk", "juliaMarker"],
       ["showJuliaChk", "showJulia"],
       ["showMandelbrotChk", "showMandelbrot"],
     ];
     checkboxFields.forEach(([chk, field]) => { this[chk].checked = !!this[field]; });
+    this.julia.marker.chk.checked = !!this.juliaMarker;
     const panelCheckboxFields = [
-      ["mandelbrotCenterMarkerChk", "centerMarker"],
-      ["mandelbrotGridOverlayChk", "gridOverlay"],
-      ["mandelbrotProgressiveChk", "progressiveMode"],
-      ["mandelbrotSmoothColoringChk", "smoothColoring"],
+      ["centerMarker", "centerMarker"],
+      ["gridOverlay", "gridOverlay"],
+      ["progressive", "progressiveMode"],
+      ["smoothColoring", "smoothColoring"],
     ];
-    panelCheckboxFields.forEach(([chk, field]) => { this[chk].checked = !!this.mandelbrotPanel[field]; });
-    const juliaPanelCheckboxFields = [
-      ["juliaCenterMarkerChk", "centerMarker"],
-      ["juliaGridOverlayChk", "gridOverlay"],
-      ["juliaProgressiveChk", "progressiveMode"],
-      ["juliaSmoothColoringChk", "smoothColoring"],
-    ];
-    juliaPanelCheckboxFields.forEach(([chk, field]) => { this[chk].checked = !!this.juliaPanel[field]; });
+    panelCheckboxFields.forEach(([group, field]) => { this.mandelbrot[group].chk.checked = !!this.mandelbrotPanel[field]; });
+    panelCheckboxFields.forEach(([group, field]) => { this.julia[group].chk.checked = !!this.juliaPanel[field]; });
     // Apply the restored panel-visibility CSS classes *before* resizing
     // anything below: resizeCanvas()/resizeOverlayCanvas() read the current
     // CSS box size, so if dual-view's 50vw split isn't already in effect,
@@ -216,57 +210,57 @@ class MandelbrotApp {
       this.juliaPanel.resizeCanvas();
       this.juliaPanel.resizeOverlayCanvas();
     }
-    this.mandelbrotPaletteSel.value = this.mandelbrotPanel.paletteType;
-    this.juliaPaletteSel.value = this.juliaPanel.paletteType;
+    this.mandelbrot.palette.sel.value = this.mandelbrotPanel.paletteType;
+    this.julia.palette.sel.value = this.juliaPanel.paletteType;
     this.backBtn    = document.getElementById("backBtn");
     this.forwardBtn = document.getElementById("forwardBtn");
     this.resetBtn   = document.getElementById("resetBtn");
     this.shareBtn   = document.getElementById("shareBtn");
 
-    this.mandelbrotIterSlider.oninput = this.onMandelbrotIterInput;
-    this.mandelbrotIterSlider.onchange = () => {
+    this.mandelbrot.iter.slider.oninput = this.onMandelbrotIterInput;
+    this.mandelbrot.iter.slider.onchange = () => {
       if (this.mandelbrotPendingIterSnapshot) {
         this.pushHistory(this.mandelbrotPendingIterSnapshot);
         this.mandelbrotPendingIterSnapshot = null;
       }
     };
-    this.mandelbrotZoomSlider.oninput = this.onMandelbrotZoomInput;
-    this.mandelbrotZoomSlider.onchange = () => {
+    this.mandelbrot.zoom.slider.oninput = this.onMandelbrotZoomInput;
+    this.mandelbrot.zoom.slider.onchange = () => {
       if (this.mandelbrotPendingZoomSnapshot) {
         this.pushHistory(this.mandelbrotPendingZoomSnapshot);
         this.mandelbrotPendingZoomSnapshot = null;
       }
     };
-    this.mandelbrotPaletteSel.onchange = this.onMandelbrotPaletteChange;
+    this.mandelbrot.palette.sel.onchange = this.onMandelbrotPaletteChange;
     this.showMandelbrotChk.onchange = this.onPanelVisibilityChange;
     this.showJuliaChk.onchange = this.onPanelVisibilityChange;
-    this.mandelbrotProgressiveChk.onchange = this.onMandelbrotProgressiveChange;
-    this.mandelbrotSmoothColoringChk.onchange = this.onMandelbrotSmoothColoringChange;
-    this.mandelbrotGridOverlayChk.onchange = this.onMandelbrotGridOverlayChange;
-    this.mandelbrotCenterMarkerChk.onchange = this.onMandelbrotCenterMarkerChange;
-    this.juliaMarkerChk.onchange = this.onJuliaMarkerChange;
+    this.mandelbrot.progressive.chk.onchange = this.onMandelbrotProgressiveChange;
+    this.mandelbrot.smoothColoring.chk.onchange = this.onMandelbrotSmoothColoringChange;
+    this.mandelbrot.gridOverlay.chk.onchange = this.onMandelbrotGridOverlayChange;
+    this.mandelbrot.centerMarker.chk.onchange = this.onMandelbrotCenterMarkerChange;
+    this.julia.marker.chk.onchange = this.onJuliaMarkerChange;
 
     // Julia's own controls — symmetric with Mandelbrot's above, including
     // the same debounce-on-release pattern for the sliders.
-    this.juliaIterSlider.oninput = this.onJuliaIterInput;
-    this.juliaIterSlider.onchange = () => {
+    this.julia.iter.slider.oninput = this.onJuliaIterInput;
+    this.julia.iter.slider.onchange = () => {
       if (this.juliaPendingIterSnapshot) {
         this.pushHistory(this.juliaPendingIterSnapshot);
         this.juliaPendingIterSnapshot = null;
       }
     };
-    this.juliaZoomSlider.oninput = this.onJuliaZoomInput;
-    this.juliaZoomSlider.onchange = () => {
+    this.julia.zoom.slider.oninput = this.onJuliaZoomInput;
+    this.julia.zoom.slider.onchange = () => {
       if (this.juliaPendingZoomSnapshot) {
         this.pushHistory(this.juliaPendingZoomSnapshot);
         this.juliaPendingZoomSnapshot = null;
       }
     };
-    this.juliaPaletteSel.onchange = this.onJuliaPaletteChange;
-    this.juliaProgressiveChk.onchange = this.onJuliaProgressiveChange;
-    this.juliaSmoothColoringChk.onchange = this.onJuliaSmoothColoringChange;
-    this.juliaGridOverlayChk.onchange = this.onJuliaGridOverlayChange;
-    this.juliaCenterMarkerChk.onchange = this.onJuliaCenterMarkerChange;
+    this.julia.palette.sel.onchange = this.onJuliaPaletteChange;
+    this.julia.progressive.chk.onchange = this.onJuliaProgressiveChange;
+    this.julia.smoothColoring.chk.onchange = this.onJuliaSmoothColoringChange;
+    this.julia.gridOverlay.chk.onchange = this.onJuliaGridOverlayChange;
+    this.julia.centerMarker.chk.onchange = this.onJuliaCenterMarkerChange;
 
     this.backBtn.onclick    = this.onBack;
     this.forwardBtn.onclick = this.onForward;
@@ -324,13 +318,13 @@ class MandelbrotApp {
   }
 
   syncMandelbrotZoomSliderUI() {
-    this.mandelbrotZoomSlider.value = Math.log10(this.mandelbrotPanel.scale);
-    this.mandelbrotZoomLabel.textContent = this.mandelbrotPanel.scale;
+    this.mandelbrot.zoom.slider.value = Math.log10(this.mandelbrotPanel.scale);
+    this.mandelbrot.zoom.label.textContent = this.mandelbrotPanel.scale;
   }
 
   syncJuliaZoomSliderUI() {
-    this.juliaZoomSlider.value = Math.log10(this.juliaPanel.scale);
-    this.juliaZoomLabel.textContent = this.juliaPanel.scale;
+    this.julia.zoom.slider.value = Math.log10(this.juliaPanel.scale);
+    this.julia.zoom.label.textContent = this.juliaPanel.scale;
   }
 
   // Tier 1 ("navigable view", undo/redo): both panels' own view+quality,
@@ -406,15 +400,15 @@ class MandelbrotApp {
 
   restoreDisplayPrefs(p) {
     this.mandelbrotPanel.gridOverlay = p.mandelbrotPanelGridOverlay;
-    this.mandelbrotGridOverlayChk.checked = !!p.mandelbrotPanelGridOverlay;
+    this.mandelbrot.gridOverlay.chk.checked = !!p.mandelbrotPanelGridOverlay;
     this.mandelbrotPanel.centerMarker = p.mandelbrotPanelCenterMarker;
-    this.mandelbrotCenterMarkerChk.checked = !!p.mandelbrotPanelCenterMarker;
+    this.mandelbrot.centerMarker.chk.checked = !!p.mandelbrotPanelCenterMarker;
     this.juliaPanel.gridOverlay = p.juliaPanelGridOverlay;
-    this.juliaGridOverlayChk.checked = !!p.juliaPanelGridOverlay;
+    this.julia.gridOverlay.chk.checked = !!p.juliaPanelGridOverlay;
     this.juliaPanel.centerMarker = p.juliaPanelCenterMarker;
-    this.juliaCenterMarkerChk.checked = !!p.juliaPanelCenterMarker;
+    this.julia.centerMarker.chk.checked = !!p.juliaPanelCenterMarker;
     this.juliaMarker = p.juliaMarker;
-    this.juliaMarkerChk.checked = !!p.juliaMarker;
+    this.julia.marker.chk.checked = !!p.juliaMarker;
 
     this.showMandelbrot = p.showMandelbrot;
     this.showMandelbrotChk.checked = !!p.showMandelbrot;
@@ -536,11 +530,11 @@ class MandelbrotApp {
     this.setScale(s.mandelbrotPanel.scale);
     this.setMandelbrotMaxIter(s.mandelbrotPanel.maxIter);
     this.applyMandelbrotPalette(s.mandelbrotPanel.paletteType);
-    this.mandelbrotPaletteSel.value = s.mandelbrotPanel.paletteType;
+    this.mandelbrot.palette.sel.value = s.mandelbrotPanel.paletteType;
     this.mandelbrotPanel.progressiveMode = s.mandelbrotPanel.progressiveMode;
-    this.mandelbrotProgressiveChk.checked = !!s.mandelbrotPanel.progressiveMode;
+    this.mandelbrot.progressive.chk.checked = !!s.mandelbrotPanel.progressiveMode;
     this.mandelbrotPanel.smoothColoring = s.mandelbrotPanel.smoothColoring;
-    this.mandelbrotSmoothColoringChk.checked = !!s.mandelbrotPanel.smoothColoring;
+    this.mandelbrot.smoothColoring.chk.checked = !!s.mandelbrotPanel.smoothColoring;
     this.resetProgressive(this.mandelbrotPanel);
 
     // Mirror of the Mandelbrot block above — explicit side-effecting calls
@@ -553,11 +547,11 @@ class MandelbrotApp {
     this.syncJuliaZoomSliderUI();
     this.setJuliaMaxIter(s.juliaPanel.maxIter);
     this.applyJuliaPalette(s.juliaPanel.paletteType);
-    this.juliaPaletteSel.value = s.juliaPanel.paletteType;
+    this.julia.palette.sel.value = s.juliaPanel.paletteType;
     this.juliaPanel.progressiveMode = s.juliaPanel.progressiveMode;
-    this.juliaProgressiveChk.checked = !!s.juliaPanel.progressiveMode;
+    this.julia.progressive.chk.checked = !!s.juliaPanel.progressiveMode;
     this.juliaPanel.smoothColoring = s.juliaPanel.smoothColoring;
-    this.juliaSmoothColoringChk.checked = !!s.juliaPanel.smoothColoring;
+    this.julia.smoothColoring.chk.checked = !!s.juliaPanel.smoothColoring;
     this.resetProgressive(this.juliaPanel);
 
     this.juliaSeed = s.juliaSeed;
@@ -568,8 +562,8 @@ class MandelbrotApp {
   setMandelbrotMaxIter(next) {
     const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
     this.mandelbrotPanel.maxIter = clamped;
-    this.mandelbrotIterSlider.value = Math.log10(clamped);
-    this.mandelbrotIterLabel.textContent = clamped;
+    this.mandelbrot.iter.slider.value = Math.log10(clamped);
+    this.mandelbrot.iter.label.textContent = clamped;
   }
 
   // Julia's own Iterations slider — independent of Mandelbrot's. History
@@ -578,8 +572,8 @@ class MandelbrotApp {
   setJuliaMaxIter(next) {
     const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
     this.juliaPanel.maxIter = clamped;
-    this.juliaIterSlider.value = Math.log10(clamped);
-    this.juliaIterLabel.textContent = clamped;
+    this.julia.iter.slider.value = Math.log10(clamped);
+    this.julia.iter.label.textContent = clamped;
   }
 
   resizeCanvas() {
@@ -712,40 +706,40 @@ class MandelbrotApp {
 
   onMandelbrotIterInput = () => {
     if (!this.mandelbrotPendingIterSnapshot) this.mandelbrotPendingIterSnapshot = this.snapshotView();
-    this.setMandelbrotMaxIter(10 ** Number(this.mandelbrotIterSlider.value));
+    this.setMandelbrotMaxIter(10 ** Number(this.mandelbrot.iter.slider.value));
     this.resetProgressive(this.mandelbrotPanel);
     this.scheduleRender();
   };
 
   onMandelbrotZoomInput = () => {
     if (!this.mandelbrotPendingZoomSnapshot) this.mandelbrotPendingZoomSnapshot = this.snapshotView();
-    this.setScale(10 ** Number(this.mandelbrotZoomSlider.value));
+    this.setScale(10 ** Number(this.mandelbrot.zoom.slider.value));
     this.scheduleRender();
   };
 
   onMandelbrotPaletteChange = () => {
     this.pushHistory(this.snapshotView());
-    this.applyMandelbrotPalette(Number(this.mandelbrotPaletteSel.value));
+    this.applyMandelbrotPalette(Number(this.mandelbrot.palette.sel.value));
     this.scheduleRender();
   };
 
   onJuliaIterInput = () => {
     if (!this.juliaPendingIterSnapshot) this.juliaPendingIterSnapshot = this.snapshotView();
-    this.setJuliaMaxIter(10 ** Number(this.juliaIterSlider.value));
+    this.setJuliaMaxIter(10 ** Number(this.julia.iter.slider.value));
     this.resetProgressive(this.juliaPanel);
     this.scheduleRender();
   };
 
   onJuliaZoomInput = () => {
     if (!this.juliaPendingZoomSnapshot) this.juliaPendingZoomSnapshot = this.snapshotView();
-    this.juliaPanel.setScale(10 ** Number(this.juliaZoomSlider.value), MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
+    this.juliaPanel.setScale(10 ** Number(this.julia.zoom.slider.value), MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
     this.syncJuliaZoomSliderUI();
     this.scheduleRender();
   };
 
   onJuliaPaletteChange = () => {
     this.pushHistory(this.snapshotView());
-    this.applyJuliaPalette(Number(this.juliaPaletteSel.value));
+    this.applyJuliaPalette(Number(this.julia.palette.sel.value));
     this.scheduleRender();
   };
 
@@ -803,14 +797,14 @@ class MandelbrotApp {
 
   onMandelbrotProgressiveChange = () => {
     this.pushHistory(this.snapshotView());
-    this.mandelbrotPanel.progressiveMode = this.mandelbrotProgressiveChk.checked ? 1 : 0;
+    this.mandelbrotPanel.progressiveMode = this.mandelbrot.progressive.chk.checked ? 1 : 0;
     this.resetProgressive(this.mandelbrotPanel);
     this.scheduleRender();
   };
 
   onMandelbrotSmoothColoringChange = () => {
     this.pushHistory(this.snapshotView());
-    this.mandelbrotPanel.smoothColoring = this.mandelbrotSmoothColoringChk.checked ? 1 : 0;
+    this.mandelbrotPanel.smoothColoring = this.mandelbrot.smoothColoring.chk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
@@ -818,17 +812,17 @@ class MandelbrotApp {
   // change what the fractal render pass produces, only what's drawn on the
   // separate #mandelbrotOverlay canvas, so no pushHistory here (unlike the toggles above).
   onMandelbrotGridOverlayChange = () => {
-    this.mandelbrotPanel.gridOverlay = this.mandelbrotGridOverlayChk.checked ? 1 : 0;
+    this.mandelbrotPanel.gridOverlay = this.mandelbrot.gridOverlay.chk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
   onMandelbrotCenterMarkerChange = () => {
-    this.mandelbrotPanel.centerMarker = this.mandelbrotCenterMarkerChk.checked ? 1 : 0;
+    this.mandelbrotPanel.centerMarker = this.mandelbrot.centerMarker.chk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
   onJuliaMarkerChange = () => {
-    this.juliaMarker = this.juliaMarkerChk.checked ? 1 : 0;
+    this.juliaMarker = this.julia.marker.chk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
@@ -836,26 +830,26 @@ class MandelbrotApp {
   // (pushHistory immediately, same as onMandelbrotProgressiveChange/onMandelbrotSmoothColoringChange).
   onJuliaProgressiveChange = () => {
     this.pushHistory(this.snapshotView());
-    this.juliaPanel.progressiveMode = this.juliaProgressiveChk.checked ? 1 : 0;
+    this.juliaPanel.progressiveMode = this.julia.progressive.chk.checked ? 1 : 0;
     this.resetProgressive(this.juliaPanel);
     this.scheduleRender();
   };
 
   onJuliaSmoothColoringChange = () => {
     this.pushHistory(this.snapshotView());
-    this.juliaPanel.smoothColoring = this.juliaSmoothColoringChk.checked ? 1 : 0;
+    this.juliaPanel.smoothColoring = this.julia.smoothColoring.chk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
   // Julia's own grid/center-marker — Tier 2 (display preference), no
   // pushHistory, mirrors Mandelbrot's onMandelbrotGridOverlayChange/onMandelbrotCenterMarkerChange.
   onJuliaGridOverlayChange = () => {
-    this.juliaPanel.gridOverlay = this.juliaGridOverlayChk.checked ? 1 : 0;
+    this.juliaPanel.gridOverlay = this.julia.gridOverlay.chk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
   onJuliaCenterMarkerChange = () => {
-    this.juliaPanel.centerMarker = this.juliaCenterMarkerChk.checked ? 1 : 0;
+    this.juliaPanel.centerMarker = this.julia.centerMarker.chk.checked ? 1 : 0;
     this.scheduleRender();
   };
 
