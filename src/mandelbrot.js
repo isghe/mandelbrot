@@ -160,8 +160,8 @@ class MandelbrotApp {
 
     // Julia's own controls, independent of the Mandelbrot ones above —
     // synced to the live juliaPanel's field values further down in this
-    // constructor (juliaPanelCheckboxFields, setJuliaMaxIter/
-    // syncJuliaZoomSliderUI/juliaPaletteSel), symmetric with Mandelbrot's.
+    // constructor (panelCheckboxFields, setJuliaMaxIter/
+    // syncJuliaZoomSliderUI/this.julia.palette.sel), symmetric with Mandelbrot's.
     this.julia = {
       iter: { slider: document.getElementById("juliaIterSlider"), label: document.getElementById("juliaIterLabel") },
       zoom: { slider: document.getElementById("juliaZoomSlider"), label: document.getElementById("juliaZoomLabel") },
