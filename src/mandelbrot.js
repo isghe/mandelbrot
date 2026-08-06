@@ -115,9 +115,13 @@ class MandelbrotApp {
     // separate concern (showJulia + updatePanelVisibility).
     this.julia = { panel: new FractalPanel(document.getElementById("juliaGfx"), document.getElementById("juliaOverlay")) };
     // A fresh Julia view is centered on the current Julia seed (its default
-    // pan), matching what the old lazy createJuliaPanel() did on first reveal;
-    // restoreSettings() overrides this if the URL/localStorage carries a
-    // juliaPanelCenter. pivot follows in restoreSettings() below.
+    // pan), matching what the old lazy createJuliaPanel() did on first
+    // reveal (historical: Julia used to be created on-demand when first
+    // shown, before eager dual-panel construction landed in 4fbd53b —
+    // createJuliaPanel() itself is long gone, this comment just preserves
+    // why this default exists); restoreSettings() overrides this if the
+    // URL/localStorage carries a juliaPanelCenter. pivot follows in
+    // restoreSettings() below.
     this.julia.panel.center = this.juliaSeed;
 
     // Captured via snapshotView() itself: both panels are freshly constructed
@@ -142,10 +146,10 @@ class MandelbrotApp {
     // UI
     this.uiToggleBtn = document.getElementById("uiToggleBtn");
     this.uiPanel = document.getElementById("ui");
-    // this.mandelbrot / this.julia below hold DOM control refs only (sliders,
-    // labels, selects, checkboxes) — the corresponding view/quality state
-    // lives on this.mandelbrot.panel / this.julia.panel (FractalPanel), a
-    // separate object.
+    // this.mandelbrot / this.julia are per-side namespaces: `.panel` (set
+    // above) holds the FractalPanel (view/quality state); the DOM control
+    // refs added below (sliders, labels, selects, checkboxes) are its
+    // sibling keys.
     Object.assign(this.mandelbrot, {
       iter: { slider: document.getElementById("mandelbrotIterSlider"), label: document.getElementById("mandelbrotIterLabel") },
       zoom: { slider: document.getElementById("mandelbrotZoomSlider"), label: document.getElementById("mandelbrotZoomLabel") },
@@ -498,8 +502,8 @@ class MandelbrotApp {
     const pointFields = ["juliaSeed", "juliaPanelCenter", "mandelbrotPanelCenter"];
     // mandelbrotPanelX / juliaPanelX names double as MandelbrotApp accessor
     // names (see the getters/setters above the constructor) — this[field] =
-    // s[field] below routes straight through: mandelbrotPanel always exists;
-    // juliaPanel falls back to a backing field until it's created.
+    // s[field] below routes straight through to this.mandelbrot.panel /
+    // this.julia.panel, both always live (constructed eagerly above).
     const numberFields = [
       "juliaMarker", "showJulia", "showMandelbrot",
       "mandelbrotPanelScale", "mandelbrotPanelMaxIter", "mandelbrotPanelPaletteType",
