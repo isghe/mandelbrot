@@ -13,6 +13,27 @@ class MandelbrotApp {
   static WHEEL_HISTORY_MS = 250;
   static SETTINGS_KEY = 'isghe-mandelbrot-settings';
   static SETTINGS_SAVE_MS = 400;
+  // Bridges the flat mandelbrotPanelX/juliaPanelX schema field names (URL/
+  // localStorage, see share.js) to their live location on this.mandelbrot.panel/
+  // this.julia.panel — used by restoreSettings()'s generic dispatch below.
+  static PANEL_FIELD_MAP = {
+    mandelbrotPanelCenter: ["mandelbrot", "center"],
+    mandelbrotPanelScale: ["mandelbrot", "scale"],
+    mandelbrotPanelMaxIter: ["mandelbrot", "maxIter"],
+    mandelbrotPanelPaletteType: ["mandelbrot", "paletteType"],
+    mandelbrotPanelProgressiveMode: ["mandelbrot", "progressiveMode"],
+    mandelbrotPanelSmoothColoring: ["mandelbrot", "smoothColoring"],
+    mandelbrotPanelGridOverlay: ["mandelbrot", "gridOverlay"],
+    mandelbrotPanelCenterMarker: ["mandelbrot", "centerMarker"],
+    juliaPanelCenter: ["julia", "center"],
+    juliaPanelScale: ["julia", "scale"],
+    juliaPanelMaxIter: ["julia", "maxIter"],
+    juliaPanelPaletteType: ["julia", "paletteType"],
+    juliaPanelProgressiveMode: ["julia", "progressiveMode"],
+    juliaPanelSmoothColoring: ["julia", "smoothColoring"],
+    juliaPanelGridOverlay: ["julia", "gridOverlay"],
+    juliaPanelCenterMarker: ["julia", "centerMarker"],
+  };
   // Visibility toggling operates on DOM elements that exist from page load.
   // Both panels' FractalPanel wrappers are constructed eagerly in the
   // constructor, so showing/hiding is purely a CSS concern here. This table
@@ -61,51 +82,6 @@ class MandelbrotApp {
 
   // render scheduling
   rafPending = false;
-
-  // Pure passthroughs to the two live panels. Both panels are constructed
-  // eagerly in the constructor and never destroyed (hidden via CSS when a
-  // panel is off), so these have no backing field and no side effect — a
-  // symmetric pair of getter/setter groups, juliaPanelX and mandelbrotPanelX.
-  // They exist so restoreSettings() can drive both panels through the same
-  // generic this[field] = s[field] loop. The DOM refs (sliders/checkboxes/
-  // selects) don't exist yet when restoreSettings() runs, so these can't do
-  // UI sync — the rest of the constructor (setJulia/MandelbrotMaxIter,
-  // palette256, the panelCheckboxFields loops) re-aligns the interface, and
-  // the runtime write paths (applySnapshot/restoreDisplayPrefs) call the
-  // side-effecting helpers explicitly rather than relying on the setters.
-  get juliaPanelCenter() { return this.julia.panel.center; }
-  set juliaPanelCenter(v) { this.julia.panel.center = v; }
-  get juliaPanelScale() { return this.julia.panel.scale; }
-  set juliaPanelScale(v) { this.julia.panel.scale = v; }
-  get juliaPanelMaxIter() { return this.julia.panel.maxIter; }
-  set juliaPanelMaxIter(v) { this.julia.panel.maxIter = v; }
-  get juliaPanelPaletteType() { return this.julia.panel.paletteType; }
-  set juliaPanelPaletteType(v) { this.julia.panel.paletteType = v; }
-  get juliaPanelSmoothColoring() { return this.julia.panel.smoothColoring; }
-  set juliaPanelSmoothColoring(v) { this.julia.panel.smoothColoring = v; }
-  get juliaPanelProgressiveMode() { return this.julia.panel.progressiveMode; }
-  set juliaPanelProgressiveMode(v) { this.julia.panel.progressiveMode = v; }
-  get juliaPanelGridOverlay() { return this.julia.panel.gridOverlay; }
-  set juliaPanelGridOverlay(v) { this.julia.panel.gridOverlay = v; }
-  get juliaPanelCenterMarker() { return this.julia.panel.centerMarker; }
-  set juliaPanelCenterMarker(v) { this.julia.panel.centerMarker = v; }
-
-  get mandelbrotPanelCenter() { return this.mandelbrot.panel.center; }
-  set mandelbrotPanelCenter(v) { this.mandelbrot.panel.center = v; }
-  get mandelbrotPanelScale() { return this.mandelbrot.panel.scale; }
-  set mandelbrotPanelScale(v) { this.mandelbrot.panel.scale = v; }
-  get mandelbrotPanelMaxIter() { return this.mandelbrot.panel.maxIter; }
-  set mandelbrotPanelMaxIter(v) { this.mandelbrot.panel.maxIter = v; }
-  get mandelbrotPanelPaletteType() { return this.mandelbrot.panel.paletteType; }
-  set mandelbrotPanelPaletteType(v) { this.mandelbrot.panel.paletteType = v; }
-  get mandelbrotPanelProgressiveMode() { return this.mandelbrot.panel.progressiveMode; }
-  set mandelbrotPanelProgressiveMode(v) { this.mandelbrot.panel.progressiveMode = v; }
-  get mandelbrotPanelSmoothColoring() { return this.mandelbrot.panel.smoothColoring; }
-  set mandelbrotPanelSmoothColoring(v) { this.mandelbrot.panel.smoothColoring = v; }
-  get mandelbrotPanelGridOverlay() { return this.mandelbrot.panel.gridOverlay; }
-  set mandelbrotPanelGridOverlay(v) { this.mandelbrot.panel.gridOverlay = v; }
-  get mandelbrotPanelCenterMarker() { return this.mandelbrot.panel.centerMarker; }
-  set mandelbrotPanelCenterMarker(v) { this.mandelbrot.panel.centerMarker = v; }
 
   constructor(canvas) {
     this.mandelbrot = { panel: new FractalPanel(canvas, document.getElementById("mandelbrotOverlay")) };
@@ -346,20 +322,20 @@ class MandelbrotApp {
   snapshotView() {
     return {
       mandelbrotPanel: {
-        center: this.mandelbrotPanelCenter,
-        scale: this.mandelbrotPanelScale,
-        maxIter: this.mandelbrotPanelMaxIter,
-        paletteType: this.mandelbrotPanelPaletteType,
-        smoothColoring: this.mandelbrotPanelSmoothColoring,
-        progressiveMode: this.mandelbrotPanelProgressiveMode,
+        center: this.mandelbrot.panel.center,
+        scale: this.mandelbrot.panel.scale,
+        maxIter: this.mandelbrot.panel.maxIter,
+        paletteType: this.mandelbrot.panel.paletteType,
+        smoothColoring: this.mandelbrot.panel.smoothColoring,
+        progressiveMode: this.mandelbrot.panel.progressiveMode,
       },
       juliaPanel: {
-        center: this.juliaPanelCenter,
-        scale: this.juliaPanelScale,
-        maxIter: this.juliaPanelMaxIter,
-        paletteType: this.juliaPanelPaletteType,
-        smoothColoring: this.juliaPanelSmoothColoring,
-        progressiveMode: this.juliaPanelProgressiveMode,
+        center: this.julia.panel.center,
+        scale: this.julia.panel.scale,
+        maxIter: this.julia.panel.maxIter,
+        paletteType: this.julia.panel.paletteType,
+        smoothColoring: this.julia.panel.smoothColoring,
+        progressiveMode: this.julia.panel.progressiveMode,
       },
       juliaSeed: this.juliaSeed,
     };
@@ -370,23 +346,23 @@ class MandelbrotApp {
   // flattenSnapshotForShare() below for the bridge between the two.
   shareState() {
     return {
-      mandelbrotPanelCenter: this.mandelbrotPanelCenter,
-      mandelbrotPanelScale: this.mandelbrotPanelScale,
-      mandelbrotPanelMaxIter: this.mandelbrotPanelMaxIter,
-      mandelbrotPanelPaletteType: this.mandelbrotPanelPaletteType,
-      mandelbrotPanelProgressiveMode: this.mandelbrotPanelProgressiveMode,
-      mandelbrotPanelSmoothColoring: this.mandelbrotPanelSmoothColoring,
-      mandelbrotPanelGridOverlay: this.mandelbrotPanelGridOverlay,
-      mandelbrotPanelCenterMarker: this.mandelbrotPanelCenterMarker,
+      mandelbrotPanelCenter: this.mandelbrot.panel.center,
+      mandelbrotPanelScale: this.mandelbrot.panel.scale,
+      mandelbrotPanelMaxIter: this.mandelbrot.panel.maxIter,
+      mandelbrotPanelPaletteType: this.mandelbrot.panel.paletteType,
+      mandelbrotPanelProgressiveMode: this.mandelbrot.panel.progressiveMode,
+      mandelbrotPanelSmoothColoring: this.mandelbrot.panel.smoothColoring,
+      mandelbrotPanelGridOverlay: this.mandelbrot.panel.gridOverlay,
+      mandelbrotPanelCenterMarker: this.mandelbrot.panel.centerMarker,
       juliaSeed: this.juliaSeed,
-      juliaPanelCenter: this.juliaPanelCenter,
-      juliaPanelScale: this.juliaPanelScale,
-      juliaPanelMaxIter: this.juliaPanelMaxIter,
-      juliaPanelPaletteType: this.juliaPanelPaletteType,
-      juliaPanelProgressiveMode: this.juliaPanelProgressiveMode,
-      juliaPanelSmoothColoring: this.juliaPanelSmoothColoring,
-      juliaPanelGridOverlay: this.juliaPanelGridOverlay,
-      juliaPanelCenterMarker: this.juliaPanelCenterMarker,
+      juliaPanelCenter: this.julia.panel.center,
+      juliaPanelScale: this.julia.panel.scale,
+      juliaPanelMaxIter: this.julia.panel.maxIter,
+      juliaPanelPaletteType: this.julia.panel.paletteType,
+      juliaPanelProgressiveMode: this.julia.panel.progressiveMode,
+      juliaPanelSmoothColoring: this.julia.panel.smoothColoring,
+      juliaPanelGridOverlay: this.julia.panel.gridOverlay,
+      juliaPanelCenterMarker: this.julia.panel.centerMarker,
       juliaMarker: this.juliaMarker,
       showMandelbrot: this.showMandelbrot,
       showJulia: this.showJulia,
@@ -400,10 +376,10 @@ class MandelbrotApp {
   // meaningless on Julia's own view — see drawOverlayForPanel).
   captureDisplayPrefs() {
     return {
-      mandelbrotPanelGridOverlay: this.mandelbrotPanelGridOverlay,
-      mandelbrotPanelCenterMarker: this.mandelbrotPanelCenterMarker,
-      juliaPanelGridOverlay: this.juliaPanelGridOverlay,
-      juliaPanelCenterMarker: this.juliaPanelCenterMarker,
+      mandelbrotPanelGridOverlay: this.mandelbrot.panel.gridOverlay,
+      mandelbrotPanelCenterMarker: this.mandelbrot.panel.centerMarker,
+      juliaPanelGridOverlay: this.julia.panel.gridOverlay,
+      juliaPanelCenterMarker: this.julia.panel.centerMarker,
       juliaMarker: this.juliaMarker,
       showMandelbrot: this.showMandelbrot,
       showJulia: this.showJulia,
@@ -490,20 +466,31 @@ class MandelbrotApp {
     const s = shared || this.loadSettings();
     if (!s) return;
 
+    const setPanelField = (flatName, value) => {
+      const mapped = MandelbrotApp.PANEL_FIELD_MAP[flatName];
+      if (mapped) {
+        const [side, key] = mapped;
+        this[side].panel[key] = value;
+      } else {
+        this[flatName] = value;
+      }
+    };
     const restoreNumber = (field) => {
-      if (typeof s[field] === "number") this[field] = s[field];
+      if (typeof s[field] === "number") setPanelField(field, s[field]);
     };
     const restorePoint = (field) => {
       const p = s[field];
       if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
-        this[field] = new DOMPointReadOnly(p.x, p.y);
+        setPanelField(field, new DOMPointReadOnly(p.x, p.y));
       }
     };
     const pointFields = ["juliaSeed", "juliaPanelCenter", "mandelbrotPanelCenter"];
-    // mandelbrotPanelX / juliaPanelX names double as MandelbrotApp accessor
-    // names (see the getters/setters above the constructor) — this[field] =
-    // s[field] below routes straight through to this.mandelbrot.panel /
-    // this.julia.panel, both always live (constructed eagerly above).
+    // mandelbrotPanelX / juliaPanelX names are the flat URL/localStorage
+    // schema field names (see share.js) — setPanelField() above routes them
+    // through PANEL_FIELD_MAP to this.mandelbrot.panel / this.julia.panel,
+    // both always live (constructed eagerly above). juliaSeed/juliaMarker/
+    // showJulia/showMandelbrot aren't in the map, so they fall through to
+    // plain this[flatName] = value.
     const numberFields = [
       "juliaMarker", "showJulia", "showMandelbrot",
       "mandelbrotPanelScale", "mandelbrotPanelMaxIter", "mandelbrotPanelPaletteType",
