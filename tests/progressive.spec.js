@@ -29,7 +29,7 @@ test('progressive mode ramp actually renders a frame at maxIter', async ({ page 
   // Julia's own ramp, not Mandelbrot's, since Julia renders after Mandelbrot
   // each frame). Read Mandelbrot's own field directly instead.
   await expect.poll(async () => {
-    return page.evaluate(() => window.app.mandelbrotPanel.lastDisplayIter);
+    return page.evaluate(() => window.app.mandelbrot.panel.lastDisplayIter);
   }, { timeout: 15000 }).toBe(64);
 });
 
@@ -43,10 +43,10 @@ test('progressive ramps are independent per panel — Julia reaches its own (dif
   await expect(gpuError).toBeHidden();
 
   await expect.poll(async () => {
-    return page.evaluate(() => window.app.mandelbrotPanel.lastDisplayIter);
+    return page.evaluate(() => window.app.mandelbrot.panel.lastDisplayIter);
   }, { timeout: 15000 }).toBe(64);
   await expect.poll(async () => {
-    return page.evaluate(() => window.app.juliaPanel?.lastDisplayIter);
+    return page.evaluate(() => window.app.julia.panel?.lastDisplayIter);
   }, { timeout: 15000 }).toBe(32);
 });
 
@@ -60,14 +60,14 @@ test('device loss stops the progressive re-arm instead of looping every frame', 
   // WebGPU setup resolves — asserting a render *count* before that startup
   // call has landed races it, and can count that unrelated call as a bogus
   // second progressive re-arm. Wait for it to settle first.
-  await page.waitForFunction(() => window.app.mandelbrotPanel.renderer != null);
+  await page.waitForFunction(() => window.app.mandelbrot.panel.renderer != null);
 
   const renderCount = await page.evaluate(async () => {
     window.__renderCount = 0;
     const orig = window.app.renderOnce;
     window.app.renderOnce = () => { window.__renderCount++; return orig.call(window.app); };
 
-    window.app.mandelbrotPanel.progressiveMode = true;
+    window.app.mandelbrot.panel.progressiveMode = true;
     window.app.deviceLost = true;
     window.app.scheduleRender();
 
