@@ -139,7 +139,7 @@ class MandelbrotApp {
 
     // Julia's own controls, independent of the Mandelbrot ones above —
     // synced to the live juliaPanel's field values further down in this
-    // constructor (panelCheckboxFields, setJuliaMaxIter/
+    // constructor (panelCheckboxFields, setMaxIter(this.julia)/
     // syncZoomSliderUI(this.julia)/this.julia.palette.sel), symmetric with Mandelbrot's.
     Object.assign(this.julia, {
       iter: { slider: document.getElementById("juliaIterSlider"), label: document.getElementById("juliaIterLabel") },
@@ -193,20 +193,10 @@ class MandelbrotApp {
     this.resetBtn   = document.getElementById("resetBtn");
     this.shareBtn   = document.getElementById("shareBtn");
 
-    this.mandelbrot.iter.slider.oninput = this.onMandelbrotIterInput;
-    this.mandelbrot.iter.slider.onchange = () => {
-      if (this.mandelbrot.pendingSnapshot.iter) {
-        this.pushHistory(this.mandelbrot.pendingSnapshot.iter);
-        this.mandelbrot.pendingSnapshot.iter = null;
-      }
-    };
-    this.mandelbrot.zoom.slider.oninput = this.onMandelbrotZoomInput;
-    this.mandelbrot.zoom.slider.onchange = () => {
-      if (this.mandelbrot.pendingSnapshot.zoom) {
-        this.pushHistory(this.mandelbrot.pendingSnapshot.zoom);
-        this.mandelbrot.pendingSnapshot.zoom = null;
-      }
-    };
+    this.mandelbrot.iter.slider.oninput = () => this.onIterInput(this.mandelbrot);
+    this.mandelbrot.iter.slider.onchange = () => this.commitPendingSnapshot(this.mandelbrot, "iter");
+    this.mandelbrot.zoom.slider.oninput = () => this.onZoomInput(this.mandelbrot);
+    this.mandelbrot.zoom.slider.onchange = () => this.commitPendingSnapshot(this.mandelbrot, "zoom");
     this.mandelbrot.palette.sel.onchange = this.onMandelbrotPaletteChange;
     this.showMandelbrotChk.onchange = this.onPanelVisibilityChange;
     this.showJuliaChk.onchange = this.onPanelVisibilityChange;
@@ -218,20 +208,10 @@ class MandelbrotApp {
 
     // Julia's own controls — symmetric with Mandelbrot's above, including
     // the same debounce-on-release pattern for the sliders.
-    this.julia.iter.slider.oninput = this.onJuliaIterInput;
-    this.julia.iter.slider.onchange = () => {
-      if (this.julia.pendingSnapshot.iter) {
-        this.pushHistory(this.julia.pendingSnapshot.iter);
-        this.julia.pendingSnapshot.iter = null;
-      }
-    };
-    this.julia.zoom.slider.oninput = this.onJuliaZoomInput;
-    this.julia.zoom.slider.onchange = () => {
-      if (this.julia.pendingSnapshot.zoom) {
-        this.pushHistory(this.julia.pendingSnapshot.zoom);
-        this.julia.pendingSnapshot.zoom = null;
-      }
-    };
+    this.julia.iter.slider.oninput = () => this.onIterInput(this.julia);
+    this.julia.iter.slider.onchange = () => this.commitPendingSnapshot(this.julia, "iter");
+    this.julia.zoom.slider.oninput = () => this.onZoomInput(this.julia);
+    this.julia.zoom.slider.onchange = () => this.commitPendingSnapshot(this.julia, "zoom");
     this.julia.palette.sel.onchange = this.onJuliaPaletteChange;
     this.julia.progressive.chk.onchange = this.onJuliaProgressiveChange;
     this.julia.smoothColoring.chk.onchange = this.onJuliaSmoothColoringChange;
@@ -277,11 +257,11 @@ class MandelbrotApp {
     window.addEventListener("keydown", this.onKeyDown);
 
     this.setPanelScale(this.mandelbrot, this.mandelbrot.panel.scale);
-    this.setMandelbrotMaxIter(this.mandelbrot.panel.maxIter);
+    this.setMaxIter(this.mandelbrot, this.mandelbrot.panel.maxIter);
     this.mandelbrot.panel.palette256 = makePalette(this.mandelbrot.panel.paletteType);
     // Julia's own iter/zoom slider sync + GPU palette (symmetric with the
     // three Mandelbrot lines above); the renderer attaches in initGPU().
-    this.setJuliaMaxIter(this.julia.panel.maxIter);
+    this.setMaxIter(this.julia, this.julia.panel.maxIter);
     this.setPanelScale(this.julia, this.julia.panel.scale);
     this.julia.panel.palette256 = makePalette(this.julia.panel.paletteType);
 
@@ -509,7 +489,7 @@ class MandelbrotApp {
     this.mandelbrot.panel.pivot = s.mandelbrotPanel.center;
     this.mandelbrot.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
     this.setPanelScale(this.mandelbrot, s.mandelbrotPanel.scale);
-    this.setMandelbrotMaxIter(s.mandelbrotPanel.maxIter);
+    this.setMaxIter(this.mandelbrot, s.mandelbrotPanel.maxIter);
     this.applyMandelbrotPalette(s.mandelbrotPanel.paletteType);
     this.mandelbrot.palette.sel.value = s.mandelbrotPanel.paletteType;
     this.mandelbrot.panel.progressiveMode = s.mandelbrotPanel.progressiveMode;
@@ -525,7 +505,7 @@ class MandelbrotApp {
     this.julia.panel.pivot = s.juliaPanel.center;
     this.julia.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
     this.setPanelScale(this.julia, s.juliaPanel.scale);
-    this.setJuliaMaxIter(s.juliaPanel.maxIter);
+    this.setMaxIter(this.julia, s.juliaPanel.maxIter);
     this.applyJuliaPalette(s.juliaPanel.paletteType);
     this.julia.palette.sel.value = s.juliaPanel.paletteType;
     this.julia.panel.progressiveMode = s.juliaPanel.progressiveMode;
@@ -539,21 +519,14 @@ class MandelbrotApp {
     this.scheduleRender();
   }
 
-  setMandelbrotMaxIter(next) {
+  // History bookkeeping (pushHistory) is done by the caller (see the
+  // sliders' onchange/pendingSnapshot handling and applySnapshot above) —
+  // symmetric with setPanelScale above, one method for both panels.
+  setMaxIter(group, next) {
     const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
-    this.mandelbrot.panel.maxIter = clamped;
-    this.mandelbrot.iter.slider.value = Math.log10(clamped);
-    this.mandelbrot.iter.label.textContent = clamped;
-  }
-
-  // Julia's own Iterations slider — independent of Mandelbrot's. History
-  // bookkeeping (pushHistory) is done by the caller (see the slider's
-  // onchange/pendingSnapshot handling and applySnapshot above).
-  setJuliaMaxIter(next) {
-    const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
-    this.julia.panel.maxIter = clamped;
-    this.julia.iter.slider.value = Math.log10(clamped);
-    this.julia.iter.label.textContent = clamped;
+    group.panel.maxIter = clamped;
+    group.iter.slider.value = Math.log10(clamped);
+    group.iter.label.textContent = clamped;
   }
 
   resizeVisiblePanels() {
@@ -675,35 +648,33 @@ class MandelbrotApp {
     if (this.julia.panel.renderer) this.julia.panel.renderer.writePalette(palette256);
   }
 
-  onMandelbrotIterInput = () => {
-    if (!this.mandelbrot.pendingSnapshot.iter) this.mandelbrot.pendingSnapshot.iter = this.snapshotView();
-    this.setMandelbrotMaxIter(10 ** Number(this.mandelbrot.iter.slider.value));
-    this.resetProgressive(this.mandelbrot.panel);
+  // Iterations/zoom sliders debounce history on release (see the sliders'
+  // onchange -> commitPendingSnapshot wiring in the constructor): the first
+  // input of a drag snapshots the pre-change view, subsequent inputs reuse
+  // it, and onchange pushes that one snapshot instead of one per tick.
+  onIterInput(group) {
+    if (!group.pendingSnapshot.iter) group.pendingSnapshot.iter = this.snapshotView();
+    this.setMaxIter(group, 10 ** Number(group.iter.slider.value));
+    this.resetProgressive(group.panel);
     this.scheduleRender();
-  };
+  }
 
-  onMandelbrotZoomInput = () => {
-    if (!this.mandelbrot.pendingSnapshot.zoom) this.mandelbrot.pendingSnapshot.zoom = this.snapshotView();
-    this.setPanelScale(this.mandelbrot, 10 ** Number(this.mandelbrot.zoom.slider.value));
+  onZoomInput(group) {
+    if (!group.pendingSnapshot.zoom) group.pendingSnapshot.zoom = this.snapshotView();
+    this.setPanelScale(group, 10 ** Number(group.zoom.slider.value));
     this.scheduleRender();
-  };
+  }
+
+  commitPendingSnapshot(group, key) {
+    if (group.pendingSnapshot[key]) {
+      this.pushHistory(group.pendingSnapshot[key]);
+      group.pendingSnapshot[key] = null;
+    }
+  }
 
   onMandelbrotPaletteChange = () => {
     this.pushHistory(this.snapshotView());
     this.applyMandelbrotPalette(Number(this.mandelbrot.palette.sel.value));
-    this.scheduleRender();
-  };
-
-  onJuliaIterInput = () => {
-    if (!this.julia.pendingSnapshot.iter) this.julia.pendingSnapshot.iter = this.snapshotView();
-    this.setJuliaMaxIter(10 ** Number(this.julia.iter.slider.value));
-    this.resetProgressive(this.julia.panel);
-    this.scheduleRender();
-  };
-
-  onJuliaZoomInput = () => {
-    if (!this.julia.pendingSnapshot.zoom) this.julia.pendingSnapshot.zoom = this.snapshotView();
-    this.setPanelScale(this.julia, 10 ** Number(this.julia.zoom.slider.value));
     this.scheduleRender();
   };
 
