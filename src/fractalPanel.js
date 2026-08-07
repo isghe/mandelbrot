@@ -31,9 +31,9 @@ export function buildUniformData({
 // a canvas's own view) stays app-global on MandelbrotApp; everything else
 // that characterizes a single canvas's frame (view, quality, look) lives here.
 export class FractalPanel {
-  // Shared with MandelbrotApp's juliaPanelX fallback getters, so a Julia
-  // panel not yet created (or not yet restored) doesn't drift out of sync
-  // with a duplicated literal — see MandelbrotApp's three-tier state model.
+  // Single source of truth for both panels' defaults, so Mandelbrot and
+  // Julia can't drift out of sync via a duplicated literal — see
+  // MandelbrotApp's three-tier state model.
   static DEFAULT_SCALE = 3.0;
   static DEFAULT_MAX_ITER = 256;
   static DEFAULT_PALETTE_TYPE = 4;
