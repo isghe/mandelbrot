@@ -858,7 +858,7 @@ class MandelbrotApp {
     // Julia panel from rendering.
     if (this.deviceLost) {
       this.anyProgressiveBelowCap = false;
-      return Infinity;
+      return;
     }
 
     let anyBelowCap = false;
@@ -875,15 +875,11 @@ class MandelbrotApp {
         }
       }
       this.renderPanel(panel, juliaMode, displayIter);
-      // Exposed for e2e observation of "what's currently rendered"; tracks
-      // whichever panel was rendered last this frame, not just Mandelbrot's
-      // (each panel also gets its own copy for dual-view inspection).
+      // Exposed for e2e observation of "what's currently rendered".
       panel.lastDisplayIter = displayIter;
-      this.lastDisplayIter = displayIter;
     }
 
     this.anyProgressiveBelowCap = anyBelowCap;
-    return this.lastDisplayIter;
   };
 }
 
