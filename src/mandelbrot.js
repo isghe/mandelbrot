@@ -143,7 +143,7 @@ class MandelbrotApp {
     // Julia's own controls, independent of the Mandelbrot ones above —
     // synced to the live juliaPanel's field values further down in this
     // constructor (panelCheckboxFields, setJuliaMaxIter/
-    // syncJuliaZoomSliderUI/this.julia.palette.sel), symmetric with Mandelbrot's.
+    // syncZoomSliderUI("julia")/this.julia.palette.sel), symmetric with Mandelbrot's.
     Object.assign(this.julia, {
       iter: { slider: document.getElementById("juliaIterSlider"), label: document.getElementById("juliaIterLabel") },
       zoom: { slider: document.getElementById("juliaZoomSlider"), label: document.getElementById("juliaZoomLabel") },
@@ -251,7 +251,7 @@ class MandelbrotApp {
       hooks: {
         pushHistory: (s) => this.pushHistory(s),
         armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
-        onScaleChange: () => this.syncMandelbrotZoomSliderUI(),
+        onScaleChange: () => this.syncZoomSliderUI("mandelbrot"),
         // Only the Mandelbrot panel's genuine click sets the shared Julia
         // seed — see attachPanelEvents' hooks param.
         onGenuineClick: (fractalPoint) => {
@@ -272,37 +272,32 @@ class MandelbrotApp {
       hooks: {
         pushHistory: (snapshot) => this.pushHistory(snapshot),
         armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
-        onScaleChange: () => this.syncJuliaZoomSliderUI(),
+        onScaleChange: () => this.syncZoomSliderUI("julia"),
       },
     });
     window.addEventListener("resize", this.onResize);
     window.addEventListener("keydown", this.onKeyDown);
 
-    this.setScale(this.mandelbrot.panel.scale);
+    this.setPanelScale("mandelbrot", this.mandelbrot.panel.scale);
     this.setMandelbrotMaxIter(this.mandelbrot.panel.maxIter);
     this.mandelbrot.panel.palette256 = makePalette(this.mandelbrot.panel.paletteType);
     // Julia's own iter/zoom slider sync + GPU palette (symmetric with the
     // three Mandelbrot lines above); the renderer attaches in initGPU().
     this.setJuliaMaxIter(this.julia.panel.maxIter);
-    this.syncJuliaZoomSliderUI();
+    this.setPanelScale("julia", this.julia.panel.scale);
     this.julia.panel.palette256 = makePalette(this.julia.panel.paletteType);
 
     this.drawOverlay();
   }
 
-  setScale(next) {
-    this.mandelbrot.panel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
-    this.syncMandelbrotZoomSliderUI();
+  setPanelScale(side, next) {
+    this[side].panel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
+    this.syncZoomSliderUI(side);
   }
 
-  syncMandelbrotZoomSliderUI() {
-    this.mandelbrot.zoom.slider.value = Math.log10(this.mandelbrot.panel.scale);
-    this.mandelbrot.zoom.label.textContent = this.mandelbrot.panel.scale;
-  }
-
-  syncJuliaZoomSliderUI() {
-    this.julia.zoom.slider.value = Math.log10(this.julia.panel.scale);
-    this.julia.zoom.label.textContent = this.julia.panel.scale;
+  syncZoomSliderUI(side) {
+    this[side].zoom.slider.value = Math.log10(this[side].panel.scale);
+    this[side].zoom.label.textContent = this[side].panel.scale;
   }
 
   // Tier 1 ("navigable view", undo/redo): both panels' own view+quality,
@@ -515,7 +510,7 @@ class MandelbrotApp {
     this.mandelbrot.panel.center = s.mandelbrotPanel.center;
     this.mandelbrot.panel.pivot = s.mandelbrotPanel.center;
     this.mandelbrot.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.setScale(s.mandelbrotPanel.scale);
+    this.setPanelScale("mandelbrot", s.mandelbrotPanel.scale);
     this.setMandelbrotMaxIter(s.mandelbrotPanel.maxIter);
     this.applyMandelbrotPalette(s.mandelbrotPanel.paletteType);
     this.mandelbrot.palette.sel.value = s.mandelbrotPanel.paletteType;
@@ -531,8 +526,7 @@ class MandelbrotApp {
     this.julia.panel.center = s.juliaPanel.center;
     this.julia.panel.pivot = s.juliaPanel.center;
     this.julia.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.julia.panel.setScale(s.juliaPanel.scale, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
-    this.syncJuliaZoomSliderUI();
+    this.setPanelScale("julia", s.juliaPanel.scale);
     this.setJuliaMaxIter(s.juliaPanel.maxIter);
     this.applyJuliaPalette(s.juliaPanel.paletteType);
     this.julia.palette.sel.value = s.juliaPanel.paletteType;
@@ -697,7 +691,7 @@ class MandelbrotApp {
 
   onMandelbrotZoomInput = () => {
     if (!this.mandelbrotPendingZoomSnapshot) this.mandelbrotPendingZoomSnapshot = this.snapshotView();
-    this.setScale(10 ** Number(this.mandelbrot.zoom.slider.value));
+    this.setPanelScale("mandelbrot", 10 ** Number(this.mandelbrot.zoom.slider.value));
     this.scheduleRender();
   };
 
@@ -716,8 +710,7 @@ class MandelbrotApp {
 
   onJuliaZoomInput = () => {
     if (!this.juliaPendingZoomSnapshot) this.juliaPendingZoomSnapshot = this.snapshotView();
-    this.julia.panel.setScale(10 ** Number(this.julia.zoom.slider.value), MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
-    this.syncJuliaZoomSliderUI();
+    this.setPanelScale("julia", 10 ** Number(this.julia.zoom.slider.value));
     this.scheduleRender();
   };
 
