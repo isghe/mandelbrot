@@ -484,38 +484,28 @@ class MandelbrotApp {
     this.forwardBtn.disabled = !this.history.canGoForward;
   }
 
+  // Explicit, side-effecting writes (not a plain field assignment) because
+  // this also has to update sliders/checkboxes/the GPU palette texture —
+  // see setPanelScale/setMaxIter/applyPalette above.
+  applyPanelSnapshot(group, snap) {
+    group.panel.center = snap.center;
+    group.panel.pivot = snap.center;
+    group.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+    this.setPanelScale(group, snap.scale);
+    this.setMaxIter(group, snap.maxIter);
+    this.applyPalette(group, snap.paletteType);
+    group.palette.sel.value = snap.paletteType;
+    group.panel.progressiveMode = snap.progressiveMode;
+    group.progressive.chk.checked = !!snap.progressiveMode;
+    group.panel.smoothColoring = snap.smoothColoring;
+    group.smoothColoring.chk.checked = !!snap.smoothColoring;
+    this.resetProgressive(group.panel);
+  }
+
   applySnapshot(s) {
-    this.mandelbrot.panel.center = s.mandelbrotPanel.center;
-    this.mandelbrot.panel.pivot = s.mandelbrotPanel.center;
-    this.mandelbrot.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.setPanelScale(this.mandelbrot, s.mandelbrotPanel.scale);
-    this.setMaxIter(this.mandelbrot, s.mandelbrotPanel.maxIter);
-    this.applyPalette(this.mandelbrot, s.mandelbrotPanel.paletteType);
-    this.mandelbrot.palette.sel.value = s.mandelbrotPanel.paletteType;
-    this.mandelbrot.panel.progressiveMode = s.mandelbrotPanel.progressiveMode;
-    this.mandelbrot.progressive.chk.checked = !!s.mandelbrotPanel.progressiveMode;
-    this.mandelbrot.panel.smoothColoring = s.mandelbrotPanel.smoothColoring;
-    this.mandelbrot.smoothColoring.chk.checked = !!s.mandelbrotPanel.smoothColoring;
-    this.resetProgressive(this.mandelbrot.panel);
-
-    // Mirror of the Mandelbrot block above — explicit writes to
-    // this.julia.panel plus the matching UI sync, since assigning
-    // panel state alone doesn't touch the DOM controls.
-    this.julia.panel.center = s.juliaPanel.center;
-    this.julia.panel.pivot = s.juliaPanel.center;
-    this.julia.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.setPanelScale(this.julia, s.juliaPanel.scale);
-    this.setMaxIter(this.julia, s.juliaPanel.maxIter);
-    this.applyPalette(this.julia, s.juliaPanel.paletteType);
-    this.julia.palette.sel.value = s.juliaPanel.paletteType;
-    this.julia.panel.progressiveMode = s.juliaPanel.progressiveMode;
-    this.julia.progressive.chk.checked = !!s.juliaPanel.progressiveMode;
-    this.julia.panel.smoothColoring = s.juliaPanel.smoothColoring;
-    this.julia.smoothColoring.chk.checked = !!s.juliaPanel.smoothColoring;
-    this.resetProgressive(this.julia.panel);
-
+    this.applyPanelSnapshot(this.mandelbrot, s.mandelbrotPanel);
+    this.applyPanelSnapshot(this.julia, s.juliaPanel);
     this.juliaSeed = s.juliaSeed;
-
     this.scheduleRender();
   }
 
