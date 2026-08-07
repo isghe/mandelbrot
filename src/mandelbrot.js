@@ -649,7 +649,7 @@ class MandelbrotApp {
     }
     const [mRenderer, jRenderer] = await Promise.all([
       attachCanvas(this.gpuDevice, this.mandelbrot.panel.canvas, this.mandelbrot.panel.palette256),
-      this.julia.panel.renderer ? Promise.resolve(this.julia.panel.renderer) : attachCanvas(this.gpuDevice, this.julia.panel.canvas, this.julia.panel.palette256),
+      attachCanvas(this.gpuDevice, this.julia.panel.canvas, this.julia.panel.palette256),
     ]);
     this.mandelbrot.panel.renderer = mRenderer;
     this.julia.panel.renderer = jRenderer;
