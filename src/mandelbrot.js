@@ -13,9 +13,11 @@ class MandelbrotApp {
   static WHEEL_HISTORY_MS = 250;
   static SETTINGS_KEY = 'isghe-mandelbrot-settings';
   static SETTINGS_SAVE_MS = 400;
-  // Bridges the flat mandelbrotPanelX/juliaPanelX schema field names (URL/
-  // localStorage, see share.js) to their live location on this.mandelbrot.panel/
-  // this.julia.panel — used by restoreSettings()'s generic dispatch below.
+  // Bridges the flat mandelbrotPanelX/juliaPanelX/showX schema field names
+  // (URL/localStorage, see share.js) to their live location on
+  // this.mandelbrot/this.julia — used by restoreSettings()'s generic
+  // dispatch below. Third element is true for the handful of fields that
+  // live directly on the group object (e.g. `.show`) rather than on `.panel`.
   static PANEL_FIELD_MAP = {
     mandelbrotPanelCenter: ["mandelbrot", "center"],
     mandelbrotPanelScale: ["mandelbrot", "scale"],
@@ -33,6 +35,8 @@ class MandelbrotApp {
     juliaPanelSmoothColoring: ["julia", "smoothColoring"],
     juliaPanelGridOverlay: ["julia", "gridOverlay"],
     juliaPanelCenterMarker: ["julia", "centerMarker"],
+    showMandelbrot: ["mandelbrot", "show", true],
+    showJulia: ["julia", "show", true],
   };
   // Visibility toggling operates on DOM elements that exist from page load.
   // Both panels' FractalPanel wrappers are constructed eagerly in the
@@ -428,12 +432,9 @@ class MandelbrotApp {
     const setPanelField = (flatName, value) => {
       const mapped = MandelbrotApp.PANEL_FIELD_MAP[flatName];
       if (mapped) {
-        const [side, key] = mapped;
-        this[side].panel[key] = value;
-      } else if (flatName === "showMandelbrot") {
-        this.mandelbrot.show = value;
-      } else if (flatName === "showJulia") {
-        this.julia.show = value;
+        const [side, key, onGroup] = mapped;
+        if (onGroup) this[side][key] = value;
+        else this[side].panel[key] = value;
       } else {
         this[flatName] = value;
       }
@@ -448,13 +449,13 @@ class MandelbrotApp {
       }
     };
     const pointFields = ["juliaSeed", "juliaPanelCenter", "mandelbrotPanelCenter"];
-    // mandelbrotPanelX / juliaPanelX names are the flat URL/localStorage
-    // schema field names (see share.js) — setPanelField() above routes them
-    // through PANEL_FIELD_MAP to this.mandelbrot.panel / this.julia.panel,
-    // both always live (constructed eagerly above). showMandelbrot/showJulia
-    // aren't panel fields, so setPanelField() special-cases them to
-    // this.mandelbrot.show/this.julia.show; juliaSeed/juliaMarker are truly
-    // flat app-level fields and fall through to plain this[flatName] = value.
+    // mandelbrotPanelX / juliaPanelX / showX names are the flat URL/
+    // localStorage schema field names (see share.js) — setPanelField() above
+    // routes them through PANEL_FIELD_MAP to this.mandelbrot.panel/
+    // this.julia.panel (or, for showMandelbrot/showJulia, directly onto
+    // this.mandelbrot/this.julia, both always live — constructed eagerly
+    // above). juliaSeed/juliaMarker are the only truly flat app-level fields
+    // left, and fall through to plain this[flatName] = value.
     const numberFields = [
       "juliaMarker", "showJulia", "showMandelbrot",
       "mandelbrotPanelScale", "mandelbrotPanelMaxIter", "mandelbrotPanelPaletteType",
