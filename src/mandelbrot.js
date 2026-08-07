@@ -73,10 +73,6 @@ class MandelbrotApp {
 
   // view history (Back / Forward)
   history = new ViewHistory(MandelbrotApp.WHEEL_HISTORY_MS, () => this.updateHistoryButtons());
-  mandelbrotPendingZoomSnapshot = null;
-  mandelbrotPendingIterSnapshot = null;
-  juliaPendingZoomSnapshot = null;
-  juliaPendingIterSnapshot = null;
   saveSettingsTimer = null;
   shareBtnResetTimer = null;
 
@@ -132,6 +128,7 @@ class MandelbrotApp {
       smoothColoring: { chk: document.getElementById("mandelbrotSmoothColoring") },
       gridOverlay: { chk: document.getElementById("mandelbrotGridOverlay") },
       centerMarker: { chk: document.getElementById("mandelbrotCenterMarker") },
+      pendingSnapshot: { iter: null, zoom: null },
     });
     this.mandelbrot.iter.slider.min = Math.log10(MandelbrotApp.MIN_ITER);
     this.mandelbrot.iter.slider.max = Math.log10(MandelbrotApp.MAX_ITER);
@@ -153,6 +150,7 @@ class MandelbrotApp {
       gridOverlay: { chk: document.getElementById("juliaGridOverlay") },
       centerMarker: { chk: document.getElementById("juliaCenterMarker") },
       marker: { chk: document.getElementById("juliaMarker") },
+      pendingSnapshot: { iter: null, zoom: null },
     });
     this.julia.iter.slider.min = Math.log10(MandelbrotApp.MIN_ITER);
     this.julia.iter.slider.max = Math.log10(MandelbrotApp.MAX_ITER);
@@ -197,16 +195,16 @@ class MandelbrotApp {
 
     this.mandelbrot.iter.slider.oninput = this.onMandelbrotIterInput;
     this.mandelbrot.iter.slider.onchange = () => {
-      if (this.mandelbrotPendingIterSnapshot) {
-        this.pushHistory(this.mandelbrotPendingIterSnapshot);
-        this.mandelbrotPendingIterSnapshot = null;
+      if (this.mandelbrot.pendingSnapshot.iter) {
+        this.pushHistory(this.mandelbrot.pendingSnapshot.iter);
+        this.mandelbrot.pendingSnapshot.iter = null;
       }
     };
     this.mandelbrot.zoom.slider.oninput = this.onMandelbrotZoomInput;
     this.mandelbrot.zoom.slider.onchange = () => {
-      if (this.mandelbrotPendingZoomSnapshot) {
-        this.pushHistory(this.mandelbrotPendingZoomSnapshot);
-        this.mandelbrotPendingZoomSnapshot = null;
+      if (this.mandelbrot.pendingSnapshot.zoom) {
+        this.pushHistory(this.mandelbrot.pendingSnapshot.zoom);
+        this.mandelbrot.pendingSnapshot.zoom = null;
       }
     };
     this.mandelbrot.palette.sel.onchange = this.onMandelbrotPaletteChange;
@@ -222,16 +220,16 @@ class MandelbrotApp {
     // the same debounce-on-release pattern for the sliders.
     this.julia.iter.slider.oninput = this.onJuliaIterInput;
     this.julia.iter.slider.onchange = () => {
-      if (this.juliaPendingIterSnapshot) {
-        this.pushHistory(this.juliaPendingIterSnapshot);
-        this.juliaPendingIterSnapshot = null;
+      if (this.julia.pendingSnapshot.iter) {
+        this.pushHistory(this.julia.pendingSnapshot.iter);
+        this.julia.pendingSnapshot.iter = null;
       }
     };
     this.julia.zoom.slider.oninput = this.onJuliaZoomInput;
     this.julia.zoom.slider.onchange = () => {
-      if (this.juliaPendingZoomSnapshot) {
-        this.pushHistory(this.juliaPendingZoomSnapshot);
-        this.juliaPendingZoomSnapshot = null;
+      if (this.julia.pendingSnapshot.zoom) {
+        this.pushHistory(this.julia.pendingSnapshot.zoom);
+        this.julia.pendingSnapshot.zoom = null;
       }
     };
     this.julia.palette.sel.onchange = this.onJuliaPaletteChange;
@@ -550,7 +548,7 @@ class MandelbrotApp {
 
   // Julia's own Iterations slider — independent of Mandelbrot's. History
   // bookkeeping (pushHistory) is done by the caller (see the slider's
-  // onchange/juliaPendingIterSnapshot handling and applySnapshot above).
+  // onchange/pendingSnapshot handling and applySnapshot above).
   setJuliaMaxIter(next) {
     const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
     this.julia.panel.maxIter = clamped;
@@ -678,14 +676,14 @@ class MandelbrotApp {
   }
 
   onMandelbrotIterInput = () => {
-    if (!this.mandelbrotPendingIterSnapshot) this.mandelbrotPendingIterSnapshot = this.snapshotView();
+    if (!this.mandelbrot.pendingSnapshot.iter) this.mandelbrot.pendingSnapshot.iter = this.snapshotView();
     this.setMandelbrotMaxIter(10 ** Number(this.mandelbrot.iter.slider.value));
     this.resetProgressive(this.mandelbrot.panel);
     this.scheduleRender();
   };
 
   onMandelbrotZoomInput = () => {
-    if (!this.mandelbrotPendingZoomSnapshot) this.mandelbrotPendingZoomSnapshot = this.snapshotView();
+    if (!this.mandelbrot.pendingSnapshot.zoom) this.mandelbrot.pendingSnapshot.zoom = this.snapshotView();
     this.setPanelScale(this.mandelbrot, 10 ** Number(this.mandelbrot.zoom.slider.value));
     this.scheduleRender();
   };
@@ -697,14 +695,14 @@ class MandelbrotApp {
   };
 
   onJuliaIterInput = () => {
-    if (!this.juliaPendingIterSnapshot) this.juliaPendingIterSnapshot = this.snapshotView();
+    if (!this.julia.pendingSnapshot.iter) this.julia.pendingSnapshot.iter = this.snapshotView();
     this.setJuliaMaxIter(10 ** Number(this.julia.iter.slider.value));
     this.resetProgressive(this.julia.panel);
     this.scheduleRender();
   };
 
   onJuliaZoomInput = () => {
-    if (!this.juliaPendingZoomSnapshot) this.juliaPendingZoomSnapshot = this.snapshotView();
+    if (!this.julia.pendingSnapshot.zoom) this.julia.pendingSnapshot.zoom = this.snapshotView();
     this.setPanelScale(this.julia, 10 ** Number(this.julia.zoom.slider.value));
     this.scheduleRender();
   };
@@ -846,10 +844,10 @@ class MandelbrotApp {
   };
 
   onReset = () => {
-    this.mandelbrotPendingIterSnapshot = null;
-    this.mandelbrotPendingZoomSnapshot = null;
-    this.juliaPendingIterSnapshot = null;
-    this.juliaPendingZoomSnapshot = null;
+    this.mandelbrot.pendingSnapshot.iter = null;
+    this.mandelbrot.pendingSnapshot.zoom = null;
+    this.julia.pendingSnapshot.iter = null;
+    this.julia.pendingSnapshot.zoom = null;
     this.history.reset();
     // Tier 2 (display preferences) and Tier 1 (navigable view) are restored
     // as two independent units — see captureDisplayPrefs/restoreDisplayPrefs
