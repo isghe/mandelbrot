@@ -403,6 +403,8 @@ class MandelbrotApp {
     this.updatePanelVisibility();
     this.resizeCanvas();
     this.resizeOverlayCanvas();
+    this.julia.panel.resizeCanvas();
+    this.julia.panel.resizeOverlayCanvas();
   }
 
   saveSettings() {
