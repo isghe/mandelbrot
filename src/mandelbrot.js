@@ -178,16 +178,15 @@ class MandelbrotApp {
     panelCheckboxFields.forEach(([group, field]) => { this.mandelbrot[group].chk.checked = !!this.mandelbrot.panel[field]; });
     panelCheckboxFields.forEach(([group, field]) => { this.julia[group].chk.checked = !!this.julia.panel[field]; });
     // Apply the restored panel-visibility CSS classes *before* resizing
-    // anything below: resizeCanvas()/resizeOverlayCanvas() read the current
-    // CSS box size, so if dual-view's 50vw split isn't already in effect,
-    // a share URL/localStorage restore that starts in dual view would size
+    // anything below: resizeVisiblePanels() reads each panel's current CSS
+    // box size, so if dual-view's 50vw split isn't already in effect, a
+    // share URL/localStorage restore that starts in dual view would size
     // both backing stores to the old (100vw) layout and stay stretched
     // until the next window resize or panel toggle.
     this.updatePanelVisibility();
     // Both panels were constructed before the CSS visibility classes above
-    // were known — resize each shown panel's backing store now that they are
-    // (resizeCanvas reads the current CSS box size). GPU renderers attach
-    // later in initGPU().
+    // were known — resize each shown panel's backing store now that they are.
+    // GPU renderers attach later in initGPU().
     this.resizeVisiblePanels();
     this.mandelbrot.palette.sel.value = this.mandelbrot.panel.paletteType;
     this.julia.palette.sel.value = this.julia.panel.paletteType;
