@@ -90,20 +90,18 @@ class MandelbrotApp {
     // (below, and in initGPU) the same way Mandelbrot's are. Visibility is a
     // separate concern (showJulia + updatePanelVisibility).
     this.julia = { panel: new FractalPanel(document.getElementById("juliaGfx"), document.getElementById("juliaOverlay")) };
-    // A fresh Julia view is centered on the current Julia seed (its default
-    // pan), matching what the old lazy createJuliaPanel() did on first
-    // reveal (historical: Julia used to be created on-demand when first
-    // shown, before eager dual-panel construction landed in 4fbd53b —
-    // createJuliaPanel() itself is long gone, this comment just preserves
-    // why this default exists); restoreSettings() overrides this if the
+    // Julia's view center keeps FractalPanel's own default (same as
+    // Mandelbrot's), rather than starting centered on the Julia seed — the
+    // seed is a distinct concept (the fractal's "c" constant, see juliaSeed
+    // above) from where the view is panned to. Sharing the same default
+    // center/scale as Mandelbrot also keeps both panels' grid overlays
+    // aligned at reset. restoreSettings() overrides this if the
     // URL/localStorage carries a juliaPanelCenter. pivot follows in
     // restoreSettings() below.
-    this.julia.panel.center = this.juliaSeed;
 
     // Captured via snapshotView() itself: both panels are freshly constructed
-    // here (Mandelbrot's class defaults, Julia centered on the seed as above),
-    // so this captures the app's built-in default view without hand-
-    // duplicating those defaults.
+    // here, using FractalPanel's own class defaults, so this captures the
+    // app's built-in default view without hand-duplicating those defaults.
     this.initialState = this.snapshotView();
     // Tier 2 ("display preferences"): captured pre-restore too, same as
     // initialState above, so Reset always goes back to the app's built-in
