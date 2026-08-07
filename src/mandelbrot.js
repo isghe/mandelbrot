@@ -947,7 +947,11 @@ class MandelbrotApp {
   // scheduleRender's re-arm check (this.anyProgressiveBelowCap) re-arms while
   // at least one panel's ramp hasn't yet reached its own cap.
   renderOnce = () => {
-    if (this.deviceLost || !this.mandelbrot.panel.renderer) {
+    // Gated on deviceLost, not on any single panel's renderer — renderPanel
+    // already skips a panel whose own renderer isn't attached yet, so a
+    // missing Mandelbrot renderer shouldn't also block an already-ready
+    // Julia panel from rendering.
+    if (this.deviceLost) {
       this.anyProgressiveBelowCap = false;
       return Infinity;
     }
