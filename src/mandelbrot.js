@@ -90,20 +90,18 @@ class MandelbrotApp {
     // (below, and in initGPU) the same way Mandelbrot's are. Visibility is a
     // separate concern (showJulia + updatePanelVisibility).
     this.julia = { panel: new FractalPanel(document.getElementById("juliaGfx"), document.getElementById("juliaOverlay")) };
-    // A fresh Julia view is centered on the current Julia seed (its default
-    // pan), matching what the old lazy createJuliaPanel() did on first
-    // reveal (historical: Julia used to be created on-demand when first
-    // shown, before eager dual-panel construction landed in 4fbd53b —
-    // createJuliaPanel() itself is long gone, this comment just preserves
-    // why this default exists); restoreSettings() overrides this if the
+    // Julia's view center keeps FractalPanel's own default (same as
+    // Mandelbrot's), rather than starting centered on the Julia seed — the
+    // seed is a distinct concept (the fractal's "c" constant, see juliaSeed
+    // above) from where the view is panned to. Sharing the same default
+    // center/scale as Mandelbrot also keeps both panels' grid overlays
+    // aligned at reset. restoreSettings() overrides this if the
     // URL/localStorage carries a juliaPanelCenter. pivot follows in
     // restoreSettings() below.
-    this.julia.panel.center = this.juliaSeed;
 
     // Captured via snapshotView() itself: both panels are freshly constructed
-    // here (Mandelbrot's class defaults, Julia centered on the seed as above),
-    // so this captures the app's built-in default view without hand-
-    // duplicating those defaults.
+    // here, using FractalPanel's own class defaults, so this captures the
+    // app's built-in default view without hand-duplicating those defaults.
     this.initialState = this.snapshotView();
     // Tier 2 ("display preferences"): captured pre-restore too, same as
     // initialState above, so Reset always goes back to the app's built-in
@@ -145,7 +143,7 @@ class MandelbrotApp {
     // Julia's own controls, independent of the Mandelbrot ones above —
     // synced to the live juliaPanel's field values further down in this
     // constructor (panelCheckboxFields, setJuliaMaxIter/
-    // syncJuliaZoomSliderUI/this.julia.palette.sel), symmetric with Mandelbrot's.
+    // syncZoomSliderUI(this.julia)/this.julia.palette.sel), symmetric with Mandelbrot's.
     Object.assign(this.julia, {
       iter: { slider: document.getElementById("juliaIterSlider"), label: document.getElementById("juliaIterLabel") },
       zoom: { slider: document.getElementById("juliaZoomSlider"), label: document.getElementById("juliaZoomLabel") },
@@ -180,24 +178,16 @@ class MandelbrotApp {
     panelCheckboxFields.forEach(([group, field]) => { this.mandelbrot[group].chk.checked = !!this.mandelbrot.panel[field]; });
     panelCheckboxFields.forEach(([group, field]) => { this.julia[group].chk.checked = !!this.julia.panel[field]; });
     // Apply the restored panel-visibility CSS classes *before* resizing
-    // anything below: resizeCanvas()/resizeOverlayCanvas() read the current
-    // CSS box size, so if dual-view's 50vw split isn't already in effect,
-    // a share URL/localStorage restore that starts in dual view would size
+    // anything below: resizeVisiblePanels() reads each panel's current CSS
+    // box size, so if dual-view's 50vw split isn't already in effect, a
+    // share URL/localStorage restore that starts in dual view would size
     // both backing stores to the old (100vw) layout and stay stretched
     // until the next window resize or panel toggle.
     this.updatePanelVisibility();
     // Both panels were constructed before the CSS visibility classes above
-    // were known — resize each shown panel's backing store now that they are
-    // (resizeCanvas reads the current CSS box size). GPU renderers attach
-    // later in initGPU().
-    if (this.showMandelbrot) {
-      this.resizeCanvas();
-      this.resizeOverlayCanvas();
-    }
-    if (this.showJulia) {
-      this.julia.panel.resizeCanvas();
-      this.julia.panel.resizeOverlayCanvas();
-    }
+    // were known — resize each shown panel's backing store now that they are.
+    // GPU renderers attach later in initGPU().
+    this.resizeVisiblePanels();
     this.mandelbrot.palette.sel.value = this.mandelbrot.panel.paletteType;
     this.julia.palette.sel.value = this.julia.panel.paletteType;
     this.backBtn    = document.getElementById("backBtn");
@@ -261,7 +251,7 @@ class MandelbrotApp {
       hooks: {
         pushHistory: (s) => this.pushHistory(s),
         armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
-        onScaleChange: () => this.syncMandelbrotZoomSliderUI(),
+        onScaleChange: () => this.syncZoomSliderUI(this.mandelbrot),
         // Only the Mandelbrot panel's genuine click sets the shared Julia
         // seed — see attachPanelEvents' hooks param.
         onGenuineClick: (fractalPoint) => {
@@ -282,37 +272,32 @@ class MandelbrotApp {
       hooks: {
         pushHistory: (snapshot) => this.pushHistory(snapshot),
         armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
-        onScaleChange: () => this.syncJuliaZoomSliderUI(),
+        onScaleChange: () => this.syncZoomSliderUI(this.julia),
       },
     });
     window.addEventListener("resize", this.onResize);
     window.addEventListener("keydown", this.onKeyDown);
 
-    this.setScale(this.mandelbrot.panel.scale);
+    this.setPanelScale(this.mandelbrot, this.mandelbrot.panel.scale);
     this.setMandelbrotMaxIter(this.mandelbrot.panel.maxIter);
     this.mandelbrot.panel.palette256 = makePalette(this.mandelbrot.panel.paletteType);
     // Julia's own iter/zoom slider sync + GPU palette (symmetric with the
     // three Mandelbrot lines above); the renderer attaches in initGPU().
     this.setJuliaMaxIter(this.julia.panel.maxIter);
-    this.syncJuliaZoomSliderUI();
+    this.setPanelScale(this.julia, this.julia.panel.scale);
     this.julia.panel.palette256 = makePalette(this.julia.panel.paletteType);
 
     this.drawOverlay();
   }
 
-  setScale(next) {
-    this.mandelbrot.panel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
-    this.syncMandelbrotZoomSliderUI();
+  setPanelScale(group, next) {
+    group.panel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
+    this.syncZoomSliderUI(group);
   }
 
-  syncMandelbrotZoomSliderUI() {
-    this.mandelbrot.zoom.slider.value = Math.log10(this.mandelbrot.panel.scale);
-    this.mandelbrot.zoom.label.textContent = this.mandelbrot.panel.scale;
-  }
-
-  syncJuliaZoomSliderUI() {
-    this.julia.zoom.slider.value = Math.log10(this.julia.panel.scale);
-    this.julia.zoom.label.textContent = this.julia.panel.scale;
+  syncZoomSliderUI(group) {
+    group.zoom.slider.value = Math.log10(group.panel.scale);
+    group.zoom.label.textContent = group.panel.scale;
   }
 
   // Tier 1 ("navigable view", undo/redo): both panels' own view+quality,
@@ -403,8 +388,7 @@ class MandelbrotApp {
     this.showJulia = p.showJulia;
     this.showJuliaChk.checked = !!p.showJulia;
     this.updatePanelVisibility();
-    this.resizeCanvas();
-    this.resizeOverlayCanvas();
+    this.resizeVisiblePanels();
   }
 
   saveSettings() {
@@ -526,7 +510,7 @@ class MandelbrotApp {
     this.mandelbrot.panel.center = s.mandelbrotPanel.center;
     this.mandelbrot.panel.pivot = s.mandelbrotPanel.center;
     this.mandelbrot.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.setScale(s.mandelbrotPanel.scale);
+    this.setPanelScale(this.mandelbrot, s.mandelbrotPanel.scale);
     this.setMandelbrotMaxIter(s.mandelbrotPanel.maxIter);
     this.applyMandelbrotPalette(s.mandelbrotPanel.paletteType);
     this.mandelbrot.palette.sel.value = s.mandelbrotPanel.paletteType;
@@ -542,8 +526,7 @@ class MandelbrotApp {
     this.julia.panel.center = s.juliaPanel.center;
     this.julia.panel.pivot = s.juliaPanel.center;
     this.julia.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.julia.panel.setScale(s.juliaPanel.scale, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
-    this.syncJuliaZoomSliderUI();
+    this.setPanelScale(this.julia, s.juliaPanel.scale);
     this.setJuliaMaxIter(s.juliaPanel.maxIter);
     this.applyJuliaPalette(s.juliaPanel.paletteType);
     this.julia.palette.sel.value = s.juliaPanel.paletteType;
@@ -575,19 +558,15 @@ class MandelbrotApp {
     this.julia.iter.label.textContent = clamped;
   }
 
-  resizeCanvas() {
-    this.mandelbrot.panel.resizeCanvas();
-  }
-
-  resizeOverlayCanvas() {
-    this.mandelbrot.panel.resizeOverlayCanvas();
-  }
-
-  onResize = () => {
+  resizeVisiblePanels() {
     for (const { panel } of this.panels) {
       panel.resizeCanvas();
       panel.resizeOverlayCanvas();
     }
+  }
+
+  onResize = () => {
+    this.resizeVisiblePanels();
     this.scheduleRender();
   };
 
@@ -670,7 +649,7 @@ class MandelbrotApp {
     }
     const [mRenderer, jRenderer] = await Promise.all([
       attachCanvas(this.gpuDevice, this.mandelbrot.panel.canvas, this.mandelbrot.panel.palette256),
-      this.julia.panel.renderer ? Promise.resolve(this.julia.panel.renderer) : attachCanvas(this.gpuDevice, this.julia.panel.canvas, this.julia.panel.palette256),
+      attachCanvas(this.gpuDevice, this.julia.panel.canvas, this.julia.panel.palette256),
     ]);
     this.mandelbrot.panel.renderer = mRenderer;
     this.julia.panel.renderer = jRenderer;
@@ -698,11 +677,6 @@ class MandelbrotApp {
     if (this.julia.panel.renderer) this.julia.panel.renderer.writePalette(palette256);
   }
 
-  // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
-  toFractal(normPoint, anchor) {
-    return this.mandelbrot.panel.toFractal(normPoint, anchor);
-  }
-
   onMandelbrotIterInput = () => {
     if (!this.mandelbrotPendingIterSnapshot) this.mandelbrotPendingIterSnapshot = this.snapshotView();
     this.setMandelbrotMaxIter(10 ** Number(this.mandelbrot.iter.slider.value));
@@ -712,7 +686,7 @@ class MandelbrotApp {
 
   onMandelbrotZoomInput = () => {
     if (!this.mandelbrotPendingZoomSnapshot) this.mandelbrotPendingZoomSnapshot = this.snapshotView();
-    this.setScale(10 ** Number(this.mandelbrot.zoom.slider.value));
+    this.setPanelScale(this.mandelbrot, 10 ** Number(this.mandelbrot.zoom.slider.value));
     this.scheduleRender();
   };
 
@@ -731,8 +705,7 @@ class MandelbrotApp {
 
   onJuliaZoomInput = () => {
     if (!this.juliaPendingZoomSnapshot) this.juliaPendingZoomSnapshot = this.snapshotView();
-    this.julia.panel.setScale(10 ** Number(this.julia.zoom.slider.value), MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
-    this.syncJuliaZoomSliderUI();
+    this.setPanelScale(this.julia, 10 ** Number(this.julia.zoom.slider.value));
     this.scheduleRender();
   };
 
@@ -752,14 +725,7 @@ class MandelbrotApp {
     // The CSS width of a shown panel changes (100vw <-> 50vw) the instant
     // its visibility changes; refresh its backing store now rather than
     // waiting for the next window resize, or the image stays stretched.
-    if (this.showMandelbrot) {
-      this.resizeCanvas();
-      this.resizeOverlayCanvas();
-    }
-    if (this.showJulia) {
-      this.julia.panel.resizeCanvas();
-      this.julia.panel.resizeOverlayCanvas();
-    }
+    this.resizeVisiblePanels();
     this.scheduleRender();
   };
 
@@ -969,7 +935,11 @@ class MandelbrotApp {
   // scheduleRender's re-arm check (this.anyProgressiveBelowCap) re-arms while
   // at least one panel's ramp hasn't yet reached its own cap.
   renderOnce = () => {
-    if (this.deviceLost || !this.mandelbrot.panel.renderer) {
+    // Gated on deviceLost, not on any single panel's renderer — renderPanel
+    // already skips a panel whose own renderer isn't attached yet, so a
+    // missing Mandelbrot renderer shouldn't also block an already-ready
+    // Julia panel from rendering.
+    if (this.deviceLost) {
       this.anyProgressiveBelowCap = false;
       return Infinity;
     }
