@@ -169,8 +169,8 @@ for (const [qs, field, expected] of SINGLE_PARAM_CASES) {
 
     const state = await page.evaluate(() => ({
       maxIter: window.app.mandelbrot.panel.maxIter,
-      showMandelbrot: window.app.showMandelbrot,
-      showJulia: window.app.showJulia,
+      showMandelbrot: window.app.mandelbrot.show,
+      showJulia: window.app.julia.show,
       paletteType: window.app.mandelbrot.panel.paletteType,
       progressiveMode: window.app.mandelbrot.panel.progressiveMode,
       smoothColoring: window.app.mandelbrot.panel.smoothColoring,
@@ -196,8 +196,8 @@ test('a legacy (pre-v2) share URL with "julia=1" and no "v=" maps to exclusive J
   await expect(gpuError).toBeHidden();
 
   const state = await page.evaluate(() => ({
-    showJulia: window.app.showJulia,
-    showMandelbrot: window.app.showMandelbrot,
+    showJulia: window.app.julia.show,
+    showMandelbrot: window.app.mandelbrot.show,
   }));
   expect(state).toEqual({ showJulia: 1, showMandelbrot: 0 });
 });

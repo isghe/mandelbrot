@@ -40,8 +40,8 @@ class MandelbrotApp {
   // is what makes updatePanelVisibility() generic instead of one hardcoded
   // branch per panel.
   static PANEL_VISIBILITY = [
-    { canvasId: "mandelbrotGfx", overlayId: "mandelbrotOverlay", uiSectionId: "uiMandelbrot", showField: "showMandelbrot" },
-    { canvasId: "juliaGfx", overlayId: "juliaOverlay", uiSectionId: "uiJulia", showField: "showJulia" },
+    { canvasId: "mandelbrotGfx", overlayId: "mandelbrotOverlay", uiSectionId: "uiMandelbrot", side: "mandelbrot" },
+    { canvasId: "juliaGfx", overlayId: "juliaOverlay", uiSectionId: "uiJulia", side: "julia" },
   ];
 
   // State (JS = f64). maxIter/paletteType/smoothColoring/progressiveMode/
@@ -63,9 +63,8 @@ class MandelbrotApp {
   // wrappers always exist (constructed eagerly); visibility is just a CSS
   // class toggled by updatePanelVisibility(). Both shown by default
   // (split-screen) so the two GPU contexts constructed eagerly are both
-  // actually put to use from the first frame.
-  showMandelbrot = 1;
-  showJulia = 1;
+  // actually put to use from the first frame. Lives as `.show` on
+  // this.mandelbrot/this.julia (see constructor), not a flat field here.
 
   // Set once the shared WebGPU device is lost; blocks further render
   // attempts on both panels (the device, not the canvas, was lost).
@@ -80,12 +79,12 @@ class MandelbrotApp {
   rafPending = false;
 
   constructor(canvas) {
-    this.mandelbrot = { panel: new FractalPanel(canvas, document.getElementById("mandelbrotOverlay")) };
+    this.mandelbrot = { panel: new FractalPanel(canvas, document.getElementById("mandelbrotOverlay")), show: 1 };
     // Julia is constructed eagerly too (symmetric with Mandelbrot), so both
     // panels are always live; the DOM refs and GPU renderer are wired later
-    // (below, and in initGPU) the same way Mandelbrot's are. Visibility is a
-    // separate concern (showJulia + updatePanelVisibility).
-    this.julia = { panel: new FractalPanel(document.getElementById("juliaGfx"), document.getElementById("juliaOverlay")) };
+    // (below, and in initGPU) the same way Mandelbrot's are. Visibility
+    // (.show) defaults to shown for both — see updatePanelVisibility().
+    this.julia = { panel: new FractalPanel(document.getElementById("juliaGfx"), document.getElementById("juliaOverlay")), show: 1 };
     // Julia's view center keeps FractalPanel's own default (same as
     // Mandelbrot's), rather than starting centered on the Julia seed — the
     // seed is a distinct concept (the fractal's "c" constant, see juliaSeed
@@ -129,13 +128,12 @@ class MandelbrotApp {
       gridOverlay: { chk: document.getElementById("mandelbrotGridOverlay") },
       centerMarker: { chk: document.getElementById("mandelbrotCenterMarker") },
       pendingSnapshot: { iter: null, zoom: null },
+      showChk: document.getElementById("showMandelbrot"),
     });
     this.mandelbrot.iter.slider.min = Math.log10(MandelbrotApp.MIN_ITER);
     this.mandelbrot.iter.slider.max = Math.log10(MandelbrotApp.MAX_ITER);
     this.mandelbrot.zoom.slider.min = Math.log10(MandelbrotApp.MIN_SCALE);
     this.mandelbrot.zoom.slider.max = Math.log10(MandelbrotApp.MAX_SCALE);
-    this.showMandelbrotChk = document.getElementById("showMandelbrot");
-    this.showJuliaChk = document.getElementById("showJulia");
 
     // Julia's own controls, independent of the Mandelbrot ones above —
     // synced to the live juliaPanel's field values further down in this
@@ -151,17 +149,16 @@ class MandelbrotApp {
       centerMarker: { chk: document.getElementById("juliaCenterMarker") },
       marker: { chk: document.getElementById("juliaMarker") },
       pendingSnapshot: { iter: null, zoom: null },
+      showChk: document.getElementById("showJulia"),
     });
     this.julia.iter.slider.min = Math.log10(MandelbrotApp.MIN_ITER);
     this.julia.iter.slider.max = Math.log10(MandelbrotApp.MAX_ITER);
     this.julia.zoom.slider.min = Math.log10(MandelbrotApp.MIN_SCALE);
     this.julia.zoom.slider.max = Math.log10(MandelbrotApp.MAX_SCALE);
 
-    const checkboxFields = [
-      ["showJuliaChk", "showJulia"],
-      ["showMandelbrotChk", "showMandelbrot"],
-    ];
-    checkboxFields.forEach(([chk, field]) => { this[chk].checked = !!this[field]; });
+    for (const group of [this.mandelbrot, this.julia]) {
+      group.showChk.checked = !!group.show;
+    }
     this.julia.marker.chk.checked = !!this.juliaMarker;
     // [UI group key, FractalPanel field name] — mostly identical, except
     // "progressive" (UI) vs "progressiveMode" (FractalPanel), kept short on
@@ -198,8 +195,8 @@ class MandelbrotApp {
     this.mandelbrot.zoom.slider.oninput = () => this.onZoomInput(this.mandelbrot);
     this.mandelbrot.zoom.slider.onchange = () => this.commitPendingSnapshot(this.mandelbrot, "zoom");
     this.mandelbrot.palette.sel.onchange = () => this.onPaletteChange(this.mandelbrot);
-    this.showMandelbrotChk.onchange = this.onPanelVisibilityChange;
-    this.showJuliaChk.onchange = this.onPanelVisibilityChange;
+    this.mandelbrot.showChk.onchange = this.onPanelVisibilityChange;
+    this.julia.showChk.onchange = this.onPanelVisibilityChange;
     this.mandelbrot.progressive.chk.onchange = () => this.onProgressiveChange(this.mandelbrot);
     this.mandelbrot.smoothColoring.chk.onchange = () => this.onSmoothColoringChange(this.mandelbrot);
     this.mandelbrot.gridOverlay.chk.onchange = () => this.onGridOverlayChange(this.mandelbrot);
@@ -237,7 +234,7 @@ class MandelbrotApp {
           // Only the Julia panel's render actually depends on juliaSeed
           // (its escape set changes; the Mandelbrot panel's own image
           // doesn't) — reset just Julia's progressive ramp, not Mandelbrot's.
-          if (this.showJulia) this.resetProgressive(this.julia.panel);
+          if (this.julia.show) this.resetProgressive(this.julia.panel);
         },
       },
     });
@@ -327,8 +324,8 @@ class MandelbrotApp {
       juliaPanelGridOverlay: this.julia.panel.gridOverlay,
       juliaPanelCenterMarker: this.julia.panel.centerMarker,
       juliaMarker: this.juliaMarker,
-      showMandelbrot: this.showMandelbrot,
-      showJulia: this.showJulia,
+      showMandelbrot: this.mandelbrot.show,
+      showJulia: this.julia.show,
     };
   }
 
@@ -344,8 +341,8 @@ class MandelbrotApp {
       juliaPanelGridOverlay: this.julia.panel.gridOverlay,
       juliaPanelCenterMarker: this.julia.panel.centerMarker,
       juliaMarker: this.juliaMarker,
-      showMandelbrot: this.showMandelbrot,
-      showJulia: this.showJulia,
+      showMandelbrot: this.mandelbrot.show,
+      showJulia: this.julia.show,
     };
   }
 
@@ -361,10 +358,10 @@ class MandelbrotApp {
     this.juliaMarker = p.juliaMarker;
     this.julia.marker.chk.checked = !!p.juliaMarker;
 
-    this.showMandelbrot = p.showMandelbrot;
-    this.showMandelbrotChk.checked = !!p.showMandelbrot;
-    this.showJulia = p.showJulia;
-    this.showJuliaChk.checked = !!p.showJulia;
+    this.mandelbrot.show = p.showMandelbrot;
+    this.mandelbrot.showChk.checked = !!p.showMandelbrot;
+    this.julia.show = p.showJulia;
+    this.julia.showChk.checked = !!p.showJulia;
     this.updatePanelVisibility();
     this.resizeVisiblePanels();
   }
@@ -433,6 +430,10 @@ class MandelbrotApp {
       if (mapped) {
         const [side, key] = mapped;
         this[side].panel[key] = value;
+      } else if (flatName === "showMandelbrot") {
+        this.mandelbrot.show = value;
+      } else if (flatName === "showJulia") {
+        this.julia.show = value;
       } else {
         this[flatName] = value;
       }
@@ -450,9 +451,10 @@ class MandelbrotApp {
     // mandelbrotPanelX / juliaPanelX names are the flat URL/localStorage
     // schema field names (see share.js) — setPanelField() above routes them
     // through PANEL_FIELD_MAP to this.mandelbrot.panel / this.julia.panel,
-    // both always live (constructed eagerly above). juliaSeed/juliaMarker/
-    // showJulia/showMandelbrot aren't in the map, so they fall through to
-    // plain this[flatName] = value.
+    // both always live (constructed eagerly above). showMandelbrot/showJulia
+    // aren't panel fields, so setPanelField() special-cases them to
+    // this.mandelbrot.show/this.julia.show; juliaSeed/juliaMarker are truly
+    // flat app-level fields and fall through to plain this[flatName] = value.
     const numberFields = [
       "juliaMarker", "showJulia", "showMandelbrot",
       "mandelbrotPanelScale", "mandelbrotPanelMaxIter", "mandelbrotPanelPaletteType",
@@ -665,8 +667,8 @@ class MandelbrotApp {
   // overlay toggles below) — no pushHistory. Both panels are always live
   // (just hidden by CSS), so toggling never needs to attach WebGPU.
   onPanelVisibilityChange = () => {
-    this.showMandelbrot = this.showMandelbrotChk.checked ? 1 : 0;
-    this.showJulia = this.showJuliaChk.checked ? 1 : 0;
+    this.mandelbrot.show = this.mandelbrot.showChk.checked ? 1 : 0;
+    this.julia.show = this.julia.showChk.checked ? 1 : 0;
     this.updatePanelVisibility();
     // The CSS width of a shown panel changes (100vw <-> 50vw) the instant
     // its visibility changes; refresh its backing store now rather than
@@ -676,10 +678,10 @@ class MandelbrotApp {
   };
 
   updatePanelVisibility() {
-    document.body.classList.toggle("dual-view", !!(this.showMandelbrot && this.showJulia));
+    document.body.classList.toggle("dual-view", !!(this.mandelbrot.show && this.julia.show));
     let anyVisible = false;
-    for (const { canvasId, overlayId, uiSectionId, showField } of MandelbrotApp.PANEL_VISIBILITY) {
-      const show = !!this[showField];
+    for (const { canvasId, overlayId, uiSectionId, side } of MandelbrotApp.PANEL_VISIBILITY) {
+      const show = !!this[side].show;
       anyVisible = anyVisible || show;
       document.getElementById(canvasId).classList.toggle("panel-hidden", !show);
       document.getElementById(overlayId).classList.toggle("panel-hidden", !show);
@@ -693,14 +695,14 @@ class MandelbrotApp {
   // Currently-shown panels that actually have a FractalPanel instance to
   // operate on (unlike PANEL_VISIBILITY above, this needs the live JS
   // object, not just a DOM id) — what onResize/drawOverlay/renderOnce loop
-  // over. Both panels always exist; only visibility (showMandelbrot/
-  // showJulia) gates inclusion here.
+  // over. Both panels always exist; only visibility (`.show`) gates
+  // inclusion here.
   get panels() {
     const list = [];
-    if (this.showMandelbrot) {
+    if (this.mandelbrot.show) {
       list.push({ panel: this.mandelbrot.panel, juliaMode: 0, showJuliaMarker: true });
     }
-    if (this.showJulia) {
+    if (this.julia.show) {
       list.push({ panel: this.julia.panel, juliaMode: 1, showJuliaMarker: false });
     }
     return list;
