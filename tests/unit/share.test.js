@@ -7,7 +7,10 @@ const initialState = {
   mandelbrotPanelScale: 3.0,
   mandelbrotPanelMaxIter: 256,
   juliaSeed: { x: -0.8, y: 0.156 },
-  juliaPanelCenter: { x: -0.8, y: 0.156 },
+  // Julia's own view center defaults to FractalPanel's default (-0.5, 0),
+  // same as Mandelbrot's — not to juliaSeed, which is a distinct concept
+  // (the fractal's "c" constant). See mandelbrot.js's 7591efb.
+  juliaPanelCenter: { x: -0.5, y: 0 },
   juliaPanelScale: 3.0,
   juliaPanelMaxIter: 256,
   juliaPanelPaletteType: 4,
@@ -348,7 +351,7 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
     showJulia: 1,
     juliaSeed: { x: -0.8, y: 0.156 },
     juliaPanel: {
-      center: { x: -0.8, y: 0.156 }, scale: 3.0,
+      center: { x: -0.5, y: 0 }, scale: 3.0,
       maxIter: 256, paletteType: 4, smoothColoring: 0, progressiveMode: 0,
       gridOverlay: 0, centerMarker: 0,
     },
@@ -436,7 +439,7 @@ test('loadSettingsData (v5) flattens mandelbrotPanel/juliaPanel back into the fl
   const loaded = share.loadSettingsData(stored);
   assert.deepStrictEqual(loaded.mandelbrotPanelCenter, { x: -0.5, y: 0 });
   assert.strictEqual(loaded.mandelbrotPanelScale, 1.5);
-  assert.deepStrictEqual(loaded.juliaPanelCenter, { x: -0.8, y: 0.156 });
+  assert.deepStrictEqual(loaded.juliaPanelCenter, { x: -0.5, y: 0 });
   assert.strictEqual(loaded.juliaPanelScale, 3.0);
   assert.strictEqual(loaded.juliaPanelPaletteType, 2);
   assert.strictEqual(loaded.juliaPanelMaxIter, 256);
