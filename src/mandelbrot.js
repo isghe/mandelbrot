@@ -83,12 +83,15 @@ class MandelbrotApp {
   rafPending = false;
 
   constructor(canvas) {
-    this.mandelbrot = { panel: new FractalPanel(canvas, document.getElementById("mandelbrotOverlay")), show: 1 };
+    // juliaMode/showJuliaMarker are fixed, intrinsic to each side (not
+    // restored/toggled at runtime) — living here means `get panels()` below
+    // doesn't need to hardcode them per branch.
+    this.mandelbrot = { panel: new FractalPanel(canvas, document.getElementById("mandelbrotOverlay")), show: 1, juliaMode: 0, showJuliaMarker: true };
     // Julia is constructed eagerly too (symmetric with Mandelbrot), so both
     // panels are always live; the DOM refs and GPU renderer are wired later
     // (below, and in initGPU) the same way Mandelbrot's are. Visibility
     // (.show) defaults to shown for both — see updatePanelVisibility().
-    this.julia = { panel: new FractalPanel(document.getElementById("juliaGfx"), document.getElementById("juliaOverlay")), show: 1 };
+    this.julia = { panel: new FractalPanel(document.getElementById("juliaGfx"), document.getElementById("juliaOverlay")), show: 1, juliaMode: 1, showJuliaMarker: false };
     // Julia's view center keeps FractalPanel's own default (same as
     // Mandelbrot's), rather than starting centered on the Julia seed — the
     // seed is a distinct concept (the fractal's "c" constant, see juliaSeed
@@ -697,15 +700,13 @@ class MandelbrotApp {
   // operate on (unlike PANEL_VISIBILITY above, this needs the live JS
   // object, not just a DOM id) — what onResize/drawOverlay/renderOnce loop
   // over. Both panels always exist; only visibility (`.show`) gates
-  // inclusion here.
+  // inclusion here. Each group object already carries its own `panel`/
+  // `juliaMode`/`showJuliaMarker` (set once in the constructor), so this is
+  // purely a filter, not a per-branch literal.
   get panels() {
     const list = [];
-    if (this.mandelbrot.show) {
-      list.push({ panel: this.mandelbrot.panel, juliaMode: 0, showJuliaMarker: true });
-    }
-    if (this.julia.show) {
-      list.push({ panel: this.julia.panel, juliaMode: 1, showJuliaMarker: false });
-    }
+    if (this.mandelbrot.show) list.push(this.mandelbrot);
+    if (this.julia.show) list.push(this.julia);
     return list;
   }
 
