@@ -677,11 +677,6 @@ class MandelbrotApp {
     if (this.julia.panel.renderer) this.julia.panel.renderer.writePalette(palette256);
   }
 
-  // Screen-normalized [0,1] point -> fractal-space point, anchored at `anchor`.
-  toFractal(normPoint, anchor) {
-    return this.mandelbrot.panel.toFractal(normPoint, anchor);
-  }
-
   onMandelbrotIterInput = () => {
     if (!this.mandelbrotPendingIterSnapshot) this.mandelbrotPendingIterSnapshot = this.snapshotView();
     this.setMandelbrotMaxIter(10 ** Number(this.mandelbrot.iter.slider.value));
