@@ -481,10 +481,6 @@ class MandelbrotApp {
     this.history.push(snapshot);
   }
 
-  flushPendingWheelHistory() {
-    this.history.flushPendingWheel();
-  }
-
   updateHistoryButtons() {
     this.backBtn.disabled = !this.history.canGoBack;
     this.forwardBtn.disabled = !this.history.canGoForward;
