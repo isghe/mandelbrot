@@ -231,7 +231,7 @@ class MandelbrotApp {
     this.attachPanelEvents({
       panel: this.mandelbrot.panel,
       hooks: {
-        pushHistory: (s) => this.pushHistory(s),
+        pushHistory: (s) => this.history.push(s),
         armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
         onScaleChange: () => this.syncZoomSliderUI(this.mandelbrot),
         // Only the Mandelbrot panel's genuine click sets the shared Julia
@@ -252,7 +252,7 @@ class MandelbrotApp {
     this.attachPanelEvents({
       panel: this.julia.panel,
       hooks: {
-        pushHistory: (snapshot) => this.pushHistory(snapshot),
+        pushHistory: (snapshot) => this.history.push(snapshot),
         armWheelHistory: () => this.history.armWheel(() => this.snapshotView()),
         onScaleChange: () => this.syncZoomSliderUI(this.julia),
       },
@@ -477,14 +477,6 @@ class MandelbrotApp {
     if (shared) this.saveSettings();
   }
 
-  pushHistory(snapshot) {
-    this.history.push(snapshot);
-  }
-
-  flushPendingWheelHistory() {
-    this.history.flushPendingWheel();
-  }
-
   updateHistoryButtons() {
     this.backBtn.disabled = !this.history.canGoBack;
     this.forwardBtn.disabled = !this.history.canGoForward;
@@ -656,13 +648,13 @@ class MandelbrotApp {
 
   commitPendingSnapshot(group, key) {
     if (group.pendingSnapshot[key]) {
-      this.pushHistory(group.pendingSnapshot[key]);
+      this.history.push(group.pendingSnapshot[key]);
       group.pendingSnapshot[key] = null;
     }
   }
 
   onPaletteChange(group) {
-    this.pushHistory(this.snapshotView());
+    this.history.push(this.snapshotView());
     this.applyPalette(group, Number(group.palette.sel.value));
     this.scheduleRender();
   }
@@ -713,14 +705,14 @@ class MandelbrotApp {
   // Quality controls — Tier 1, pushHistory immediately (unlike the overlay
   // display preferences below).
   onProgressiveChange(group) {
-    this.pushHistory(this.snapshotView());
+    this.history.push(this.snapshotView());
     group.panel.progressiveMode = group.progressive.chk.checked ? 1 : 0;
     this.resetProgressive(group.panel);
     this.scheduleRender();
   }
 
   onSmoothColoringChange(group) {
-    this.pushHistory(this.snapshotView());
+    this.history.push(this.snapshotView());
     group.panel.smoothColoring = group.smoothColoring.chk.checked ? 1 : 0;
     this.scheduleRender();
   }
@@ -866,7 +858,7 @@ class MandelbrotApp {
     // Julia panel from rendering.
     if (this.deviceLost) {
       this.anyProgressiveBelowCap = false;
-      return Infinity;
+      return;
     }
 
     let anyBelowCap = false;
@@ -883,15 +875,11 @@ class MandelbrotApp {
         }
       }
       this.renderPanel(panel, juliaMode, displayIter);
-      // Exposed for e2e observation of "what's currently rendered"; tracks
-      // whichever panel was rendered last this frame, not just Mandelbrot's
-      // (each panel also gets its own copy for dual-view inspection).
+      // Exposed for e2e observation of "what's currently rendered".
       panel.lastDisplayIter = displayIter;
-      this.lastDisplayIter = displayIter;
     }
 
     this.anyProgressiveBelowCap = anyBelowCap;
-    return this.lastDisplayIter;
   };
 }
 
