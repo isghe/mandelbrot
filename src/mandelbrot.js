@@ -188,14 +188,7 @@ class MandelbrotApp {
     // were known — resize each shown panel's backing store now that they are
     // (resizeCanvas reads the current CSS box size). GPU renderers attach
     // later in initGPU().
-    if (this.showMandelbrot) {
-      this.resizeCanvas();
-      this.resizeOverlayCanvas();
-    }
-    if (this.showJulia) {
-      this.julia.panel.resizeCanvas();
-      this.julia.panel.resizeOverlayCanvas();
-    }
+    this.resizeVisiblePanels();
     this.mandelbrot.palette.sel.value = this.mandelbrot.panel.paletteType;
     this.julia.palette.sel.value = this.julia.panel.paletteType;
     this.backBtn    = document.getElementById("backBtn");
@@ -401,10 +394,7 @@ class MandelbrotApp {
     this.showJulia = p.showJulia;
     this.showJuliaChk.checked = !!p.showJulia;
     this.updatePanelVisibility();
-    this.resizeCanvas();
-    this.resizeOverlayCanvas();
-    this.julia.panel.resizeCanvas();
-    this.julia.panel.resizeOverlayCanvas();
+    this.resizeVisiblePanels();
   }
 
   saveSettings() {
@@ -575,19 +565,15 @@ class MandelbrotApp {
     this.julia.iter.label.textContent = clamped;
   }
 
-  resizeCanvas() {
-    this.mandelbrot.panel.resizeCanvas();
-  }
-
-  resizeOverlayCanvas() {
-    this.mandelbrot.panel.resizeOverlayCanvas();
-  }
-
-  onResize = () => {
+  resizeVisiblePanels() {
     for (const { panel } of this.panels) {
       panel.resizeCanvas();
       panel.resizeOverlayCanvas();
     }
+  }
+
+  onResize = () => {
+    this.resizeVisiblePanels();
     this.scheduleRender();
   };
 
@@ -752,14 +738,7 @@ class MandelbrotApp {
     // The CSS width of a shown panel changes (100vw <-> 50vw) the instant
     // its visibility changes; refresh its backing store now rather than
     // waiting for the next window resize, or the image stays stretched.
-    if (this.showMandelbrot) {
-      this.resizeCanvas();
-      this.resizeOverlayCanvas();
-    }
-    if (this.showJulia) {
-      this.julia.panel.resizeCanvas();
-      this.julia.panel.resizeOverlayCanvas();
-    }
+    this.resizeVisiblePanels();
     this.scheduleRender();
   };
 
