@@ -536,9 +536,9 @@ class MandelbrotApp {
     this.mandelbrot.smoothColoring.chk.checked = !!s.mandelbrotPanel.smoothColoring;
     this.resetProgressive(this.mandelbrot.panel);
 
-    // Mirror of the Mandelbrot block above — explicit side-effecting calls
-    // rather than the juliaPanelX setters (those are pure passthroughs, see
-    // the accessors above; UI sync has to happen here instead).
+    // Mirror of the Mandelbrot block above — explicit writes to
+    // this.julia.panel plus the matching UI sync, since assigning
+    // panel state alone doesn't touch the DOM controls.
     this.julia.panel.center = s.juliaPanel.center;
     this.julia.panel.pivot = s.juliaPanel.center;
     this.julia.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
