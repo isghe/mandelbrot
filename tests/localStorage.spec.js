@@ -74,8 +74,8 @@ test('the Mandelbrot and Julia panels persist independent palette/iterations acr
 
 test('reloading the page restores the Julia panel\'s own dragged/zoomed position, not just juliaSeed', async ({ page }) => {
   const initial = await page.evaluate(() => ({
-    center: { x: window.app.julia.panel.center.x, y: window.app.julia.panel.center.y },
-    scale: window.app.julia.panel.scale,
+    center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
+    scale: window.app.modelNamed("julia").panel.scale,
   }));
 
   await page.mouse.move(900, 350); // over the Julia (right) panel
@@ -87,8 +87,8 @@ test('reloading the page restores the Julia panel\'s own dragged/zoomed position
   await page.waitForTimeout(200);
 
   const before = await page.evaluate(() => ({
-    center: { x: window.app.julia.panel.center.x, y: window.app.julia.panel.center.y },
-    scale: window.app.julia.panel.scale,
+    center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
+    scale: window.app.modelNamed("julia").panel.scale,
   }));
   // Confirm the drag/zoom actually registered — otherwise this test would
   // pass trivially even if the mouse actions produced no effect at all
@@ -110,8 +110,8 @@ test('reloading the page restores the Julia panel\'s own dragged/zoomed position
   await page.waitForTimeout(200);
 
   const after = await page.evaluate(() => ({
-    center: { x: window.app.julia.panel.center.x, y: window.app.julia.panel.center.y },
-    scale: window.app.julia.panel.scale,
+    center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
+    scale: window.app.modelNamed("julia").panel.scale,
   }));
   expect(after).toEqual(before);
 });

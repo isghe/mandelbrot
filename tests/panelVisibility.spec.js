@@ -113,7 +113,7 @@ test('clicking on the Mandelbrot panel updates the Julia panel, but clicking on 
 test('right-clicking on the Mandelbrot panel does not change juliaSeed or pan the view', async ({ page }) => {
   const before = await page.evaluate(() => ({
     juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
-    center: { x: window.app.mandelbrot.panel.center.x, y: window.app.mandelbrot.panel.center.y },
+    center: { x: window.app.modelNamed("mandelbrot").panel.center.x, y: window.app.modelNamed("mandelbrot").panel.center.y },
   }));
 
   await page.mouse.click(600, 300, { button: 'right' });
@@ -121,22 +121,22 @@ test('right-clicking on the Mandelbrot panel does not change juliaSeed or pan th
 
   const after = await page.evaluate(() => ({
     juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
-    center: { x: window.app.mandelbrot.panel.center.x, y: window.app.mandelbrot.panel.center.y },
+    center: { x: window.app.modelNamed("mandelbrot").panel.center.x, y: window.app.modelNamed("mandelbrot").panel.center.y },
   }));
   expect(after).toEqual(before);
   await expect(page.locator('#backBtn')).toBeDisabled();
 });
 
 test('the Julia panel pans/zooms independently of the Mandelbrot panel', async ({ page }) => {
-  const mandelbrotScaleBefore = await page.evaluate(() => window.app.mandelbrot.panel.scale);
-  const juliaScaleBefore = await page.evaluate(() => window.app.julia.panel.scale);
+  const mandelbrotScaleBefore = await page.evaluate(() => window.app.modelNamed("mandelbrot").panel.scale);
+  const juliaScaleBefore = await page.evaluate(() => window.app.modelNamed("julia").panel.scale);
 
   await page.mouse.move(900, 350); // over the Julia (right) panel
   await page.mouse.wheel(0, -200);
   await page.waitForTimeout(200);
 
-  const mandelbrotScaleAfter = await page.evaluate(() => window.app.mandelbrot.panel.scale);
-  const juliaScaleAfter = await page.evaluate(() => window.app.julia.panel.scale);
+  const mandelbrotScaleAfter = await page.evaluate(() => window.app.modelNamed("mandelbrot").panel.scale);
+  const juliaScaleAfter = await page.evaluate(() => window.app.modelNamed("julia").panel.scale);
 
   expect(mandelbrotScaleAfter).toBe(mandelbrotScaleBefore);
   expect(juliaScaleAfter).not.toBe(juliaScaleBefore);
@@ -170,8 +170,8 @@ test('Reset restores the default split-screen view', async ({ page }) => {
 // last dragged/zoomed it instead of restoring its initial center/scale.
 test('Reset also restores the Julia panel\'s own pan/zoom to its initial state', async ({ page }) => {
   const initial = await page.evaluate(() => ({
-    center: { x: window.app.julia.panel.center.x, y: window.app.julia.panel.center.y },
-    scale: window.app.julia.panel.scale,
+    center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
+    scale: window.app.modelNamed("julia").panel.scale,
   }));
 
   await page.mouse.move(900, 350); // over the Julia (right) panel
@@ -183,8 +183,8 @@ test('Reset also restores the Julia panel\'s own pan/zoom to its initial state',
   await page.waitForTimeout(200);
 
   const moved = await page.evaluate(() => ({
-    center: { x: window.app.julia.panel.center.x, y: window.app.julia.panel.center.y },
-    scale: window.app.julia.panel.scale,
+    center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
+    scale: window.app.modelNamed("julia").panel.scale,
   }));
   expect(moved).not.toEqual(initial);
 
@@ -192,8 +192,8 @@ test('Reset also restores the Julia panel\'s own pan/zoom to its initial state',
   await page.waitForTimeout(200);
 
   const afterReset = await page.evaluate(() => ({
-    center: { x: window.app.julia.panel.center.x, y: window.app.julia.panel.center.y },
-    scale: window.app.julia.panel.scale,
+    center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
+    scale: window.app.modelNamed("julia").panel.scale,
   }));
   expect(afterReset).toEqual(initial);
 });
