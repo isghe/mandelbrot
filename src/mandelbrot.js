@@ -78,14 +78,40 @@ export class MandelbrotApp {
   rafPending = false;
 
   constructor() {
-    // juliaMode/showJuliaMarker/onGenuineClick are the only three facts that
+    // juliaMode/showJuliaMarker/onGenuineClick/schema are the only facts that
     // distinguish Mandelbrot from Julia anywhere in this file — supplied
     // once here, at the one call site that has to know which is which.
     // Everything downstream (event wiring, rendering, visibility,
-    // snapshotting) operates on this.models generically.
+    // snapshotting) operates on this.models generically. `schema` mirrors
+    // PANEL_FIELD_MAP's flat field names (see there) split by tier — `view`
+    // is Tier 1 (undo history), `displayPrefs`/`show` are Tier 2.
     this.models = [
-      this.createModel("mandelbrot", { juliaMode: 0, showJuliaMarker: true, onGenuineClick: (p) => this.setJuliaSeed(p) }),
-      this.createModel("julia", { juliaMode: 1, showJuliaMarker: false }),
+      this.createModel("mandelbrot", {
+        juliaMode: 0, showJuliaMarker: true, onGenuineClick: (p) => this.setJuliaSeed(p),
+        schema: {
+          panel: "mandelbrotPanel",
+          view: {
+            center: "mandelbrotPanelCenter", scale: "mandelbrotPanelScale", maxIter: "mandelbrotPanelMaxIter",
+            paletteType: "mandelbrotPanelPaletteType", progressiveMode: "mandelbrotPanelProgressiveMode",
+            smoothColoring: "mandelbrotPanelSmoothColoring",
+          },
+          displayPrefs: { gridOverlay: "mandelbrotPanelGridOverlay", centerMarker: "mandelbrotPanelCenterMarker" },
+          show: "showMandelbrot",
+        },
+      }),
+      this.createModel("julia", {
+        juliaMode: 1, showJuliaMarker: false,
+        schema: {
+          panel: "juliaPanel",
+          view: {
+            center: "juliaPanelCenter", scale: "juliaPanelScale", maxIter: "juliaPanelMaxIter",
+            paletteType: "juliaPanelPaletteType", progressiveMode: "juliaPanelProgressiveMode",
+            smoothColoring: "juliaPanelSmoothColoring",
+          },
+          displayPrefs: { gridOverlay: "juliaPanelGridOverlay", centerMarker: "juliaPanelCenterMarker" },
+          show: "showJulia",
+        },
+      }),
     ];
     // Julia's view center keeps FractalPanel's own default (same as
     // Mandelbrot's), rather than starting centered on the Julia seed — the
@@ -206,8 +232,15 @@ export class MandelbrotApp {
   // to this beyond the Julia-seed-marker checkbox, which is app-level (see
   // constructor). juliaMode/showJuliaMarker/onGenuineClick are stored right
   // on the model so every later consumer (event wiring, rendering,
-  // visibility) can stay agnostic about which side it's looking at.
-  createModel(name, { juliaMode, showJuliaMarker, onGenuineClick }) {
+  // visibility) can stay agnostic about which side it's looking at. `schema`
+  // is the model's flat URL/localStorage field names (see share.js) — not
+  // yet consumed anywhere; snapshotView()/shareState()/captureDisplayPrefs()/
+  // restoreDisplayPrefs()/restoreSettings() still name "mandelbrot"/"julia"
+  // by hand and PANEL_FIELD_MAP still does the flat-name dispatch. This is
+  // scaffolding for that follow-up — declared here, at insertion time, so it
+  // ends up alongside juliaMode/showJuliaMarker as the third kind of fact
+  // that's genuinely known only at this one call site.
+  createModel(name, { juliaMode, showJuliaMarker, onGenuineClick, schema }) {
     const cap = name[0].toUpperCase() + name.slice(1);
     const model = {
       name,
@@ -216,6 +249,7 @@ export class MandelbrotApp {
       juliaMode,
       showJuliaMarker,
       onGenuineClick,
+      schema,
       iter: { slider: document.getElementById(`${name}IterSlider`), label: document.getElementById(`${name}IterLabel`) },
       zoom: { slider: document.getElementById(`${name}ZoomSlider`), label: document.getElementById(`${name}ZoomLabel`) },
       palette: { sel: document.getElementById(`${name}PaletteType`) },

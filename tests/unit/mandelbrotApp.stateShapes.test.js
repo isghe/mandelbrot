@@ -283,6 +283,37 @@ test('restoreDisplayPrefs(captureDisplayPrefs()) is the identity', () => {
   assert.deepEqual(app.captureDisplayPrefs(), original);
 });
 
+// --- Mossa 1: schema is declared on each model but not yet consumed by any
+// producer/consumer — these two tests prove the declaration is equivalent to
+// the still-live PANEL_FIELD_MAP before anything comes to depend on it.
+// The first test is scaffolding: it's expected to be deleted in Mossa 5,
+// once PANEL_FIELD_MAP itself is derived away. ---
+
+test('each model schema flat names are exactly PANEL_FIELD_MAP keys for that side', () => {
+  const app = makeApp();
+  for (const model of app.models) {
+    const declared = [
+      ...Object.values(model.schema.view),
+      ...Object.values(model.schema.displayPrefs),
+      model.schema.show,
+    ].sort();
+    const fromMap = Object.entries(MandelbrotApp.PANEL_FIELD_MAP)
+      .filter(([, [side]]) => side === model.name)
+      .map(([flatName]) => flatName)
+      .sort();
+    assert.deepEqual(declared, fromMap, `${model.name} schema vs PANEL_FIELD_MAP`);
+  }
+});
+
+test('both models declare the same logical key sets (view/displayPrefs/show)', () => {
+  const app = makeApp();
+  const [mandelbrot, julia] = app.models;
+  assert.deepEqual(Object.keys(mandelbrot.schema.view).sort(), Object.keys(julia.schema.view).sort());
+  assert.deepEqual(Object.keys(mandelbrot.schema.displayPrefs).sort(), Object.keys(julia.schema.displayPrefs).sort());
+  assert.equal(typeof mandelbrot.schema.show, 'string');
+  assert.equal(typeof julia.schema.show, 'string');
+});
+
 test('shareState round-trips through share.settingsData/localStorage/restoreSettings', () => {
   const store = {};
   const app1 = makeApp({ store });
