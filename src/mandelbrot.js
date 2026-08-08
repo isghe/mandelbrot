@@ -283,27 +283,13 @@ export class MandelbrotApp {
   // view (it's the Julia-family constant), so it stays a separate top-level
   // field rather than living inside either panel's sub-object.
   snapshotView() {
-    const mandelbrot = this.modelNamed("mandelbrot");
-    const julia = this.modelNamed("julia");
-    return {
-      mandelbrotPanel: {
-        center: mandelbrot.panel.center,
-        scale: mandelbrot.panel.scale,
-        maxIter: mandelbrot.panel.maxIter,
-        paletteType: mandelbrot.panel.paletteType,
-        smoothColoring: mandelbrot.panel.smoothColoring,
-        progressiveMode: mandelbrot.panel.progressiveMode,
-      },
-      juliaPanel: {
-        center: julia.panel.center,
-        scale: julia.panel.scale,
-        maxIter: julia.panel.maxIter,
-        paletteType: julia.panel.paletteType,
-        smoothColoring: julia.panel.smoothColoring,
-        progressiveMode: julia.panel.progressiveMode,
-      },
-      juliaSeed: this.juliaSeed,
-    };
+    const snap = { juliaSeed: this.juliaSeed };
+    for (const model of this.models) {
+      const panelSnap = {};
+      for (const key of Object.keys(model.schema.view)) panelSnap[key] = model.panel[key];
+      snap[model.schema.panel] = panelSnap;
+    }
+    return snap;
   }
 
   // share.js expects this flat shape (schema v5), distinct from
@@ -342,17 +328,12 @@ export class MandelbrotApp {
   // app-level flag (it marks where juliaSeed sits on the Mandelbrot plane,
   // meaningless on Julia's own view — see drawOverlayForPanel).
   captureDisplayPrefs() {
-    const mandelbrot = this.modelNamed("mandelbrot");
-    const julia = this.modelNamed("julia");
-    return {
-      mandelbrotPanelGridOverlay: mandelbrot.panel.gridOverlay,
-      mandelbrotPanelCenterMarker: mandelbrot.panel.centerMarker,
-      juliaPanelGridOverlay: julia.panel.gridOverlay,
-      juliaPanelCenterMarker: julia.panel.centerMarker,
-      juliaMarker: this.juliaMarker,
-      showMandelbrot: mandelbrot.show,
-      showJulia: julia.show,
-    };
+    const prefs = { juliaMarker: this.juliaMarker };
+    for (const model of this.models) {
+      for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) prefs[flatName] = model.panel[key];
+      prefs[model.schema.show] = model.show;
+    }
+    return prefs;
   }
 
   restoreDisplayPrefs(p) {
@@ -410,21 +391,12 @@ export class MandelbrotApp {
   // buildShareUrl includes them unconditionally rather than diffing them —
   // see shareState()'s call site in buildShareUrl()).
   flattenSnapshotForShare(s) {
-    return {
-      mandelbrotPanelCenter: s.mandelbrotPanel.center,
-      mandelbrotPanelScale: s.mandelbrotPanel.scale,
-      mandelbrotPanelMaxIter: s.mandelbrotPanel.maxIter,
-      mandelbrotPanelPaletteType: s.mandelbrotPanel.paletteType,
-      mandelbrotPanelProgressiveMode: s.mandelbrotPanel.progressiveMode,
-      mandelbrotPanelSmoothColoring: s.mandelbrotPanel.smoothColoring,
-      juliaSeed: s.juliaSeed,
-      juliaPanelCenter: s.juliaPanel.center,
-      juliaPanelScale: s.juliaPanel.scale,
-      juliaPanelMaxIter: s.juliaPanel.maxIter,
-      juliaPanelPaletteType: s.juliaPanel.paletteType,
-      juliaPanelProgressiveMode: s.juliaPanel.progressiveMode,
-      juliaPanelSmoothColoring: s.juliaPanel.smoothColoring,
-    };
+    const flat = { juliaSeed: s.juliaSeed };
+    for (const model of this.models) {
+      const panelSnap = s[model.schema.panel];
+      for (const [key, flatName] of Object.entries(model.schema.view)) flat[flatName] = panelSnap[key];
+    }
+    return flat;
   }
 
   buildShareUrl() {
@@ -504,7 +476,7 @@ export class MandelbrotApp {
   }
 
   applySnapshot(s) {
-    for (const model of this.models) this.applyPanelSnapshot(model, s[`${model.name}Panel`]);
+    for (const model of this.models) this.applyPanelSnapshot(model, s[model.schema.panel]);
     this.juliaSeed = s.juliaSeed;
     this.scheduleRender();
   }
