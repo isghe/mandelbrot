@@ -38,16 +38,6 @@ class MandelbrotApp {
     showMandelbrot: ["mandelbrot", "show", true],
     showJulia: ["julia", "show", true],
   };
-  // Visibility toggling operates on DOM elements that exist from page load.
-  // Both panels' FractalPanel wrappers are constructed eagerly in the
-  // constructor, so showing/hiding is purely a CSS concern here. This table
-  // is what makes updatePanelVisibility() generic instead of one hardcoded
-  // branch per panel.
-  static PANEL_VISIBILITY = [
-    { canvasId: "mandelbrotGfx", overlayId: "mandelbrotOverlay", uiSectionId: "uiMandelbrot", side: "mandelbrot" },
-    { canvasId: "juliaGfx", overlayId: "juliaOverlay", uiSectionId: "uiJulia", side: "julia" },
-  ];
-
   // State (JS = f64). maxIter/paletteType/smoothColoring/progressiveMode/
   // gridOverlay/centerMarker live per-panel (this.mandelbrot.panel.X /
   // this.julia.panel.X) — see FractalPanel. juliaSeed is the one piece of
@@ -442,8 +432,7 @@ class MandelbrotApp {
     pointFields.forEach(restorePoint);
     numberFields.forEach(restoreNumber);
 
-    this.mandelbrot.panel.pivot = this.mandelbrot.panel.center;
-    this.julia.panel.pivot = this.julia.panel.center;
+    for (const model of this.models) model.panel.pivot = model.panel.center;
 
     if (shared) this.saveSettings();
   }
@@ -472,8 +461,7 @@ class MandelbrotApp {
   }
 
   applySnapshot(s) {
-    this.applyPanelSnapshot(this.mandelbrot, s.mandelbrotPanel);
-    this.applyPanelSnapshot(this.julia, s.juliaPanel);
+    for (const model of this.models) this.applyPanelSnapshot(model, s[`${model.name}Panel`]);
     this.juliaSeed = s.juliaSeed;
     this.scheduleRender();
   }
@@ -577,12 +565,10 @@ class MandelbrotApp {
       this.showError("No WebGPU adapter available.");
       return;
     }
-    const [mRenderer, jRenderer] = await Promise.all([
-      attachCanvas(this.gpuDevice, this.mandelbrot.panel.canvas, this.mandelbrot.panel.palette256),
-      attachCanvas(this.gpuDevice, this.julia.panel.canvas, this.julia.panel.palette256),
-    ]);
-    this.mandelbrot.panel.renderer = mRenderer;
-    this.julia.panel.renderer = jRenderer;
+    const renderers = await Promise.all(
+      this.models.map((model) => attachCanvas(this.gpuDevice, model.panel.canvas, model.panel.palette256))
+    );
+    this.models.forEach((model, i) => { model.panel.renderer = renderers[i]; });
     this.scheduleRender();
   }
 
@@ -644,8 +630,7 @@ class MandelbrotApp {
   // overlay toggles below) — no pushHistory. Both panels are always live
   // (just hidden by CSS), so toggling never needs to attach WebGPU.
   onPanelVisibilityChange = () => {
-    this.mandelbrot.show = this.mandelbrot.showChk.checked ? 1 : 0;
-    this.julia.show = this.julia.showChk.checked ? 1 : 0;
+    for (const model of this.models) model.show = model.showChk.checked ? 1 : 0;
     this.updatePanelVisibility();
     // The CSS width of a shown panel changes (100vw <-> 50vw) the instant
     // its visibility changes; refresh its backing store now rather than
@@ -655,32 +640,25 @@ class MandelbrotApp {
   };
 
   updatePanelVisibility() {
-    document.body.classList.toggle("dual-view", !!(this.mandelbrot.show && this.julia.show));
+    document.body.classList.toggle("dual-view", this.models.every((model) => model.show));
     let anyVisible = false;
-    for (const { canvasId, overlayId, uiSectionId, side } of MandelbrotApp.PANEL_VISIBILITY) {
-      const show = !!this[side].show;
+    for (const model of this.models) {
+      const show = !!model.show;
       anyVisible = anyVisible || show;
-      document.getElementById(canvasId).classList.toggle("panel-hidden", !show);
-      document.getElementById(overlayId).classList.toggle("panel-hidden", !show);
-      document.getElementById(uiSectionId).classList.toggle("panel-hidden", !show);
+      model.panel.canvas.classList.toggle("panel-hidden", !show);
+      model.panel.overlayCanvas.classList.toggle("panel-hidden", !show);
+      model.uiSection.classList.toggle("panel-hidden", !show);
     }
     // Generic over however many visualization modes eventually exist, not
     // just these two: show the placeholder whenever none of them are on.
     this.noVizMessage.style.display = anyVisible ? "none" : "block";
   }
 
-  // Currently-shown panels that actually have a FractalPanel instance to
-  // operate on (unlike PANEL_VISIBILITY above, this needs the live JS
-  // object, not just a DOM id) — what onResize/drawOverlay/renderOnce loop
-  // over. Both panels always exist; only visibility (`.show`) gates
-  // inclusion here. Each model object already carries its own `panel`/
-  // `juliaMode`/`showJuliaMarker` (set once in the constructor), so this is
-  // purely a filter, not a per-branch literal.
+  // Currently-shown models — what onResize/drawOverlay/renderOnce loop
+  // over. Both models always exist; only visibility (`.show`) gates
+  // inclusion here.
   get panels() {
-    const list = [];
-    if (this.mandelbrot.show) list.push(this.mandelbrot);
-    if (this.julia.show) list.push(this.julia);
-    return list;
+    return this.models.filter((model) => model.show);
   }
 
   // Quality controls — Tier 1, pushHistory immediately (unlike the overlay
@@ -744,10 +722,10 @@ class MandelbrotApp {
   };
 
   onReset = () => {
-    this.mandelbrot.pendingSnapshot.iter = null;
-    this.mandelbrot.pendingSnapshot.zoom = null;
-    this.julia.pendingSnapshot.iter = null;
-    this.julia.pendingSnapshot.zoom = null;
+    for (const model of this.models) {
+      model.pendingSnapshot.iter = null;
+      model.pendingSnapshot.zoom = null;
+    }
     this.history.reset();
     // Tier 2 (display preferences) and Tier 1 (navigable view) are restored
     // as two independent units — see captureDisplayPrefs/restoreDisplayPrefs
