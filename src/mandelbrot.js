@@ -5,7 +5,11 @@ import { ViewHistory } from './history.js';
 import { requestGPUDevice, attachCanvas } from './renderer.js';
 import { FractalPanel, buildUniformData } from './fractalPanel.js';
 
-class MandelbrotApp {
+// Exported so tests/unit/mandelbrotApp.stateShapes.test.js can `new
+// MandelbrotApp()` directly against a mocked DOM, instead of only through
+// the real app instance the top-level bootstrap below constructs (see the
+// __MANDELBROT_TEST__ guard at the bottom of this file).
+export class MandelbrotApp {
   static MIN_SCALE = 1e-14;
   static MAX_SCALE = 4.0;
   static MIN_ITER = 1;
@@ -859,10 +863,14 @@ class MandelbrotApp {
   };
 }
 
-const app = new MandelbrotApp();
-window.app = app; // exposed for e2e test assertions on internal state (tests/)
-try {
-  await app.init();
-} catch (e) {
-  app.showError(`Failed to initialize WebGPU: ${e.message}`);
+// Unit tests import this module for the MandelbrotApp class itself and set
+// this flag first to skip the real app's construction (GPU + full DOM).
+if (!globalThis.__MANDELBROT_TEST__) {
+  const app = new MandelbrotApp();
+  window.app = app; // exposed for e2e test assertions on internal state (tests/)
+  try {
+    await app.init();
+  } catch (e) {
+    app.showError(`Failed to initialize WebGPU: ${e.message}`);
+  }
 }
