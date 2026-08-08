@@ -17,7 +17,7 @@ class MandelbrotApp {
   // (URL/localStorage, see share.js) to their live location on
   // this.mandelbrot/this.julia — used by restoreSettings()'s generic
   // dispatch below. Third element is true for the handful of fields that
-  // live directly on the group object (e.g. `.show`) rather than on `.panel`.
+  // live directly on the model object (e.g. `.show`) rather than on `.panel`.
   static PANEL_FIELD_MAP = {
     mandelbrotPanelCenter: ["mandelbrot", "center"],
     mandelbrotPanelScale: ["mandelbrot", "scale"],
@@ -163,8 +163,8 @@ class MandelbrotApp {
     this.julia.zoom.slider.min = Math.log10(MandelbrotApp.MIN_SCALE);
     this.julia.zoom.slider.max = Math.log10(MandelbrotApp.MAX_SCALE);
 
-    for (const group of [this.mandelbrot, this.julia]) {
-      group.showChk.checked = !!group.show;
+    for (const model of [this.mandelbrot, this.julia]) {
+      model.showChk.checked = !!model.show;
     }
     this.julia.marker.chk.checked = !!this.juliaMarker;
     // [UI group key, FractalPanel field name] — mostly identical, except
@@ -272,14 +272,14 @@ class MandelbrotApp {
     this.drawOverlay();
   }
 
-  setPanelScale(group, next) {
-    group.panel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
-    this.syncZoomSliderUI(group);
+  setPanelScale(model, next) {
+    model.panel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
+    this.syncZoomSliderUI(model);
   }
 
-  syncZoomSliderUI(group) {
-    group.zoom.slider.value = Math.log10(group.panel.scale);
-    group.zoom.label.textContent = group.panel.scale;
+  syncZoomSliderUI(model) {
+    model.zoom.slider.value = Math.log10(model.panel.scale);
+    model.zoom.label.textContent = model.panel.scale;
   }
 
   // Tier 1 ("navigable view", undo/redo): both panels' own view+quality,
@@ -485,19 +485,19 @@ class MandelbrotApp {
   // Explicit, side-effecting writes (not a plain field assignment) because
   // this also has to update sliders/checkboxes/the GPU palette texture —
   // see setPanelScale/setMaxIter/applyPalette above.
-  applyPanelSnapshot(group, snap) {
-    group.panel.center = snap.center;
-    group.panel.pivot = snap.center;
-    group.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
-    this.setPanelScale(group, snap.scale);
-    this.setMaxIter(group, snap.maxIter);
-    this.applyPalette(group, snap.paletteType);
-    group.palette.sel.value = snap.paletteType;
-    group.panel.progressiveMode = snap.progressiveMode;
-    group.progressive.chk.checked = !!snap.progressiveMode;
-    group.panel.smoothColoring = snap.smoothColoring;
-    group.smoothColoring.chk.checked = !!snap.smoothColoring;
-    this.resetProgressive(group.panel);
+  applyPanelSnapshot(model, snap) {
+    model.panel.center = snap.center;
+    model.panel.pivot = snap.center;
+    model.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+    this.setPanelScale(model, snap.scale);
+    this.setMaxIter(model, snap.maxIter);
+    this.applyPalette(model, snap.paletteType);
+    model.palette.sel.value = snap.paletteType;
+    model.panel.progressiveMode = snap.progressiveMode;
+    model.progressive.chk.checked = !!snap.progressiveMode;
+    model.panel.smoothColoring = snap.smoothColoring;
+    model.smoothColoring.chk.checked = !!snap.smoothColoring;
+    this.resetProgressive(model.panel);
   }
 
   applySnapshot(s) {
@@ -510,11 +510,11 @@ class MandelbrotApp {
   // History bookkeeping (pushHistory) is done by the caller (see the
   // sliders' onchange/pendingSnapshot handling and applySnapshot above) —
   // symmetric with setPanelScale above, one method for both panels.
-  setMaxIter(group, next) {
+  setMaxIter(model, next) {
     const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
-    group.panel.maxIter = clamped;
-    group.iter.slider.value = Math.log10(clamped);
-    group.iter.label.textContent = clamped;
+    model.panel.maxIter = clamped;
+    model.iter.slider.value = Math.log10(clamped);
+    model.iter.label.textContent = clamped;
   }
 
   resizeVisiblePanels() {
@@ -622,40 +622,40 @@ class MandelbrotApp {
 
   // Each panel owns its own GPU palette texture (attachCanvas is per-canvas),
   // so the two panels can show different palettes simultaneously.
-  applyPalette(group, type) {
+  applyPalette(model, type) {
     const palette256 = makePalette(type);
-    group.panel.paletteType = type;
-    group.panel.palette256 = palette256;
-    if (group.panel.renderer) group.panel.renderer.writePalette(palette256);
+    model.panel.paletteType = type;
+    model.panel.palette256 = palette256;
+    if (model.panel.renderer) model.panel.renderer.writePalette(palette256);
   }
 
   // Iterations/zoom sliders debounce history on release (see the sliders'
   // onchange -> commitPendingSnapshot wiring in the constructor): the first
   // input of a drag snapshots the pre-change view, subsequent inputs reuse
   // it, and onchange pushes that one snapshot instead of one per tick.
-  onIterInput(group) {
-    if (!group.pendingSnapshot.iter) group.pendingSnapshot.iter = this.snapshotView();
-    this.setMaxIter(group, 10 ** Number(group.iter.slider.value));
-    this.resetProgressive(group.panel);
+  onIterInput(model) {
+    if (!model.pendingSnapshot.iter) model.pendingSnapshot.iter = this.snapshotView();
+    this.setMaxIter(model, 10 ** Number(model.iter.slider.value));
+    this.resetProgressive(model.panel);
     this.scheduleRender();
   }
 
-  onZoomInput(group) {
-    if (!group.pendingSnapshot.zoom) group.pendingSnapshot.zoom = this.snapshotView();
-    this.setPanelScale(group, 10 ** Number(group.zoom.slider.value));
+  onZoomInput(model) {
+    if (!model.pendingSnapshot.zoom) model.pendingSnapshot.zoom = this.snapshotView();
+    this.setPanelScale(model, 10 ** Number(model.zoom.slider.value));
     this.scheduleRender();
   }
 
-  commitPendingSnapshot(group, key) {
-    if (group.pendingSnapshot[key]) {
-      this.history.push(group.pendingSnapshot[key]);
-      group.pendingSnapshot[key] = null;
+  commitPendingSnapshot(model, key) {
+    if (model.pendingSnapshot[key]) {
+      this.history.push(model.pendingSnapshot[key]);
+      model.pendingSnapshot[key] = null;
     }
   }
 
-  onPaletteChange(group) {
+  onPaletteChange(model) {
     this.history.push(this.snapshotView());
-    this.applyPalette(group, Number(group.palette.sel.value));
+    this.applyPalette(model, Number(model.palette.sel.value));
     this.scheduleRender();
   }
 
@@ -692,7 +692,7 @@ class MandelbrotApp {
   // operate on (unlike PANEL_VISIBILITY above, this needs the live JS
   // object, not just a DOM id) — what onResize/drawOverlay/renderOnce loop
   // over. Both panels always exist; only visibility (`.show`) gates
-  // inclusion here. Each group object already carries its own `panel`/
+  // inclusion here. Each model object already carries its own `panel`/
   // `juliaMode`/`showJuliaMarker` (set once in the constructor), so this is
   // purely a filter, not a per-branch literal.
   get panels() {
@@ -704,29 +704,29 @@ class MandelbrotApp {
 
   // Quality controls — Tier 1, pushHistory immediately (unlike the overlay
   // display preferences below).
-  onProgressiveChange(group) {
+  onProgressiveChange(model) {
     this.history.push(this.snapshotView());
-    group.panel.progressiveMode = group.progressive.chk.checked ? 1 : 0;
-    this.resetProgressive(group.panel);
+    model.panel.progressiveMode = model.progressive.chk.checked ? 1 : 0;
+    this.resetProgressive(model.panel);
     this.scheduleRender();
   }
 
-  onSmoothColoringChange(group) {
+  onSmoothColoringChange(model) {
     this.history.push(this.snapshotView());
-    group.panel.smoothColoring = group.smoothColoring.chk.checked ? 1 : 0;
+    model.panel.smoothColoring = model.smoothColoring.chk.checked ? 1 : 0;
     this.scheduleRender();
   }
 
   // Overlay display preferences are not part of view history: they don't
   // change what the fractal render pass produces, only what's drawn on that
   // panel's own overlay canvas, so no pushHistory here (unlike the toggles above).
-  onGridOverlayChange(group) {
-    group.panel.gridOverlay = group.gridOverlay.chk.checked ? 1 : 0;
+  onGridOverlayChange(model) {
+    model.panel.gridOverlay = model.gridOverlay.chk.checked ? 1 : 0;
     this.scheduleRender();
   }
 
-  onCenterMarkerChange(group) {
-    group.panel.centerMarker = group.centerMarker.chk.checked ? 1 : 0;
+  onCenterMarkerChange(model) {
+    model.panel.centerMarker = model.centerMarker.chk.checked ? 1 : 0;
     this.scheduleRender();
   }
 
