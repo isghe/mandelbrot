@@ -95,28 +95,29 @@ export class FractalPanel {
     this.resizeOverlayCanvas();
   }
 
-  resizeCanvas() {
+  // Resizes `canvas`'s backing store to match its CSS size at the current
+  // device pixel ratio; returns dpr/rect so callers needing more (e.g. the
+  // overlay's transform reset) don't recompute them.
+  resizeCanvasBackingStore(canvas) {
     const dpr = window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
     const width = Math.max(1, Math.round(rect.width * dpr));
     const height = Math.max(1, Math.round(rect.height * dpr));
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width;
-      this.canvas.height = height;
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
     }
+    return { dpr, rect };
+  }
+
+  resizeCanvas() {
+    this.resizeCanvasBackingStore(this.canvas);
   }
 
   // Keeps the overlay's backing store in sync with the gfx canvas; the
   // transform reset lets overlay draw calls be written in CSS pixels.
   resizeOverlayCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.overlayCanvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width * dpr));
-    const height = Math.max(1, Math.round(rect.height * dpr));
-    if (this.overlayCanvas.width !== width || this.overlayCanvas.height !== height) {
-      this.overlayCanvas.width = width;
-      this.overlayCanvas.height = height;
-    }
+    const { dpr, rect } = this.resizeCanvasBackingStore(this.overlayCanvas);
     this.overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.overlayCssWidth = rect.width;
     this.overlayCssHeight = rect.height;
