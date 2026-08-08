@@ -322,19 +322,19 @@ test('zooming the Julia panel enables Back/Forward and is undoable', async ({ pa
   const backBtn = page.locator('#backBtn');
   await expect(backBtn).toBeDisabled();
 
-  const scaleBefore = await page.evaluate(() => window.app.julia.panel.scale);
+  const scaleBefore = await page.evaluate(() => window.app.modelNamed("julia").panel.scale);
 
   await page.mouse.move(900, 350); // over the Julia (right) panel
   await page.mouse.wheel(0, -200);
   await page.waitForTimeout(400);
 
   await expect(backBtn).toBeEnabled();
-  const scaleAfter = await page.evaluate(() => window.app.julia.panel.scale);
+  const scaleAfter = await page.evaluate(() => window.app.modelNamed("julia").panel.scale);
   expect(scaleAfter).not.toBe(scaleBefore);
 
   await backBtn.click();
   await page.waitForTimeout(200);
-  const scaleAfterBack = await page.evaluate(() => window.app.julia.panel.scale);
+  const scaleAfterBack = await page.evaluate(() => window.app.modelNamed("julia").panel.scale);
   expect(scaleAfterBack).toBe(scaleBefore);
   await expect(backBtn).toBeDisabled();
 });
@@ -350,7 +350,7 @@ test('wheel-zoom after panning centers on the new position, not the stale pivot'
   await page.mouse.up();
   await page.waitForTimeout(200);
 
-  const centerAfterPan = await page.evaluate(() => ({ x: window.app.mandelbrot.panel.center.x, y: window.app.mandelbrot.panel.center.y }));
+  const centerAfterPan = await page.evaluate(() => ({ x: window.app.modelNamed("mandelbrot").panel.center.x, y: window.app.modelNamed("mandelbrot").panel.center.y }));
 
   // Zoom with the cursor exactly at the screen center: a correctly tracked
   // pivot keeps the center fixed (only scale changes). Before the fix, the
@@ -360,7 +360,7 @@ test('wheel-zoom after panning centers on the new position, not the stale pivot'
   await page.mouse.wheel(0, -200);
   await page.waitForTimeout(400);
 
-  const centerAfterZoom = await page.evaluate(() => ({ x: window.app.mandelbrot.panel.center.x, y: window.app.mandelbrot.panel.center.y }));
+  const centerAfterZoom = await page.evaluate(() => ({ x: window.app.modelNamed("mandelbrot").panel.center.x, y: window.app.modelNamed("mandelbrot").panel.center.y }));
 
   expect(centerAfterZoom.x).toBeCloseTo(centerAfterPan.x, 4);
   expect(centerAfterZoom.y).toBeCloseTo(centerAfterPan.y, 4);
