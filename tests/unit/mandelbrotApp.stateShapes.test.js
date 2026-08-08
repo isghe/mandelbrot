@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { share } from '../../src/share.js';
 
 // mandelbrot.js relies on a full browser environment (DOM, WebGPU, storage).
 // This file only exercises MandelbrotApp's constructor (state shapes are all
@@ -26,7 +27,21 @@ function makeMockCanvas({ cssWidth = 800, cssHeight = 600 } = {}) {
 
 function makeMockOverlayCanvas(opts) {
   const canvas = makeMockCanvas(opts);
-  canvas.getContext = () => ({ setTransform() {}, clearRect() {} });
+  // Wide enough for overlay.js's drawGrid/drawCenterMarker/drawJuliaMarker,
+  // needed once the round-trip test restores a state with gridOverlay/
+  // centerMarker on, which draws at construction time (drawOverlay()).
+  canvas.getContext = () => ({
+    setTransform() {},
+    clearRect() {},
+    beginPath() {},
+    closePath() {},
+    moveTo() {},
+    lineTo() {},
+    arc() {},
+    stroke() {},
+    set strokeStyle(_v) {},
+    set lineWidth(_v) {},
+  });
   return canvas;
 }
 
@@ -74,7 +89,10 @@ function buildDomMocks() {
   return mocks;
 }
 
-function installGlobals() {
+// `store` is a plain object used as the localStorage backing — shared across
+// installGlobals() calls when a test needs a second app instance to read
+// what a first one wrote (see the round-trip test below).
+function installGlobals({ store = {} } = {}) {
   const mocks = buildDomMocks();
   globalThis.document = {
     getElementById: (id) => mocks[id],
@@ -83,7 +101,10 @@ function installGlobals() {
   };
   globalThis.window = { devicePixelRatio: 1, addEventListener() {} };
   globalThis.location = { search: '', origin: 'http://localhost', pathname: '/' };
-  globalThis.localStorage = { getItem: () => null, setItem() {} };
+  globalThis.localStorage = {
+    getItem: (key) => (Object.hasOwn(store, key) ? store[key] : null),
+    setItem: (key, value) => { store[key] = value; },
+  };
   return mocks;
 }
 
@@ -131,9 +152,30 @@ function assertNoKeys(obj, forbidden, label) {
   }
 }
 
-function makeApp() {
-  installGlobals();
+function makeApp(opts) {
+  installGlobals(opts);
   return new MandelbrotApp();
+}
+
+// Every field the two flat schema producers/consumers touch, mutated away
+// from its constructor default — used by the round-trip test below to prove
+// nothing is lost or misrouted going out through shareState() and back in
+// through restoreSettings().
+function mutateEveryField(app) {
+  for (const side of ['mandelbrot', 'julia']) {
+    const model = app.modelNamed(side);
+    model.panel.center = new DOMPointReadOnly(0.11, -0.22);
+    model.panel.scale = 0.5;
+    model.panel.maxIter = 777;
+    model.panel.paletteType = 2;
+    model.panel.progressiveMode = 1;
+    model.panel.smoothColoring = 1;
+    model.panel.gridOverlay = 1;
+    model.panel.centerMarker = 1;
+    model.show = side === 'mandelbrot' ? 1 : 0;
+  }
+  app.juliaSeed = new DOMPointReadOnly(0.33, -0.44);
+  app.juliaMarker = 1;
 }
 
 // --- P0: snapshotView() (undo-history, Tier 1 only) ---
@@ -217,4 +259,39 @@ test('shareState is a superset of flattenSnapshotForShare and captureDisplayPref
   const shareKeys = new Set(Object.keys(app.shareState()));
   for (const key of FLATTEN_SHARE_KEYS) assert.ok(shareKeys.has(key), `shareState missing ${key}`);
   for (const key of DISPLAY_PREFS_KEYS) assert.ok(shareKeys.has(key), `shareState missing ${key}`);
+});
+
+// --- Mossa 0: consumers (restoreDisplayPrefs, restoreSettings) — the reverse
+// direction, currently only reachable through slow/flaky e2e. These pin the
+// consumer side before the schema-declaration refactor touches it. ---
+
+test('restoreDisplayPrefs(captureDisplayPrefs()) is the identity', () => {
+  const app = makeApp();
+  const original = app.captureDisplayPrefs();
+
+  // Mutate every Tier-2 field away from its captured value.
+  app.modelNamed('mandelbrot').panel.gridOverlay = 1;
+  app.modelNamed('mandelbrot').panel.centerMarker = 1;
+  app.modelNamed('julia').panel.gridOverlay = 1;
+  app.modelNamed('julia').panel.centerMarker = 1;
+  app.modelNamed('mandelbrot').show = 0;
+  app.modelNamed('julia').show = 0;
+  app.juliaMarker = 1;
+
+  app.restoreDisplayPrefs(original);
+
+  assert.deepEqual(app.captureDisplayPrefs(), original);
+});
+
+test('shareState round-trips through share.settingsData/localStorage/restoreSettings', () => {
+  const store = {};
+  const app1 = makeApp({ store });
+  mutateEveryField(app1);
+  const before = app1.shareState();
+  localStorage.setItem(app1.constructor.SETTINGS_KEY, JSON.stringify(share.settingsData(before)));
+
+  const app2 = makeApp({ store });
+  const after = app2.shareState();
+
+  assert.deepEqual(after, before);
 });
