@@ -315,23 +315,17 @@ export class MandelbrotApp {
   }
 
   restoreDisplayPrefs(p) {
-    const mandelbrot = this.modelNamed("mandelbrot");
-    const julia = this.modelNamed("julia");
-    mandelbrot.panel.gridOverlay = p.mandelbrotPanelGridOverlay;
-    mandelbrot.gridOverlay.chk.checked = !!p.mandelbrotPanelGridOverlay;
-    mandelbrot.panel.centerMarker = p.mandelbrotPanelCenterMarker;
-    mandelbrot.centerMarker.chk.checked = !!p.mandelbrotPanelCenterMarker;
-    julia.panel.gridOverlay = p.juliaPanelGridOverlay;
-    julia.gridOverlay.chk.checked = !!p.juliaPanelGridOverlay;
-    julia.panel.centerMarker = p.juliaPanelCenterMarker;
-    julia.centerMarker.chk.checked = !!p.juliaPanelCenterMarker;
+    for (const model of this.models) {
+      for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) {
+        model.panel[key] = p[flatName];
+        model[key].chk.checked = !!p[flatName];
+      }
+      model.show = p[model.schema.show];
+      model.showChk.checked = !!p[model.schema.show];
+    }
     this.juliaMarker = p.juliaMarker;
     this.juliaMarkerChk.checked = !!p.juliaMarker;
 
-    mandelbrot.show = p.showMandelbrot;
-    mandelbrot.showChk.checked = !!p.showMandelbrot;
-    julia.show = p.showJulia;
-    julia.showChk.checked = !!p.showJulia;
     this.updatePanelVisibility();
     this.resizeVisiblePanels();
   }
