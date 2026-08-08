@@ -292,34 +292,12 @@ export class MandelbrotApp {
     return snap;
   }
 
-  // share.js expects this flat shape (schema v5), distinct from
-  // snapshotView()'s nested Tier 1 shape used for undo-history/Reset — see
-  // flattenSnapshotForShare() below for the bridge between the two.
+  // share.js expects this flat shape (schema v5): exactly the union of
+  // Tier 1 (flattened) and Tier 2 — every field either method below already
+  // produces, so this is their composition rather than a third hand-written
+  // copy of the same field list.
   shareState() {
-    const mandelbrot = this.modelNamed("mandelbrot");
-    const julia = this.modelNamed("julia");
-    return {
-      mandelbrotPanelCenter: mandelbrot.panel.center,
-      mandelbrotPanelScale: mandelbrot.panel.scale,
-      mandelbrotPanelMaxIter: mandelbrot.panel.maxIter,
-      mandelbrotPanelPaletteType: mandelbrot.panel.paletteType,
-      mandelbrotPanelProgressiveMode: mandelbrot.panel.progressiveMode,
-      mandelbrotPanelSmoothColoring: mandelbrot.panel.smoothColoring,
-      mandelbrotPanelGridOverlay: mandelbrot.panel.gridOverlay,
-      mandelbrotPanelCenterMarker: mandelbrot.panel.centerMarker,
-      juliaSeed: this.juliaSeed,
-      juliaPanelCenter: julia.panel.center,
-      juliaPanelScale: julia.panel.scale,
-      juliaPanelMaxIter: julia.panel.maxIter,
-      juliaPanelPaletteType: julia.panel.paletteType,
-      juliaPanelProgressiveMode: julia.panel.progressiveMode,
-      juliaPanelSmoothColoring: julia.panel.smoothColoring,
-      juliaPanelGridOverlay: julia.panel.gridOverlay,
-      juliaPanelCenterMarker: julia.panel.centerMarker,
-      juliaMarker: this.juliaMarker,
-      showMandelbrot: mandelbrot.show,
-      showJulia: julia.show,
-    };
+    return { ...this.flattenSnapshotForShare(this.snapshotView()), ...this.captureDisplayPrefs() };
   }
 
   // Tier 2 ("display preferences"): overlay toggles (per panel) and panel
@@ -382,14 +360,13 @@ export class MandelbrotApp {
     this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
   };
 
-  // share.js's buildShareUrl diffs against the same flat shape shareState()
-  // produces — this.initialState is snapshotView()'s nested Tier 1 shape
-  // (for applySnapshot/Reset), so it needs flattening here, same as
-  // shareState() flattens the *live* panels instead of delegating to
-  // snapshotView() directly. Only Tier 1 fields are needed (gridOverlay/
-  // centerMarker are Tier 2, not part of snapshotView()'s shape, and
-  // buildShareUrl includes them unconditionally rather than diffing them —
-  // see shareState()'s call site in buildShareUrl()).
+  // share.js's buildShareUrl diffs the live shareState() against this same
+  // flat shape applied to this.initialState (snapshotView()'s nested Tier 1
+  // shape, used for applySnapshot/Reset) — hence the bridge. Only Tier 1
+  // fields, deliberately: buildShareUrl diffs these against initialState but
+  // includes Tier 2 (gridOverlay/centerMarker) unconditionally instead, since
+  // Reset always zeroes those rather than restoring a captured initial value
+  // — see shareState()'s call site in buildShareUrl().
   flattenSnapshotForShare(s) {
     const flat = { juliaSeed: s.juliaSeed };
     for (const model of this.models) {
