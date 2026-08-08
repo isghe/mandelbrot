@@ -401,9 +401,9 @@ class MandelbrotApp {
     const setPanelField = (flatName, value) => {
       const mapped = MandelbrotApp.PANEL_FIELD_MAP[flatName];
       if (mapped) {
-        const [side, key, onGroup] = mapped;
+        const [side, key, onModel] = mapped;
         const model = this.modelNamed(side);
-        if (onGroup) model[key] = value;
+        if (onModel) model[key] = value;
         else model.panel[key] = value;
       } else {
         this[flatName] = value;
@@ -669,9 +669,13 @@ class MandelbrotApp {
 
   // The one place a caller needs "the model called X" instead of "every
   // model" — used by PANEL_FIELD_MAP's dispatch (restoreSettings) and
-  // setJuliaSeed, both genuinely side-specific.
+  // setJuliaSeed, both genuinely side-specific. Throws on a bad name (e.g. a
+  // typo in PANEL_FIELD_MAP or createModel's call sites) instead of handing
+  // back undefined for a confusing failure several lines later.
   modelNamed(name) {
-    return this.models.find((model) => model.name === name);
+    const model = this.models.find((m) => m.name === name);
+    if (!model) throw new Error(`No model named "${name}"`);
+    return model;
   }
 
   // Quality controls — Tier 1, pushHistory immediately (unlike the overlay
