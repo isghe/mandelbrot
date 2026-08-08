@@ -5,7 +5,11 @@ import { ViewHistory } from './history.js';
 import { requestGPUDevice, attachCanvas } from './renderer.js';
 import { FractalPanel, buildUniformData } from './fractalPanel.js';
 
-class MandelbrotApp {
+// Exported so tests/unit/mandelbrotApp.stateShapes.test.js can `new
+// MandelbrotApp()` directly against a mocked DOM, instead of only through
+// the real app instance the top-level bootstrap below constructs (see the
+// __MANDELBROT_TEST__ guard at the bottom of this file).
+export class MandelbrotApp {
   static MIN_SCALE = 1e-14;
   static MAX_SCALE = 4.0;
   static MIN_ITER = 1;
@@ -13,32 +17,10 @@ class MandelbrotApp {
   static WHEEL_HISTORY_MS = 250;
   static SETTINGS_KEY = 'isghe-mandelbrot-settings';
   static SETTINGS_SAVE_MS = 400;
-  // Bridges the flat mandelbrotPanelX/juliaPanelX/showX schema field names
-  // (URL/localStorage, see share.js) to their live location on the model
-  // named "mandelbrot"/"julia" (this.modelNamed) — used by
-  // restoreSettings()'s generic dispatch below. Third element is true for
-  // the handful of fields that live directly on the model object (e.g.
-  // `.show`) rather than on `.panel`.
-  static PANEL_FIELD_MAP = {
-    mandelbrotPanelCenter: ["mandelbrot", "center"],
-    mandelbrotPanelScale: ["mandelbrot", "scale"],
-    mandelbrotPanelMaxIter: ["mandelbrot", "maxIter"],
-    mandelbrotPanelPaletteType: ["mandelbrot", "paletteType"],
-    mandelbrotPanelProgressiveMode: ["mandelbrot", "progressiveMode"],
-    mandelbrotPanelSmoothColoring: ["mandelbrot", "smoothColoring"],
-    mandelbrotPanelGridOverlay: ["mandelbrot", "gridOverlay"],
-    mandelbrotPanelCenterMarker: ["mandelbrot", "centerMarker"],
-    juliaPanelCenter: ["julia", "center"],
-    juliaPanelScale: ["julia", "scale"],
-    juliaPanelMaxIter: ["julia", "maxIter"],
-    juliaPanelPaletteType: ["julia", "paletteType"],
-    juliaPanelProgressiveMode: ["julia", "progressiveMode"],
-    juliaPanelSmoothColoring: ["julia", "smoothColoring"],
-    juliaPanelGridOverlay: ["julia", "gridOverlay"],
-    juliaPanelCenterMarker: ["julia", "centerMarker"],
-    showMandelbrot: ["mandelbrot", "show", true],
-    showJulia: ["julia", "show", true],
-  };
+  // Which per-panel schema.view logical keys (see createModel()) hold a
+  // DOMPointReadOnly rather than a plain number — used by restoreSettings()
+  // below to pick the right validator/constructor per field.
+  static POINT_KEYS = new Set(["center"]);
   // State (JS = f64). maxIter/paletteType/smoothColoring/progressiveMode/
   // gridOverlay/centerMarker live per-model (model.panel.X, see
   // modelNamed()) — see FractalPanel. juliaSeed is the one piece of
@@ -74,14 +56,42 @@ class MandelbrotApp {
   rafPending = false;
 
   constructor() {
-    // juliaMode/showJuliaMarker/onGenuineClick are the only three facts that
+    // juliaMode/showJuliaMarker/onGenuineClick/schema are the only facts that
     // distinguish Mandelbrot from Julia anywhere in this file — supplied
     // once here, at the one call site that has to know which is which.
     // Everything downstream (event wiring, rendering, visibility,
-    // snapshotting) operates on this.models generically.
+    // snapshotting) operates on this.models generically. `schema` declares
+    // each model's flat URL/localStorage field names (see share.js), split
+    // by tier — `view` is Tier 1 (undo history), `displayPrefs`/`show` are
+    // Tier 2 — and drives snapshotView()/shareState()/captureDisplayPrefs()/
+    // restoreDisplayPrefs()/restoreSettings() below generically.
     this.models = [
-      this.createModel("mandelbrot", { juliaMode: 0, showJuliaMarker: true, onGenuineClick: (p) => this.setJuliaSeed(p) }),
-      this.createModel("julia", { juliaMode: 1, showJuliaMarker: false }),
+      this.createModel("mandelbrot", {
+        juliaMode: 0, showJuliaMarker: true, onGenuineClick: (p) => this.setJuliaSeed(p),
+        schema: {
+          panel: "mandelbrotPanel",
+          view: {
+            center: "mandelbrotPanelCenter", scale: "mandelbrotPanelScale", maxIter: "mandelbrotPanelMaxIter",
+            paletteType: "mandelbrotPanelPaletteType", progressiveMode: "mandelbrotPanelProgressiveMode",
+            smoothColoring: "mandelbrotPanelSmoothColoring",
+          },
+          displayPrefs: { gridOverlay: "mandelbrotPanelGridOverlay", centerMarker: "mandelbrotPanelCenterMarker" },
+          show: "showMandelbrot",
+        },
+      }),
+      this.createModel("julia", {
+        juliaMode: 1, showJuliaMarker: false,
+        schema: {
+          panel: "juliaPanel",
+          view: {
+            center: "juliaPanelCenter", scale: "juliaPanelScale", maxIter: "juliaPanelMaxIter",
+            paletteType: "juliaPanelPaletteType", progressiveMode: "juliaPanelProgressiveMode",
+            smoothColoring: "juliaPanelSmoothColoring",
+          },
+          displayPrefs: { gridOverlay: "juliaPanelGridOverlay", centerMarker: "juliaPanelCenterMarker" },
+          show: "showJulia",
+        },
+      }),
     ];
     // Julia's view center keeps FractalPanel's own default (same as
     // Mandelbrot's), rather than starting centered on the Julia seed — the
@@ -202,8 +212,13 @@ class MandelbrotApp {
   // to this beyond the Julia-seed-marker checkbox, which is app-level (see
   // constructor). juliaMode/showJuliaMarker/onGenuineClick are stored right
   // on the model so every later consumer (event wiring, rendering,
-  // visibility) can stay agnostic about which side it's looking at.
-  createModel(name, { juliaMode, showJuliaMarker, onGenuineClick }) {
+  // visibility) can stay agnostic about which side it's looking at. `schema`
+  // is the model's flat URL/localStorage field names (see share.js),
+  // consumed by snapshotView()/shareState()/captureDisplayPrefs()/
+  // restoreDisplayPrefs()/restoreSettings() below — declared here, at
+  // insertion time, so it ends up alongside juliaMode/showJuliaMarker as the
+  // third kind of fact that's genuinely known only at this one call site.
+  createModel(name, { juliaMode, showJuliaMarker, onGenuineClick, schema }) {
     const cap = name[0].toUpperCase() + name.slice(1);
     const model = {
       name,
@@ -212,6 +227,7 @@ class MandelbrotApp {
       juliaMode,
       showJuliaMarker,
       onGenuineClick,
+      schema,
       iter: { slider: document.getElementById(`${name}IterSlider`), label: document.getElementById(`${name}IterLabel`) },
       zoom: { slider: document.getElementById(`${name}ZoomSlider`), label: document.getElementById(`${name}ZoomLabel`) },
       palette: { sel: document.getElementById(`${name}PaletteType`) },
@@ -245,57 +261,21 @@ class MandelbrotApp {
   // view (it's the Julia-family constant), so it stays a separate top-level
   // field rather than living inside either panel's sub-object.
   snapshotView() {
-    const mandelbrot = this.modelNamed("mandelbrot");
-    const julia = this.modelNamed("julia");
-    return {
-      mandelbrotPanel: {
-        center: mandelbrot.panel.center,
-        scale: mandelbrot.panel.scale,
-        maxIter: mandelbrot.panel.maxIter,
-        paletteType: mandelbrot.panel.paletteType,
-        smoothColoring: mandelbrot.panel.smoothColoring,
-        progressiveMode: mandelbrot.panel.progressiveMode,
-      },
-      juliaPanel: {
-        center: julia.panel.center,
-        scale: julia.panel.scale,
-        maxIter: julia.panel.maxIter,
-        paletteType: julia.panel.paletteType,
-        smoothColoring: julia.panel.smoothColoring,
-        progressiveMode: julia.panel.progressiveMode,
-      },
-      juliaSeed: this.juliaSeed,
-    };
+    const snap = { juliaSeed: this.juliaSeed };
+    for (const model of this.models) {
+      const panelSnap = {};
+      for (const key of Object.keys(model.schema.view)) panelSnap[key] = model.panel[key];
+      snap[model.schema.panel] = panelSnap;
+    }
+    return snap;
   }
 
-  // share.js expects this flat shape (schema v5), distinct from
-  // snapshotView()'s nested Tier 1 shape used for undo-history/Reset — see
-  // flattenSnapshotForShare() below for the bridge between the two.
+  // share.js expects this flat shape (schema v5): exactly the union of
+  // Tier 1 (flattened) and Tier 2 — every field either method below already
+  // produces, so this is their composition rather than a third hand-written
+  // copy of the same field list.
   shareState() {
-    const mandelbrot = this.modelNamed("mandelbrot");
-    const julia = this.modelNamed("julia");
-    return {
-      mandelbrotPanelCenter: mandelbrot.panel.center,
-      mandelbrotPanelScale: mandelbrot.panel.scale,
-      mandelbrotPanelMaxIter: mandelbrot.panel.maxIter,
-      mandelbrotPanelPaletteType: mandelbrot.panel.paletteType,
-      mandelbrotPanelProgressiveMode: mandelbrot.panel.progressiveMode,
-      mandelbrotPanelSmoothColoring: mandelbrot.panel.smoothColoring,
-      mandelbrotPanelGridOverlay: mandelbrot.panel.gridOverlay,
-      mandelbrotPanelCenterMarker: mandelbrot.panel.centerMarker,
-      juliaSeed: this.juliaSeed,
-      juliaPanelCenter: julia.panel.center,
-      juliaPanelScale: julia.panel.scale,
-      juliaPanelMaxIter: julia.panel.maxIter,
-      juliaPanelPaletteType: julia.panel.paletteType,
-      juliaPanelProgressiveMode: julia.panel.progressiveMode,
-      juliaPanelSmoothColoring: julia.panel.smoothColoring,
-      juliaPanelGridOverlay: julia.panel.gridOverlay,
-      juliaPanelCenterMarker: julia.panel.centerMarker,
-      juliaMarker: this.juliaMarker,
-      showMandelbrot: mandelbrot.show,
-      showJulia: julia.show,
-    };
+    return { ...this.flattenSnapshotForShare(this.snapshotView()), ...this.captureDisplayPrefs() };
   }
 
   // Tier 2 ("display preferences"): overlay toggles (per panel) and panel
@@ -304,37 +284,26 @@ class MandelbrotApp {
   // app-level flag (it marks where juliaSeed sits on the Mandelbrot plane,
   // meaningless on Julia's own view — see drawOverlayForPanel).
   captureDisplayPrefs() {
-    const mandelbrot = this.modelNamed("mandelbrot");
-    const julia = this.modelNamed("julia");
-    return {
-      mandelbrotPanelGridOverlay: mandelbrot.panel.gridOverlay,
-      mandelbrotPanelCenterMarker: mandelbrot.panel.centerMarker,
-      juliaPanelGridOverlay: julia.panel.gridOverlay,
-      juliaPanelCenterMarker: julia.panel.centerMarker,
-      juliaMarker: this.juliaMarker,
-      showMandelbrot: mandelbrot.show,
-      showJulia: julia.show,
-    };
+    const prefs = { juliaMarker: this.juliaMarker };
+    for (const model of this.models) {
+      for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) prefs[flatName] = model.panel[key];
+      prefs[model.schema.show] = model.show;
+    }
+    return prefs;
   }
 
   restoreDisplayPrefs(p) {
-    const mandelbrot = this.modelNamed("mandelbrot");
-    const julia = this.modelNamed("julia");
-    mandelbrot.panel.gridOverlay = p.mandelbrotPanelGridOverlay;
-    mandelbrot.gridOverlay.chk.checked = !!p.mandelbrotPanelGridOverlay;
-    mandelbrot.panel.centerMarker = p.mandelbrotPanelCenterMarker;
-    mandelbrot.centerMarker.chk.checked = !!p.mandelbrotPanelCenterMarker;
-    julia.panel.gridOverlay = p.juliaPanelGridOverlay;
-    julia.gridOverlay.chk.checked = !!p.juliaPanelGridOverlay;
-    julia.panel.centerMarker = p.juliaPanelCenterMarker;
-    julia.centerMarker.chk.checked = !!p.juliaPanelCenterMarker;
+    for (const model of this.models) {
+      for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) {
+        model.panel[key] = p[flatName];
+        model[key].chk.checked = !!p[flatName];
+      }
+      model.show = p[model.schema.show];
+      model.showChk.checked = !!p[model.schema.show];
+    }
     this.juliaMarker = p.juliaMarker;
     this.juliaMarkerChk.checked = !!p.juliaMarker;
 
-    mandelbrot.show = p.showMandelbrot;
-    mandelbrot.showChk.checked = !!p.showMandelbrot;
-    julia.show = p.showJulia;
-    julia.showChk.checked = !!p.showJulia;
     this.updatePanelVisibility();
     this.resizeVisiblePanels();
   }
@@ -363,30 +332,20 @@ class MandelbrotApp {
     this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
   };
 
-  // share.js's buildShareUrl diffs against the same flat shape shareState()
-  // produces — this.initialState is snapshotView()'s nested Tier 1 shape
-  // (for applySnapshot/Reset), so it needs flattening here, same as
-  // shareState() flattens the *live* panels instead of delegating to
-  // snapshotView() directly. Only Tier 1 fields are needed (gridOverlay/
-  // centerMarker are Tier 2, not part of snapshotView()'s shape, and
-  // buildShareUrl includes them unconditionally rather than diffing them —
-  // see shareState()'s call site in buildShareUrl()).
+  // share.js's buildShareUrl diffs the live shareState() against this same
+  // flat shape applied to this.initialState (snapshotView()'s nested Tier 1
+  // shape, used for applySnapshot/Reset) — hence the bridge. Only Tier 1
+  // fields, deliberately: buildShareUrl diffs these against initialState but
+  // includes Tier 2 (gridOverlay/centerMarker) unconditionally instead, since
+  // Reset always zeroes those rather than restoring a captured initial value
+  // — see shareState()'s call site in buildShareUrl().
   flattenSnapshotForShare(s) {
-    return {
-      mandelbrotPanelCenter: s.mandelbrotPanel.center,
-      mandelbrotPanelScale: s.mandelbrotPanel.scale,
-      mandelbrotPanelMaxIter: s.mandelbrotPanel.maxIter,
-      mandelbrotPanelPaletteType: s.mandelbrotPanel.paletteType,
-      mandelbrotPanelProgressiveMode: s.mandelbrotPanel.progressiveMode,
-      mandelbrotPanelSmoothColoring: s.mandelbrotPanel.smoothColoring,
-      juliaSeed: s.juliaSeed,
-      juliaPanelCenter: s.juliaPanel.center,
-      juliaPanelScale: s.juliaPanel.scale,
-      juliaPanelMaxIter: s.juliaPanel.maxIter,
-      juliaPanelPaletteType: s.juliaPanel.paletteType,
-      juliaPanelProgressiveMode: s.juliaPanel.progressiveMode,
-      juliaPanelSmoothColoring: s.juliaPanel.smoothColoring,
-    };
+    const flat = { juliaSeed: s.juliaSeed };
+    for (const model of this.models) {
+      const panelSnap = s[model.schema.panel];
+      for (const [key, flatName] of Object.entries(model.schema.view)) flat[flatName] = panelSnap[key];
+    }
+    return flat;
   }
 
   buildShareUrl() {
@@ -398,44 +357,26 @@ class MandelbrotApp {
     const s = shared || this.loadSettings();
     if (!s) return;
 
-    const setPanelField = (flatName, value) => {
-      const mapped = MandelbrotApp.PANEL_FIELD_MAP[flatName];
-      if (mapped) {
-        const [side, key, onModel] = mapped;
-        const model = this.modelNamed(side);
-        if (onModel) model[key] = value;
-        else model.panel[key] = value;
-      } else {
-        this[flatName] = value;
+    const restoreNumber = (flatName, target, key) => {
+      if (typeof s[flatName] === "number") target[key] = s[flatName];
+    };
+    const restorePoint = (flatName, target, key) => {
+      const p = s[flatName];
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) target[key] = new DOMPointReadOnly(p.x, p.y);
+    };
+    // Driven by each model's own schema (see createModel()) instead of a
+    // reverse flat-name lookup: for every logical key the model declares,
+    // read s[flatName] and validate/route it by type (POINT_KEYS vs number).
+    // juliaSeed/juliaMarker are the only truly flat app-level fields left.
+    for (const model of this.models) {
+      for (const [key, flatName] of Object.entries(model.schema.view)) {
+        (MandelbrotApp.POINT_KEYS.has(key) ? restorePoint : restoreNumber)(flatName, model.panel, key);
       }
-    };
-    const restoreNumber = (field) => {
-      if (typeof s[field] === "number") setPanelField(field, s[field]);
-    };
-    const restorePoint = (field) => {
-      const p = s[field];
-      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
-        setPanelField(field, new DOMPointReadOnly(p.x, p.y));
-      }
-    };
-    const pointFields = ["juliaSeed", "juliaPanelCenter", "mandelbrotPanelCenter"];
-    // mandelbrotPanelX / juliaPanelX / showX names are the flat URL/
-    // localStorage schema field names (see share.js) — setPanelField() above
-    // routes them through PANEL_FIELD_MAP to modelNamed(side).panel (or, for
-    // showMandelbrot/showJulia, directly onto modelNamed(side)). juliaSeed/
-    // juliaMarker are the only truly flat app-level fields left, and fall
-    // through to plain this[flatName] = value.
-    const numberFields = [
-      "juliaMarker", "showJulia", "showMandelbrot",
-      "mandelbrotPanelScale", "mandelbrotPanelMaxIter", "mandelbrotPanelPaletteType",
-      "mandelbrotPanelProgressiveMode", "mandelbrotPanelSmoothColoring",
-      "mandelbrotPanelGridOverlay", "mandelbrotPanelCenterMarker",
-      "juliaPanelScale", "juliaPanelMaxIter", "juliaPanelPaletteType",
-      "juliaPanelProgressiveMode", "juliaPanelSmoothColoring",
-      "juliaPanelGridOverlay", "juliaPanelCenterMarker",
-    ];
-    pointFields.forEach(restorePoint);
-    numberFields.forEach(restoreNumber);
+      for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) restoreNumber(flatName, model.panel, key);
+      restoreNumber(model.schema.show, model, "show");
+    }
+    restorePoint("juliaSeed", this, "juliaSeed");
+    restoreNumber("juliaMarker", this, "juliaMarker");
 
     for (const model of this.models) model.panel.pivot = model.panel.center;
 
@@ -466,7 +407,7 @@ class MandelbrotApp {
   }
 
   applySnapshot(s) {
-    for (const model of this.models) this.applyPanelSnapshot(model, s[`${model.name}Panel`]);
+    for (const model of this.models) this.applyPanelSnapshot(model, s[model.schema.panel]);
     this.juliaSeed = s.juliaSeed;
     this.scheduleRender();
   }
@@ -668,10 +609,11 @@ class MandelbrotApp {
   }
 
   // The one place a caller needs "the model called X" instead of "every
-  // model" — used by PANEL_FIELD_MAP's dispatch (restoreSettings) and
-  // setJuliaSeed, both genuinely side-specific. Throws on a bad name (e.g. a
-  // typo in PANEL_FIELD_MAP or createModel's call sites) instead of handing
-  // back undefined for a confusing failure several lines later.
+  // model" — used by setJuliaSeed, genuinely side-specific (the other former
+  // user, restoreSettings(), now drives its dispatch off model.schema in a
+  // loop over this.models instead). Throws on a bad name (e.g. a typo in a
+  // createModel() call site) instead of handing back undefined for a
+  // confusing failure several lines later.
   modelNamed(name) {
     const model = this.models.find((m) => m.name === name);
     if (!model) throw new Error(`No model named "${name}"`);
@@ -859,10 +801,14 @@ class MandelbrotApp {
   };
 }
 
-const app = new MandelbrotApp();
-window.app = app; // exposed for e2e test assertions on internal state (tests/)
-try {
-  await app.init();
-} catch (e) {
-  app.showError(`Failed to initialize WebGPU: ${e.message}`);
+// Unit tests import this module for the MandelbrotApp class itself and set
+// this flag first to skip the real app's construction (GPU + full DOM).
+if (!globalThis.__MANDELBROT_TEST__) {
+  const app = new MandelbrotApp();
+  window.app = app; // exposed for e2e test assertions on internal state (tests/)
+  try {
+    await app.init();
+  } catch (e) {
+    app.showError(`Failed to initialize WebGPU: ${e.message}`);
+  }
 }
