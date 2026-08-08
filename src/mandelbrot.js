@@ -17,32 +17,10 @@ export class MandelbrotApp {
   static WHEEL_HISTORY_MS = 250;
   static SETTINGS_KEY = 'isghe-mandelbrot-settings';
   static SETTINGS_SAVE_MS = 400;
-  // Bridges the flat mandelbrotPanelX/juliaPanelX/showX schema field names
-  // (URL/localStorage, see share.js) to their live location on the model
-  // named "mandelbrot"/"julia" (this.modelNamed) — used by
-  // restoreSettings()'s generic dispatch below. Third element is true for
-  // the handful of fields that live directly on the model object (e.g.
-  // `.show`) rather than on `.panel`.
-  static PANEL_FIELD_MAP = {
-    mandelbrotPanelCenter: ["mandelbrot", "center"],
-    mandelbrotPanelScale: ["mandelbrot", "scale"],
-    mandelbrotPanelMaxIter: ["mandelbrot", "maxIter"],
-    mandelbrotPanelPaletteType: ["mandelbrot", "paletteType"],
-    mandelbrotPanelProgressiveMode: ["mandelbrot", "progressiveMode"],
-    mandelbrotPanelSmoothColoring: ["mandelbrot", "smoothColoring"],
-    mandelbrotPanelGridOverlay: ["mandelbrot", "gridOverlay"],
-    mandelbrotPanelCenterMarker: ["mandelbrot", "centerMarker"],
-    juliaPanelCenter: ["julia", "center"],
-    juliaPanelScale: ["julia", "scale"],
-    juliaPanelMaxIter: ["julia", "maxIter"],
-    juliaPanelPaletteType: ["julia", "paletteType"],
-    juliaPanelProgressiveMode: ["julia", "progressiveMode"],
-    juliaPanelSmoothColoring: ["julia", "smoothColoring"],
-    juliaPanelGridOverlay: ["julia", "gridOverlay"],
-    juliaPanelCenterMarker: ["julia", "centerMarker"],
-    showMandelbrot: ["mandelbrot", "show", true],
-    showJulia: ["julia", "show", true],
-  };
+  // Which per-panel schema.view logical keys (see createModel()) hold a
+  // DOMPointReadOnly rather than a plain number — used by restoreSettings()
+  // below to pick the right validator/constructor per field.
+  static POINT_KEYS = new Set(["center"]);
   // State (JS = f64). maxIter/paletteType/smoothColoring/progressiveMode/
   // gridOverlay/centerMarker live per-model (model.panel.X, see
   // modelNamed()) — see FractalPanel. juliaSeed is the one piece of
@@ -82,9 +60,11 @@ export class MandelbrotApp {
     // distinguish Mandelbrot from Julia anywhere in this file — supplied
     // once here, at the one call site that has to know which is which.
     // Everything downstream (event wiring, rendering, visibility,
-    // snapshotting) operates on this.models generically. `schema` mirrors
-    // PANEL_FIELD_MAP's flat field names (see there) split by tier — `view`
-    // is Tier 1 (undo history), `displayPrefs`/`show` are Tier 2.
+    // snapshotting) operates on this.models generically. `schema` declares
+    // each model's flat URL/localStorage field names (see share.js), split
+    // by tier — `view` is Tier 1 (undo history), `displayPrefs`/`show` are
+    // Tier 2 — and drives snapshotView()/shareState()/captureDisplayPrefs()/
+    // restoreDisplayPrefs()/restoreSettings() below generically.
     this.models = [
       this.createModel("mandelbrot", {
         juliaMode: 0, showJuliaMarker: true, onGenuineClick: (p) => this.setJuliaSeed(p),
@@ -233,13 +213,11 @@ export class MandelbrotApp {
   // constructor). juliaMode/showJuliaMarker/onGenuineClick are stored right
   // on the model so every later consumer (event wiring, rendering,
   // visibility) can stay agnostic about which side it's looking at. `schema`
-  // is the model's flat URL/localStorage field names (see share.js) — not
-  // yet consumed anywhere; snapshotView()/shareState()/captureDisplayPrefs()/
-  // restoreDisplayPrefs()/restoreSettings() still name "mandelbrot"/"julia"
-  // by hand and PANEL_FIELD_MAP still does the flat-name dispatch. This is
-  // scaffolding for that follow-up — declared here, at insertion time, so it
-  // ends up alongside juliaMode/showJuliaMarker as the third kind of fact
-  // that's genuinely known only at this one call site.
+  // is the model's flat URL/localStorage field names (see share.js),
+  // consumed by snapshotView()/shareState()/captureDisplayPrefs()/
+  // restoreDisplayPrefs()/restoreSettings() below — declared here, at
+  // insertion time, so it ends up alongside juliaMode/showJuliaMarker as the
+  // third kind of fact that's genuinely known only at this one call site.
   createModel(name, { juliaMode, showJuliaMarker, onGenuineClick, schema }) {
     const cap = name[0].toUpperCase() + name.slice(1);
     const model = {
@@ -379,44 +357,26 @@ export class MandelbrotApp {
     const s = shared || this.loadSettings();
     if (!s) return;
 
-    const setPanelField = (flatName, value) => {
-      const mapped = MandelbrotApp.PANEL_FIELD_MAP[flatName];
-      if (mapped) {
-        const [side, key, onModel] = mapped;
-        const model = this.modelNamed(side);
-        if (onModel) model[key] = value;
-        else model.panel[key] = value;
-      } else {
-        this[flatName] = value;
+    const restoreNumber = (flatName, target, key) => {
+      if (typeof s[flatName] === "number") target[key] = s[flatName];
+    };
+    const restorePoint = (flatName, target, key) => {
+      const p = s[flatName];
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) target[key] = new DOMPointReadOnly(p.x, p.y);
+    };
+    // Driven by each model's own schema (see createModel()) instead of a
+    // reverse flat-name lookup: for every logical key the model declares,
+    // read s[flatName] and validate/route it by type (POINT_KEYS vs number).
+    // juliaSeed/juliaMarker are the only truly flat app-level fields left.
+    for (const model of this.models) {
+      for (const [key, flatName] of Object.entries(model.schema.view)) {
+        (MandelbrotApp.POINT_KEYS.has(key) ? restorePoint : restoreNumber)(flatName, model.panel, key);
       }
-    };
-    const restoreNumber = (field) => {
-      if (typeof s[field] === "number") setPanelField(field, s[field]);
-    };
-    const restorePoint = (field) => {
-      const p = s[field];
-      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
-        setPanelField(field, new DOMPointReadOnly(p.x, p.y));
-      }
-    };
-    const pointFields = ["juliaSeed", "juliaPanelCenter", "mandelbrotPanelCenter"];
-    // mandelbrotPanelX / juliaPanelX / showX names are the flat URL/
-    // localStorage schema field names (see share.js) — setPanelField() above
-    // routes them through PANEL_FIELD_MAP to modelNamed(side).panel (or, for
-    // showMandelbrot/showJulia, directly onto modelNamed(side)). juliaSeed/
-    // juliaMarker are the only truly flat app-level fields left, and fall
-    // through to plain this[flatName] = value.
-    const numberFields = [
-      "juliaMarker", "showJulia", "showMandelbrot",
-      "mandelbrotPanelScale", "mandelbrotPanelMaxIter", "mandelbrotPanelPaletteType",
-      "mandelbrotPanelProgressiveMode", "mandelbrotPanelSmoothColoring",
-      "mandelbrotPanelGridOverlay", "mandelbrotPanelCenterMarker",
-      "juliaPanelScale", "juliaPanelMaxIter", "juliaPanelPaletteType",
-      "juliaPanelProgressiveMode", "juliaPanelSmoothColoring",
-      "juliaPanelGridOverlay", "juliaPanelCenterMarker",
-    ];
-    pointFields.forEach(restorePoint);
-    numberFields.forEach(restoreNumber);
+      for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) restoreNumber(flatName, model.panel, key);
+      restoreNumber(model.schema.show, model, "show");
+    }
+    restorePoint("juliaSeed", this, "juliaSeed");
+    restoreNumber("juliaMarker", this, "juliaMarker");
 
     for (const model of this.models) model.panel.pivot = model.panel.center;
 
@@ -649,10 +609,11 @@ export class MandelbrotApp {
   }
 
   // The one place a caller needs "the model called X" instead of "every
-  // model" — used by PANEL_FIELD_MAP's dispatch (restoreSettings) and
-  // setJuliaSeed, both genuinely side-specific. Throws on a bad name (e.g. a
-  // typo in PANEL_FIELD_MAP or createModel's call sites) instead of handing
-  // back undefined for a confusing failure several lines later.
+  // model" — used by setJuliaSeed, genuinely side-specific (the other former
+  // user, restoreSettings(), now drives its dispatch off model.schema in a
+  // loop over this.models instead). Throws on a bad name (e.g. a typo in a
+  // createModel() call site) instead of handing back undefined for a
+  // confusing failure several lines later.
   modelNamed(name) {
     const model = this.models.find((m) => m.name === name);
     if (!model) throw new Error(`No model named "${name}"`);
