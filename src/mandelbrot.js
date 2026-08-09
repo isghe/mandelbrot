@@ -69,10 +69,10 @@ export class MandelbrotApp {
     // URL/localStorage field names (see share.js) are derived from `name`
     // inside createModel() itself, not passed in here — see its comment.
     this.models = [
+      this.createModel("julia", { juliaMode: 1, showJuliaMarker: false }),
       this.createModel("mandelbrot", {
         juliaMode: 0, showJuliaMarker: true, onGenuineClick: (p) => this.setJuliaSeed(p),
       }),
-      this.createModel("julia", { juliaMode: 1, showJuliaMarker: false }),
     ];
     // Julia's view center keeps FractalPanel's own default (same as
     // Mandelbrot's), rather than starting centered on the Julia seed — the

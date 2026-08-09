@@ -289,7 +289,8 @@ test('restoreDisplayPrefs(captureDisplayPrefs()) is the identity', () => {
 
 test('each model derives exactly the expected flat schema names', () => {
   const app = makeApp();
-  const [mandelbrot, julia] = app.models;
+  const mandelbrot = app.models.find((m) => m.name === 'mandelbrot');
+  const julia = app.models.find((m) => m.name === 'julia');
   assert.deepEqual(mandelbrot.schema, {
     panel: 'mandelbrotPanel',
     view: {
