@@ -91,7 +91,7 @@ clear that state before dialing the iteration count back up more gradually.
   is likewise not undoable.
 - **Reset to initial condition** button — restore the default view, iterations, palette,
   Julia seed, progressive mode, smooth coloring, the grid/marker overlay checkboxes
-  (unchecked), and panel visibility (Mandelbrot shown, Julia hidden) — even though none of
+  (unchecked), and panel visibility (both panels shown, split screen) — even though none of
   these are part of the Back/Forward history. Also clears the Back/Forward history. Note
   this also overwrites the persisted settings below with these defaults, once the next
   render fires.
