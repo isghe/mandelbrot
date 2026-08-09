@@ -81,7 +81,7 @@ export async function attachCanvas(device, canvas, palette256) {
     primitive: { topology: "triangle-list" }
   });
 
-  // Uniform buffer: 14 logical f32 fields + 2 padding floats, since WGSL
+  // Uniform buffer: 15 logical f32 fields + 1 padding float, since WGSL
   // rounds a uniform struct's size up to a 16-byte multiple (64 B here).
   const uniformBuffer = device.createBuffer({
     size: 16 * 4,
