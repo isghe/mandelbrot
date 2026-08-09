@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makePalette, paletteBandCount } from '../../src/palette.js';
 
-const TYPES = [0, 1, 2, 3, 4];
+const TYPES = [0, 1, 2, 3, 4, 5];
 
 test('makePalette returns a 256x2-entry RGBA buffer', () => {
   const palette = makePalette(4);
@@ -44,8 +44,8 @@ test('makePalette produces a different gradient row per type', () => {
   }
 });
 
-test('interior row (row 1) is solid black for all palettes', () => {
-  for (const type of TYPES) {
+test('interior row (row 1) is solid black for existing gradient palettes', () => {
+  for (const type of [0, 1, 2, 3, 4]) {
     const palette = makePalette(type);
     for (let i = 0; i < 256; i++) {
       const o = 256 * 4 + i * 4;
@@ -54,8 +54,36 @@ test('interior row (row 1) is solid black for all palettes', () => {
   }
 });
 
-test('paletteBandCount returns 0 for every existing (gradient) palette', () => {
-  for (const type of TYPES) {
-    assert.strictEqual(paletteBandCount(type), 0, `type ${type}`);
+test('makePalette(5) gradient row is hard black/white bands, no intermediate colors', () => {
+  const palette = makePalette(5);
+  const seen = new Set();
+  for (let i = 0; i < 256; i++) {
+    const r = palette[i * 4 + 0], g = palette[i * 4 + 1], b = palette[i * 4 + 2];
+    seen.add(`${r},${g},${b}`);
+  }
+  assert.deepStrictEqual([...seen].sort(), ['0,0,0', '255,255,255'].sort());
+});
+
+test('makePalette(5) interior row is solid red', () => {
+  const palette = makePalette(5);
+  for (let i = 0; i < 256; i++) {
+    const o = 256 * 4 + i * 4;
+    assert.deepStrictEqual([...palette.slice(o, o + 3)], [255, 0, 0], `interior entry ${i}`);
+  }
+});
+
+// The shader indexes banded palettes by exact integer `iter % bandCount`
+// (see mandelbrot.wgsl), sampling texel `idx` directly - so the first N
+// texels of row 0 must be exactly the N registered colors, in order.
+test('makePalette(5) first 2 texels are exactly black then white (the registered band colors)', () => {
+  const palette = makePalette(5);
+  assert.deepStrictEqual([...palette.slice(0, 3)], [0, 0, 0], 'texel 0 (even iter)');
+  assert.deepStrictEqual([...palette.slice(4, 7)], [255, 255, 255], 'texel 1 (odd iter)');
+});
+
+test('paletteBandCount returns the color count for banded palettes, 0 for gradient palettes', () => {
+  assert.strictEqual(paletteBandCount(5), 2, 'Black and White - Red');
+  for (const type of [0, 1, 2, 3, 4]) {
+    assert.strictEqual(paletteBandCount(type), 0, `gradient type ${type}`);
   }
 });

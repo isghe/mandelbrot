@@ -2,7 +2,9 @@
 // colors, plus a second 256-entry row holding a solid interior color (for
 // points that never escape). Returned as one 256x2 RGBA buffer so it can be
 // uploaded directly as the palette texture (row 0 = gradient, row 1 = interior).
-const INTERIOR_COLORS = {};
+const INTERIOR_COLORS = {
+  5: [255, 0, 0], // Black and White - Red: interior is red
+};
 
 // Palettes whose escape-time color hard-alternates through a fixed color
 // list by iteration count (as opposed to a smooth/procedural gradient).
@@ -11,7 +13,9 @@ const INTERIOR_COLORS = {};
 // mandelbrot.wgsl's bandCount uniform) rather than through the continuous
 // t=iter/maxIter LUT lookup used by gradient palettes, so band color is
 // exact at any maxIter with no texel-resolution ceiling.
-const BANDED_PALETTES = {};
+const BANDED_PALETTES = {
+  5: [[0, 0, 0], [255, 255, 255]], // Black and White - Red: even iter -> black, odd -> white
+};
 
 // Number of colors a banded palette cycles through (0 for gradient palettes,
 // which don't use band indexing). The one place that reads BANDED_PALETTES
