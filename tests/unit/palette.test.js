@@ -2,7 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makePalette, paletteBandCount } from '../../src/palette.js';
 
-const TYPES = [0, 1, 2, 3, 4, 5];
+const TYPES = [0, 1, 2, 3, 4, 5, 6];
+
+const APPLE2 = [
+  [0,0,0],[255,255,255],[255,0,0],[0,255,0],
+  [0,0,255],[255,255,0],[255,0,255],[0,255,255],
+  [128,128,128],[255,128,0],[128,0,255],[0,128,255],
+  [128,255,0],[255,0,128],[0,255,128],[128,0,0]
+];
 
 test('makePalette returns a 256x2-entry RGBA buffer', () => {
   const palette = makePalette(4);
@@ -44,8 +51,8 @@ test('makePalette produces a different gradient row per type', () => {
   }
 });
 
-test('interior row (row 1) is solid black for existing gradient palettes', () => {
-  for (const type of [0, 1, 2, 3, 4]) {
+test('interior row (row 1) is solid black for existing palettes', () => {
+  for (const type of [0, 1, 2, 3, 4, 6]) {
     const palette = makePalette(type);
     for (let i = 0; i < 256; i++) {
       const o = 256 * 4 + i * 4;
@@ -81,8 +88,25 @@ test('makePalette(5) first 2 texels are exactly black then white (the registered
   assert.deepStrictEqual([...palette.slice(4, 7)], [255, 255, 255], 'texel 1 (odd iter)');
 });
 
+test('makePalette(6) first 16 texels are exactly Apple II\'s colors, in order, no interpolation', () => {
+  const palette = makePalette(6);
+  for (let i = 0; i < 16; i++) {
+    const o = i * 4;
+    assert.deepStrictEqual([...palette.slice(o, o + 3)], APPLE2[i], `texel ${i}`);
+  }
+});
+
+test('makePalette(6) interior row is solid black (default, no INTERIOR_COLORS entry)', () => {
+  const palette = makePalette(6);
+  for (let i = 0; i < 256; i++) {
+    const o = 256 * 4 + i * 4;
+    assert.deepStrictEqual([...palette.slice(o, o + 3)], [0, 0, 0], `interior entry ${i}`);
+  }
+});
+
 test('paletteBandCount returns the color count for banded palettes, 0 for gradient palettes', () => {
   assert.strictEqual(paletteBandCount(5), 2, 'Black and White - Red');
+  assert.strictEqual(paletteBandCount(6), 16, 'Apple II - Banded');
   for (const type of [0, 1, 2, 3, 4]) {
     assert.strictEqual(paletteBandCount(type), 0, `gradient type ${type}`);
   }

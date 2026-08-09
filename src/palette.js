@@ -6,6 +6,19 @@ const INTERIOR_COLORS = {
   5: [255, 0, 0], // Black and White - Red: interior is red
 };
 
+const APPLE2 = [
+  [0,0,0],[255,255,255],[255,0,0],[0,255,0],
+  [0,0,255],[255,255,0],[255,0,255],[0,255,255],
+  [128,128,128],[255,128,0],[128,0,255],[0,128,255],
+  [128,255,0],[255,0,128],[0,255,128],[128,0,0]
+];
+
+const VIRIDIS = [
+  [68,1,84],[71,44,122],[59,81,139],[44,113,142],
+  [33,144,141],[39,173,129],[92,200,99],[170,220,50],
+  [253,231,37]
+];
+
 // Palettes whose escape-time color hard-alternates through a fixed color
 // list by iteration count (as opposed to a smooth/procedural gradient).
 // Adding a future banded palette is just another entry here, no new branch
@@ -15,6 +28,7 @@ const INTERIOR_COLORS = {
 // exact at any maxIter with no texel-resolution ceiling.
 const BANDED_PALETTES = {
   5: [[0, 0, 0], [255, 255, 255]], // Black and White - Red: even iter -> black, odd -> white
+  6: APPLE2, // Apple II - Banded: cycles through Apple II's 16 colors, one per iteration
 };
 
 // Number of colors a banded palette cycles through (0 for gradient palettes,
@@ -41,19 +55,6 @@ export function makePalette(type) {
       arr[i*4+3] = 255;
     }
   } else {
-    const APPLE2 = [
-      [0,0,0],[255,255,255],[255,0,0],[0,255,0],
-      [0,0,255],[255,255,0],[255,0,255],[0,255,255],
-      [128,128,128],[255,128,0],[128,0,255],[0,128,255],
-      [128,255,0],[255,0,128],[0,255,128],[128,0,0]
-    ];
-
-    const VIRIDIS = [
-      [68,1,84],[71,44,122],[59,81,139],[44,113,142],
-      [33,144,141],[39,173,129],[92,200,99],[170,220,50],
-      [253,231,37]
-    ];
-
     let P;
     if (type === 4) P = APPLE2;
     else if (type === 0) P = VIRIDIS;
