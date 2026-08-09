@@ -132,6 +132,24 @@ resolves to the *old* default (Mandelbrot-only) rather than today's, so links sh
 before that change keep opening the exact view they captured. Only `v` ≥ 7 links defer
 an absent visibility param to the app's current (split-screen) default.
 
+## Palettes
+
+Palettes come in two kinds, picked from the same dropdown menu (grouped by
+`<optgroup>`):
+
+- **Gradient** — a continuous 256-entry color lookup table, sampled at
+  `t = iterations / maxIterations`. Colors blend smoothly as the iteration
+  count rises. Includes Viridis, Fire, Ocean, Rainbow, and Apple II.
+- **Banded** — colors are assigned by exact iteration class (`iterations %
+  bandCount`) rather than interpolated, so a point's color depends only on
+  which "band" its escape iteration falls into, not on `maxIterations`. Points
+  that never escape get a dedicated interior color instead of the last
+  gradient stop. Includes Black and White - Red (alternates black/white by
+  iteration parity, red interior) and Apple II - Banded (the Apple II colors
+  used as exact bands instead of a gradient). Smooth coloring is disabled
+  automatically when a banded palette is selected, since the two are
+  incompatible.
+
 ## Testing
 
 The app itself is **vanilla JS with no build step** — `package.json` and the

@@ -18,6 +18,14 @@ https://isghe.github.io/mandelbrot/?mx=-1.859401731016781&my=-0.0018090580610105
 
 ![Dual-panel view with both panels' grids on](dual-panel-view.png)
 
+## Banded palette, dual-panel deep zoom (Black and White - Red)
+
+Pubblicato: 2026-08-09 23:00:57
+
+https://isghe.github.io/mandelbrot/?mx=0.13854302181315678&my=0.5884293175069384&sx=0.13580242204077442&sy=0.5887346225910601&jpx=-0.17354844687299786&jpy=-0.2379314501367211&miter=1091&jscale=0.0000032939360421774072&jiter=871&mpalette=5&jpalette=5&mscale=0.013553105565932033&jgrid=1&juliaMark=1&v=7
+
+![Dual-panel deep zoom with the Black and White - Red banded palette on both panels](banded-bw-red.png)
+
 ## Spiral view
 
 Pubblicato: 2026-08-01 19:06:14
