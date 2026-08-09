@@ -1,4 +1,4 @@
-import { makePalette, paletteBandCount } from './palette.js';
+import { makePalette, paletteBandCount, PALETTE_GROUPS } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
@@ -192,6 +192,24 @@ export class MandelbrotApp {
     this.drawOverlay();
   }
 
+  // Builds the palette <select>'s <optgroup>/<option> tree from
+  // PALETTE_GROUPS (see palette.js) so the two panels' menus can't drift
+  // out of sync with each other or with the palette registry.
+  populatePaletteMenu(sel) {
+    for (const group of PALETTE_GROUPS) {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = group.label;
+      for (const palette of group.palettes) {
+        const option = document.createElement("option");
+        option.value = palette.id;
+        option.textContent = palette.label;
+        optgroup.appendChild(option);
+      }
+      sel.appendChild(optgroup);
+    }
+    return sel;
+  }
+
   // Builds one side's FractalPanel plus its DOM control refs and slider
   // ranges. `name` composes every DOM id mechanically (`${name}Gfx`,
   // `show${Cap}`, `${name}IterSlider`, ...) — index.html has no exceptions
@@ -233,7 +251,7 @@ export class MandelbrotApp {
         plus: document.getElementById(`${name}IterPlus`),
       },
       zoom: { slider: document.getElementById(`${name}ZoomSlider`), label: document.getElementById(`${name}ZoomLabel`) },
-      palette: { sel: document.getElementById(`${name}PaletteType`) },
+      palette: { sel: this.populatePaletteMenu(document.getElementById(`${name}PaletteType`)) },
       progressive: { chk: document.getElementById(`${name}ProgressiveMode`) },
       smoothColoring: { chk: document.getElementById(`${name}SmoothColoring`) },
       gridOverlay: { chk: document.getElementById(`${name}GridOverlay`) },
