@@ -1,6 +1,6 @@
 // WGSL rounds a uniform-address-space struct's size up to a 16-byte
-// multiple, so the host buffer must be 64 B even though these 14 fields
-// only span 56 B; the JS-side array appends 2 unused padding floats.
+// multiple, so the host buffer must be 64 B even though these 15 fields
+// only span 60 B; the JS-side array appends 1 unused padding float.
 struct Params {
     scale         : f32,
     centerX_hi    : f32,
@@ -16,6 +16,7 @@ struct Params {
     height        : f32,
     juliaMode     : f32,
     smoothColoring: f32,
+    bandCount     : f32,
 };
 
 @group(0) @binding(0) var<uniform> params : Params;
@@ -40,12 +41,32 @@ fn vs_main(@builtin(vertex_index) vid:u32) -> VSOut {
     return out;
 }
 
+// Palette texture is 256x2: row 0 (y=0.25) is the escape-time gradient,
+// row 1 (y=0.75) is a solid interior color for non-escaping points.
 fn palette256(t:f32)->vec3<f32>{
-    let uv=vec2<f32>(t,0.5);
+    let uv=vec2<f32>(t,0.25);
     // textureSampleLevel (not textureSample) because this function is now
     // called from behind a per-pixel branch (interior vs. escaped): a plain
     // textureSample relies on implicit derivatives, which WGSL requires to
     // come from uniform control flow across the pixel quad.
+    let col=textureSampleLevel(paletteTex,paletteSampler,uv,0.0);
+    return col.rgb;
+}
+
+fn interiorColor()->vec3<f32>{
+    let uv=vec2<f32>(0.5,0.75);
+    let col=textureSampleLevel(paletteTex,paletteSampler,uv,0.0);
+    return col.rgb;
+}
+
+// Banded palettes (params.bandCount > 0): the palette's N colors live in the
+// first N texels of row 0 (see palette.js), indexed by exact integer
+// iteration count instead of the continuous t=iter/maxIter lookup used by
+// palette256 - this has no texel-resolution ceiling, unlike sampling by t,
+// which collapses distinct iterations onto the same texel once bands get
+// narrower than 1/256 of the [0,1] range.
+fn bandColor(idx:i32)->vec3<f32>{
+    let uv=vec2<f32>((f32(idx)+0.5)/256.0,0.25);
     let col=textureSampleLevel(paletteTex,paletteSampler,uv,0.0);
     return col.rgb;
 }
@@ -192,7 +213,14 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
 
     if (!escaped) {
         // Interior: point did not escape within maxIter, dedicated color.
-        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        return vec4<f32>(interiorColor(), 1.0);
+    }
+
+    if (params.bandCount > 0.0) {
+        // Banded palette: exact per-iteration color, bands take precedence
+        // over smoothColoring (which has no meaning for a hard-edged palette).
+        let idx = iter % i32(params.bandCount);
+        return vec4<f32>(bandColor(idx), 1.0);
     }
 
     var t : f32;

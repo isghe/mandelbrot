@@ -1,4 +1,4 @@
-import { makePalette } from './palette.js';
+import { makePalette, paletteBandCount, PALETTE_GROUPS } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
@@ -160,6 +160,8 @@ export class MandelbrotApp {
     for (const model of this.models) {
       model.iter.slider.oninput = () => this.onIterInput(model);
       model.iter.slider.onchange = () => this.commitPendingSnapshot(model, "iter");
+      model.iter.minus.onclick = () => this.onIterStep(model, -1);
+      model.iter.plus.onclick = () => this.onIterStep(model, 1);
       model.zoom.slider.oninput = () => this.onZoomInput(model);
       model.zoom.slider.onchange = () => this.commitPendingSnapshot(model, "zoom");
       model.palette.sel.onchange = () => this.onPaletteChange(model);
@@ -181,13 +183,31 @@ export class MandelbrotApp {
 
       this.setPanelScale(model, model.panel.scale);
       this.setMaxIter(model, model.panel.maxIter);
-      model.panel.palette256 = makePalette(model.panel.paletteType);
+      this.applyPalette(model, model.panel.paletteType); // builds the initial palette256/bandCount
     }
 
     window.addEventListener("resize", this.onResize);
     window.addEventListener("keydown", this.onKeyDown);
 
     this.drawOverlay();
+  }
+
+  // Builds the palette <select>'s <optgroup>/<option> tree from
+  // PALETTE_GROUPS (see palette.js) so the two panels' menus can't drift
+  // out of sync with each other or with the palette registry.
+  populatePaletteMenu(sel) {
+    for (const group of PALETTE_GROUPS) {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = group.label;
+      for (const palette of group.palettes) {
+        const option = document.createElement("option");
+        option.value = palette.id;
+        option.textContent = palette.label;
+        optgroup.appendChild(option);
+      }
+      sel.appendChild(optgroup);
+    }
+    return sel;
   }
 
   // Builds one side's FractalPanel plus its DOM control refs and slider
@@ -224,9 +244,14 @@ export class MandelbrotApp {
       showJuliaMarker,
       onGenuineClick,
       schema,
-      iter: { slider: document.getElementById(`${name}IterSlider`), label: document.getElementById(`${name}IterLabel`) },
+      iter: {
+        slider: document.getElementById(`${name}IterSlider`),
+        label: document.getElementById(`${name}IterLabel`),
+        minus: document.getElementById(`${name}IterMinus`),
+        plus: document.getElementById(`${name}IterPlus`),
+      },
       zoom: { slider: document.getElementById(`${name}ZoomSlider`), label: document.getElementById(`${name}ZoomLabel`) },
-      palette: { sel: document.getElementById(`${name}PaletteType`) },
+      palette: { sel: this.populatePaletteMenu(document.getElementById(`${name}PaletteType`)) },
       progressive: { chk: document.getElementById(`${name}ProgressiveMode`) },
       smoothColoring: { chk: document.getElementById(`${name}SmoothColoring`) },
       gridOverlay: { chk: document.getElementById(`${name}GridOverlay`) },
@@ -408,11 +433,15 @@ export class MandelbrotApp {
     this.scheduleRender();
   }
 
+  static clampMaxIter(next) {
+    return Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
+  }
+
   // History bookkeeping (pushHistory) is done by the caller (see the
   // sliders' onchange/pendingSnapshot handling and applySnapshot above) —
   // symmetric with setPanelScale above, one method for both panels.
   setMaxIter(model, next) {
-    const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
+    const clamped = MandelbrotApp.clampMaxIter(next);
     model.panel.maxIter = clamped;
     model.iter.slider.value = Math.log10(clamped);
     model.iter.label.textContent = clamped;
@@ -536,6 +565,11 @@ export class MandelbrotApp {
     const palette256 = makePalette(type);
     model.panel.paletteType = type;
     model.panel.palette256 = palette256;
+    model.panel.bandCount = paletteBandCount(type);
+    // Bands take precedence over smooth coloring in the shader (see
+    // mandelbrot.wgsl) - disable the checkbox so the GUI doesn't promise an
+    // effect that isn't there.
+    model.smoothColoring.chk.disabled = model.panel.bandCount > 0;
     if (model.panel.renderer) model.panel.renderer.writePalette(palette256);
   }
 
@@ -546,6 +580,18 @@ export class MandelbrotApp {
   onIterInput(model) {
     if (!model.pendingSnapshot.iter) model.pendingSnapshot.iter = this.snapshotView();
     this.setMaxIter(model, 10 ** Number(model.iter.slider.value));
+    this.resetProgressive(model.panel);
+    this.scheduleRender();
+  }
+
+  onIterStep(model, delta) {
+    // Skip the history push (and re-render) entirely when already at
+    // MIN_ITER/MAX_ITER — otherwise a step at the clamp boundary is a no-op
+    // that still pollutes Back/Forward with a state identical to the last.
+    const clamped = MandelbrotApp.clampMaxIter(model.panel.maxIter + delta);
+    if (clamped === model.panel.maxIter) return;
+    this.history.push(this.snapshotView());
+    this.setMaxIter(model, clamped);
     this.resetProgressive(model.panel);
     this.scheduleRender();
   }
@@ -758,6 +804,7 @@ export class MandelbrotApp {
       canvasHeight: panel.canvas.height,
       juliaMode,
       smoothColoring: panel.smoothColoring,
+      bandCount: panel.bandCount,
     });
     panel.renderer.render(data);
   }

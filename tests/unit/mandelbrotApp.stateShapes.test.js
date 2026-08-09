@@ -57,6 +57,20 @@ function makeMockControl() {
     onclick: null,
     onchange: null,
     oninput: null,
+    appendChild() {},
+  };
+}
+
+// Minimal stand-in for the <optgroup>/<option> nodes populatePaletteMenu()
+// (mandelbrot.js) builds via document.createElement — just enough surface
+// for it to set label/value/textContent and append children without
+// throwing.
+function makeMockElement() {
+  return {
+    label: '',
+    value: '',
+    textContent: '',
+    appendChild() {},
   };
 }
 
@@ -70,6 +84,8 @@ function buildDomMocks() {
     mocks[`${name}Overlay`] = makeMockOverlayCanvas();
     mocks[`${name}IterSlider`] = makeMockControl();
     mocks[`${name}IterLabel`] = makeMockControl();
+    mocks[`${name}IterMinus`] = makeMockControl();
+    mocks[`${name}IterPlus`] = makeMockControl();
     mocks[`${name}ZoomSlider`] = makeMockControl();
     mocks[`${name}ZoomLabel`] = makeMockControl();
     mocks[`${name}PaletteType`] = makeMockControl();
@@ -96,6 +112,7 @@ function installGlobals({ store = {} } = {}) {
   const mocks = buildDomMocks();
   globalThis.document = {
     getElementById: (id) => mocks[id],
+    createElement: () => makeMockElement(),
     body: { classList: { toggle() {} } },
     activeElement: null,
   };

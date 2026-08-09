@@ -43,20 +43,17 @@
   <div id="uiPanels">
     <fieldset id="uiMandelbrot">
       <legend>Mandelbrot</legend>
-      <label>Iterations: <span id="mandelbrotIterLabel">256</span></label>
+      <label>Iterations: <span id="mandelbrotIterLabel">256</span>
+        <button type="button" id="mandelbrotIterMinus">-1</button>
+        <button type="button" id="mandelbrotIterPlus">+1</button>
+      </label>
       <input type="range" id="mandelbrotIterSlider" step="0.01">
 
       <label>Zoom: <span id="mandelbrotZoomLabel">3</span></label>
       <input type="range" id="mandelbrotZoomSlider" step="0.01">
 
       <label>Palette:</label>
-      <select id="mandelbrotPaletteType">
-        <option value="0">Viridis</option>
-        <option value="1">Fire</option>
-        <option value="2">Ocean</option>
-        <option value="3">Rainbow</option>
-        <option value="4" selected>Apple II</option>
-      </select>
+      <select id="mandelbrotPaletteType"></select>
 
       <label><input type="checkbox" id="mandelbrotProgressiveMode"> Progressive mode</label>
       <label><input type="checkbox" id="mandelbrotSmoothColoring"> Smooth coloring</label>
@@ -67,20 +64,17 @@
 
     <fieldset id="uiJulia">
       <legend>Julia</legend>
-      <label>Iterations: <span id="juliaIterLabel">256</span></label>
+      <label>Iterations: <span id="juliaIterLabel">256</span>
+        <button type="button" id="juliaIterMinus">-1</button>
+        <button type="button" id="juliaIterPlus">+1</button>
+      </label>
       <input type="range" id="juliaIterSlider" step="0.01">
 
       <label>Zoom: <span id="juliaZoomLabel">3</span></label>
       <input type="range" id="juliaZoomSlider" step="0.01">
 
       <label>Palette:</label>
-      <select id="juliaPaletteType">
-        <option value="0">Viridis</option>
-        <option value="1">Fire</option>
-        <option value="2">Ocean</option>
-        <option value="3">Rainbow</option>
-        <option value="4" selected>Apple II</option>
-      </select>
+      <select id="juliaPaletteType"></select>
 
       <label><input type="checkbox" id="juliaProgressiveMode"> Progressive mode</label>
       <label><input type="checkbox" id="juliaSmoothColoring"> Smooth coloring</label>

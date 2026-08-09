@@ -103,6 +103,7 @@ test('buildUniformData packs a 16-float array in the WGSL Params layout', () => 
     canvasHeight: 600,
     juliaMode: 1,
     smoothColoring: 0,
+    bandCount: 2,
   });
 
   assert.strictEqual(data.length, 16, 'padded to 64 bytes (16 floats)');
@@ -122,7 +123,8 @@ test('buildUniformData packs a 16-float array in the WGSL Params layout', () => 
   assert.strictEqual(data[11], 600, 'canvasHeight');
   assert.strictEqual(data[12], 1, 'juliaMode flag');
   assert.strictEqual(data[13], 0, 'smoothColoring flag');
-  assert.deepStrictEqual([...data.slice(14, 16)], [0, 0], 'trailing padding');
+  assert.strictEqual(data[14], 2, 'bandCount');
+  assert.strictEqual(data[15], 0, 'trailing padding');
 });
 
 function makeMockSelectionBox() {

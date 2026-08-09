@@ -96,8 +96,9 @@ clear that state before dialing the iteration count back up more gradually.
   this also overwrites the persisted settings below with these defaults, once the next
   render fires.
 - Iteration count and zoom level are adjustable via log-scale sliders (for precise control
-  at both the low and deep-zoom ends of their range); palette is also adjustable via the
-  UI panel.
+  at both the low and deep-zoom ends of their range), plus **-1 / +1** buttons next to the
+  iteration slider for single-step adjustments; palette is also adjustable via the UI
+  panel.
 - **Copy URL** button — copy a link to the clipboard that reproduces the current view,
   iterations, palette, Julia seed, the Julia panel's own independent pan/zoom,
   progressive mode, smooth coloring, grid/marker overlay checkboxes, and Mandelbrot/Julia

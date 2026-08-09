@@ -4,7 +4,7 @@ import { split64 } from './precision.js';
 // Packs render state into the 16-float layout of the WGSL `Params` uniform
 // (see renderer.js's uniformBuffer comment for the byte layout/padding).
 export function buildUniformData({
-  center, scale, juliaSeed, displayIter, canvasWidth, canvasHeight, juliaMode, smoothColoring,
+  center, scale, juliaSeed, displayIter, canvasWidth, canvasHeight, juliaMode, smoothColoring, bandCount,
 }) {
   const [cx_hi, cx_lo] = split64(center.x);
   const [cy_hi, cy_lo] = split64(center.y);
@@ -22,7 +22,8 @@ export function buildUniformData({
     canvasHeight,
     juliaMode,
     smoothColoring,
-    0, 0 // padding to 64 B (16 floats), see renderer.js's uniformBuffer comment
+    bandCount,
+    0 // padding to 64 B (16 floats), see renderer.js's uniformBuffer comment
   ]);
 }
 
@@ -46,12 +47,15 @@ export class FractalPanel {
   scale = FractalPanel.DEFAULT_SCALE;
 
   // Frame quality/look — independent per panel (see MandelbrotApp's
-  // three-tier state model). `palette256` is the derived 256-entry RGBA
-  // lookup table for `paletteType`, computed and written by MandelbrotApp
-  // (this class doesn't depend on palette.js).
+  // three-tier state model). `palette256`/`bandCount` are derived from
+  // `paletteType`, computed and written by MandelbrotApp (this class doesn't
+  // depend on palette.js). `bandCount` isn't part of any saved state (not in
+  // VIEW_KEYS, not in the share/localStorage schema) — it's always
+  // recomputed from `paletteType` by applyPalette.
   maxIter = FractalPanel.DEFAULT_MAX_ITER;
   paletteType = FractalPanel.DEFAULT_PALETTE_TYPE;
   palette256 = null;
+  bandCount = 0;
   smoothColoring = FractalPanel.DEFAULT_SMOOTH_COLORING;
   progressiveMode = FractalPanel.DEFAULT_PROGRESSIVE_MODE;
   progressiveIter = 1;
