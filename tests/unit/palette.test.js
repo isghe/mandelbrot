@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makePalette } from '../../src/palette.js';
+import { makePalette, paletteBandCount } from '../../src/palette.js';
 
 const TYPES = [0, 1, 2, 3, 4];
 
@@ -51,5 +51,11 @@ test('interior row (row 1) is solid black for all palettes', () => {
       const o = 256 * 4 + i * 4;
       assert.deepStrictEqual([...palette.slice(o, o + 3)], [0, 0, 0], `type ${type} interior entry ${i}`);
     }
+  }
+});
+
+test('paletteBandCount returns 0 for every existing (gradient) palette', () => {
+  for (const type of TYPES) {
+    assert.strictEqual(paletteBandCount(type), 0, `type ${type}`);
   }
 });

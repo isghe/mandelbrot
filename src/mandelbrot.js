@@ -1,4 +1,4 @@
-import { makePalette } from './palette.js';
+import { makePalette, paletteBandCount } from './palette.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
@@ -183,7 +183,7 @@ export class MandelbrotApp {
 
       this.setPanelScale(model, model.panel.scale);
       this.setMaxIter(model, model.panel.maxIter);
-      model.panel.palette256 = makePalette(model.panel.paletteType);
+      this.applyPalette(model, model.panel.paletteType); // builds the initial palette256/bandCount
     }
 
     window.addEventListener("resize", this.onResize);
@@ -543,6 +543,11 @@ export class MandelbrotApp {
     const palette256 = makePalette(type);
     model.panel.paletteType = type;
     model.panel.palette256 = palette256;
+    model.panel.bandCount = paletteBandCount(type);
+    // Bands take precedence over smooth coloring in the shader (see
+    // mandelbrot.wgsl) - disable the checkbox so the GUI doesn't promise an
+    // effect that isn't there.
+    model.smoothColoring.chk.disabled = model.panel.bandCount > 0;
     if (model.panel.renderer) model.panel.renderer.writePalette(palette256);
   }
 
@@ -772,6 +777,7 @@ export class MandelbrotApp {
       canvasHeight: panel.canvas.height,
       juliaMode,
       smoothColoring: panel.smoothColoring,
+      bandCount: panel.bandCount,
     });
     panel.renderer.render(data);
   }
