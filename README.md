@@ -5,7 +5,7 @@
 Real-time Mandelbrot and Julia set renderer using the WebGPU API, with double-single
 precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 
-**Live demo:** https://isghe.github.io/mandelbrot/
+**Live demo:** [isghe.github.io/mandelbrot](https://isghe.github.io/mandelbrot/)
 
 ![Deep zoom example](examples/example.png)
 
@@ -18,7 +18,7 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
 - **Shareable view URLs** — copy a link that reproduces the exact view, iterations,
   palette, and mode you're looking at.
 
-  Example: https://isghe.github.io/mandelbrot/?mx=-0.7445137502875607&my=0.16445045543801942&mscale=0.007380653541488702&v=7
+  Example: [Open the spiral view](https://isghe.github.io/mandelbrot/?mx=-0.7445137502875607&my=0.16445045543801942&mscale=0.007380653541488702&v=7)
 
   ![Spiral view reached via a shared URL](examples/share-example.png)
 
