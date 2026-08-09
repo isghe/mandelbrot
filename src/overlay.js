@@ -7,7 +7,7 @@ function drawGrid(ctx, w, h, center, scale, aspect) {
   const max = domPoint.add(center, half);
   const eps = step * 1e-9;
 
-  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (const x of grid.gridLines(min.x, max.x, step)) {
@@ -24,7 +24,7 @@ function drawGrid(ctx, w, h, center, scale, aspect) {
   }
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   if (min.x <= 0 && 0 <= max.x) {
