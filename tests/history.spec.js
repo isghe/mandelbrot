@@ -230,6 +230,33 @@ test('keyboard steps on a slider are undoable', async ({ page }) => {
   await expect(backBtn).toBeDisabled();
 });
 
+test('the iterations -1/+1 buttons are undoable, and clamping at MIN_ITER pushes no spurious history entry', async ({ page }) => {
+  const backBtn = page.locator('#backBtn');
+  const iterLabel = page.locator('#mandelbrotIterLabel');
+  const iterMinus = page.locator('#mandelbrotIterMinus');
+
+  await expect(iterLabel).toHaveText('256');
+
+  // Home on a focused range input jumps straight to its min (MIN_ITER = 1),
+  // firing input+change like the arrow-key test above — one real history
+  // entry, going from 256 to 1.
+  await page.locator('#mandelbrotIterSlider').focus();
+  await page.keyboard.press('Home');
+  await expect(iterLabel).toHaveText('1');
+  await expect(backBtn).toBeEnabled();
+
+  // Already at MIN_ITER: this click's clamp is a no-op. If onIterStep still
+  // pushed history unconditionally, it would add a second entry identical in
+  // maxIter to the first, and a single Back below would land on that
+  // duplicate (still showing "1") instead of jumping straight back to "256".
+  await iterMinus.click();
+  await expect(iterLabel).toHaveText('1');
+
+  await backBtn.click();
+  await expect(iterLabel).toHaveText('256');
+  await expect(backBtn).toBeDisabled();
+});
+
 test('progressive mode and smooth coloring toggles are undoable', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const progressiveChk = page.locator('#mandelbrotProgressiveMode');

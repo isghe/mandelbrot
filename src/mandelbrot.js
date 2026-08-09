@@ -433,11 +433,15 @@ export class MandelbrotApp {
     this.scheduleRender();
   }
 
+  static clampMaxIter(next) {
+    return Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
+  }
+
   // History bookkeeping (pushHistory) is done by the caller (see the
   // sliders' onchange/pendingSnapshot handling and applySnapshot above) —
   // symmetric with setPanelScale above, one method for both panels.
   setMaxIter(model, next) {
-    const clamped = Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
+    const clamped = MandelbrotApp.clampMaxIter(next);
     model.panel.maxIter = clamped;
     model.iter.slider.value = Math.log10(clamped);
     model.iter.label.textContent = clamped;
@@ -581,8 +585,13 @@ export class MandelbrotApp {
   }
 
   onIterStep(model, delta) {
+    // Skip the history push (and re-render) entirely when already at
+    // MIN_ITER/MAX_ITER — otherwise a step at the clamp boundary is a no-op
+    // that still pollutes Back/Forward with a state identical to the last.
+    const clamped = MandelbrotApp.clampMaxIter(model.panel.maxIter + delta);
+    if (clamped === model.panel.maxIter) return;
     this.history.push(this.snapshotView());
-    this.setMaxIter(model, model.panel.maxIter + delta);
+    this.setMaxIter(model, clamped);
     this.resetProgressive(model.panel);
     this.scheduleRender();
   }
