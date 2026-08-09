@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makePalette, paletteBandCount } from '../../src/palette.js';
+import { makePalette, paletteBandCount, PALETTE_GROUPS } from '../../src/palette.js';
 
-const TYPES = [0, 1, 2, 3, 4, 5, 6];
+const TYPES = PALETTE_GROUPS.flatMap((g) => g.palettes.map((p) => p.id));
 
 const APPLE2 = [
   [0,0,0],[255,255,255],[255,0,0],[0,255,0],
@@ -109,5 +109,22 @@ test('paletteBandCount returns the color count for banded palettes, 0 for gradie
   assert.strictEqual(paletteBandCount(6), 16, 'Apple II - Banded');
   for (const type of [0, 1, 2, 3, 4]) {
     assert.strictEqual(paletteBandCount(type), 0, `gradient type ${type}`);
+  }
+});
+
+test('PALETTE_GROUPS registry invariants', () => {
+  const allPalettes = PALETTE_GROUPS.flatMap((g) => g.palettes);
+  const ids = allPalettes.map((p) => p.id);
+  assert.strictEqual(new Set(ids).size, ids.length, 'ids are unique');
+
+  const labels = allPalettes.map((p) => p.label);
+  assert.ok(labels.every((l) => typeof l === 'string' && l.length > 0), 'labels are non-empty');
+  assert.strictEqual(new Set(labels).size, labels.length, 'labels are unique');
+
+  for (const group of PALETTE_GROUPS) {
+    if (!group.banded) continue;
+    for (const p of group.palettes) {
+      assert.ok(p.colors.length >= 2, `banded palette "${p.label}" has at least 2 colors`);
+    }
   }
 });

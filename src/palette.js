@@ -2,9 +2,12 @@
 // colors, plus a second 256-entry row holding a solid interior color (for
 // points that never escape). Returned as one 256x2 RGBA buffer so it can be
 // uploaded directly as the palette texture (row 0 = gradient, row 1 = interior).
-const INTERIOR_COLORS = {
-  5: [255, 0, 0], // Black and White - Red: interior is red
-};
+
+function ramp16(fn) {
+  const P = [];
+  for (let i = 0; i < 16; i++) P.push(fn(i / 15));
+  return P;
+}
 
 const APPLE2 = [
   [0,0,0],[255,255,255],[255,0,0],[0,255,0],
@@ -19,59 +22,78 @@ const VIRIDIS = [
   [253,231,37]
 ];
 
-// Palettes whose escape-time color hard-alternates through a fixed color
-// list by iteration count (as opposed to a smooth/procedural gradient).
-// Adding a future banded palette is just another entry here, no new branch
-// needed. The shader indexes these colors directly by `iter % N` (see
-// mandelbrot.wgsl's bandCount uniform) rather than through the continuous
-// t=iter/maxIter LUT lookup used by gradient palettes, so band color is
-// exact at any maxIter with no texel-resolution ceiling.
-const BANDED_PALETTES = {
-  5: [[0, 0, 0], [255, 255, 255]], // Black and White - Red: even iter -> black, odd -> white
-  6: APPLE2, // Apple II - Banded: cycles through Apple II's 16 colors, one per iteration
-};
+const FIRE = ramp16((t) => [255 * t, 80 * t, 0]);
+const OCEAN = ramp16((t) => [0, 100 * t, 255 * t]);
+const RAINBOW = ramp16((t) => [
+  (Math.sin(6.28318 * t) + 1) / 2 * 255,
+  (Math.sin(6.28318 * (t + 0.33)) + 1) / 2 * 255,
+  (Math.sin(6.28318 * (t + 0.66)) + 1) / 2 * 255
+]);
+
+// Single source of truth for every palette: id, display label (consumed by
+// the runtime-built <select> menus in mandelbrot.js), its control colors,
+// and (for banded palettes) a dedicated interior color. Grouping mirrors the
+// menu's <optgroup>s; `banded` lives on the group because it's a property of
+// the group, not of each individual palette. Adding a palette is one entry
+// here, nowhere else.
+export const PALETTE_GROUPS = [
+  { label: "Gradient", banded: false, palettes: [
+    { id: 0, label: "Viridis",  colors: VIRIDIS },
+    { id: 1, label: "Fire",     colors: FIRE },
+    { id: 2, label: "Ocean",    colors: OCEAN },
+    { id: 3, label: "Rainbow",  colors: RAINBOW },
+    { id: 4, label: "Apple II", colors: APPLE2 },
+  ]},
+  // Banded palettes hard-alternate through their color list by iteration
+  // count (as opposed to a smooth/procedural gradient). The shader indexes
+  // these colors directly by `iter % N` (see mandelbrot.wgsl's bandCount
+  // uniform) rather than through the continuous t=iter/maxIter LUT lookup
+  // used by gradient palettes, so band color is exact at any maxIter with
+  // no texel-resolution ceiling.
+  { label: "Banded", banded: true, palettes: [
+    { id: 5, label: "Black and White - Red", colors: [[0,0,0],[255,255,255]], interior: [255,0,0] },
+    { id: 6, label: "Apple II - Banded",     colors: APPLE2 },
+  ]},
+];
+
+const BY_ID = new Map(
+  PALETTE_GROUPS.flatMap((group) =>
+    group.palettes.map((p) => [p.id, { ...p, banded: group.banded }])
+  )
+);
+
+// share URLs and localStorage can carry an arbitrary numeric palette id
+// (e.g. a hand-edited or stale ?mpalette=99); fall back to Rainbow rather
+// than throwing.
+function lookup(type) {
+  return BY_ID.get(type) ?? BY_ID.get(3);
+}
 
 // Number of colors a banded palette cycles through (0 for gradient palettes,
-// which don't use band indexing). The one place that reads BANDED_PALETTES
-// outside this module.
+// which don't use band indexing).
 export function paletteBandCount(type) {
-  return type in BANDED_PALETTES ? BANDED_PALETTES[type].length : 0;
+  const entry = lookup(type);
+  return entry.banded ? entry.colors.length : 0;
 }
 
 export function makePalette(type) {
   const arr = new Uint8Array(256 * 2 * 4);
+  const entry = lookup(type);
+  const P = entry.colors;
 
-  if (type in BANDED_PALETTES) {
+  if (entry.banded) {
     // The shader indexes texel i = iter % colors.length directly (exact
     // integer arithmetic, no maxIter dependency); repeating the N colors
     // across all 256 texels keeps the texture self-describing/inspectable
     // but only the first N texels are ever actually sampled.
-    const colors = BANDED_PALETTES[type];
     for (let i = 0; i < 256; i++) {
-      const c = colors[i % colors.length];
+      const c = P[i % P.length];
       arr[i*4+0] = c[0];
       arr[i*4+1] = c[1];
       arr[i*4+2] = c[2];
       arr[i*4+3] = 255;
     }
   } else {
-    let P;
-    if (type === 4) P = APPLE2;
-    else if (type === 0) P = VIRIDIS;
-    else {
-      P = [];
-      for (let i=0;i<16;i++){
-        const t=i/15;
-        if (type===1) P.push([255*t,80*t,0]);          // Fire
-        else if (type===2) P.push([0,100*t,255*t]);   // Ocean
-        else P.push([                                   // Rainbow
-          (Math.sin(6.28318*t)+1)/2*255,
-          (Math.sin(6.28318*(t+0.33))+1)/2*255,
-          (Math.sin(6.28318*(t+0.66))+1)/2*255
-        ]);
-      }
-    }
-
     for (let i=0;i<256;i++){
       const t=i/255;
       const p=t*(P.length-1);
@@ -90,7 +112,7 @@ export function makePalette(type) {
     }
   }
 
-  const interior = INTERIOR_COLORS[type] || [0, 0, 0];
+  const interior = entry.interior || [0, 0, 0];
   for (let i = 0; i < 256; i++) {
     const o = 256 * 4 + i * 4;
     arr[o+0] = interior[0];
