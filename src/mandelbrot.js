@@ -160,6 +160,8 @@ export class MandelbrotApp {
     for (const model of this.models) {
       model.iter.slider.oninput = () => this.onIterInput(model);
       model.iter.slider.onchange = () => this.commitPendingSnapshot(model, "iter");
+      model.iter.minus.onclick = () => this.onIterStep(model, -1);
+      model.iter.plus.onclick = () => this.onIterStep(model, 1);
       model.zoom.slider.oninput = () => this.onZoomInput(model);
       model.zoom.slider.onchange = () => this.commitPendingSnapshot(model, "zoom");
       model.palette.sel.onchange = () => this.onPaletteChange(model);
@@ -224,7 +226,12 @@ export class MandelbrotApp {
       showJuliaMarker,
       onGenuineClick,
       schema,
-      iter: { slider: document.getElementById(`${name}IterSlider`), label: document.getElementById(`${name}IterLabel`) },
+      iter: {
+        slider: document.getElementById(`${name}IterSlider`),
+        label: document.getElementById(`${name}IterLabel`),
+        minus: document.getElementById(`${name}IterMinus`),
+        plus: document.getElementById(`${name}IterPlus`),
+      },
       zoom: { slider: document.getElementById(`${name}ZoomSlider`), label: document.getElementById(`${name}ZoomLabel`) },
       palette: { sel: document.getElementById(`${name}PaletteType`) },
       progressive: { chk: document.getElementById(`${name}ProgressiveMode`) },
@@ -546,6 +553,13 @@ export class MandelbrotApp {
   onIterInput(model) {
     if (!model.pendingSnapshot.iter) model.pendingSnapshot.iter = this.snapshotView();
     this.setMaxIter(model, 10 ** Number(model.iter.slider.value));
+    this.resetProgressive(model.panel);
+    this.scheduleRender();
+  }
+
+  onIterStep(model, delta) {
+    this.history.push(this.snapshotView());
+    this.setMaxIter(model, model.panel.maxIter + delta);
     this.resetProgressive(model.panel);
     this.scheduleRender();
   }

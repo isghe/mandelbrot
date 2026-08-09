@@ -43,7 +43,10 @@
   <div id="uiPanels">
     <fieldset id="uiMandelbrot">
       <legend>Mandelbrot</legend>
-      <label>Iterations: <span id="mandelbrotIterLabel">256</span></label>
+      <label>Iterations: <span id="mandelbrotIterLabel">256</span>
+        <button type="button" id="mandelbrotIterMinus">-1</button>
+        <button type="button" id="mandelbrotIterPlus">+1</button>
+      </label>
       <input type="range" id="mandelbrotIterSlider" step="0.01">
 
       <label>Zoom: <span id="mandelbrotZoomLabel">3</span></label>
@@ -67,7 +70,10 @@
 
     <fieldset id="uiJulia">
       <legend>Julia</legend>
-      <label>Iterations: <span id="juliaIterLabel">256</span></label>
+      <label>Iterations: <span id="juliaIterLabel">256</span>
+        <button type="button" id="juliaIterMinus">-1</button>
+        <button type="button" id="juliaIterPlus">+1</button>
+      </label>
       <input type="range" id="juliaIterSlider" step="0.01">
 
       <label>Zoom: <span id="juliaZoomLabel">3</span></label>

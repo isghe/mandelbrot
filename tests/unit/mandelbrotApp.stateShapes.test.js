@@ -70,6 +70,8 @@ function buildDomMocks() {
     mocks[`${name}Overlay`] = makeMockOverlayCanvas();
     mocks[`${name}IterSlider`] = makeMockControl();
     mocks[`${name}IterLabel`] = makeMockControl();
+    mocks[`${name}IterMinus`] = makeMockControl();
+    mocks[`${name}IterPlus`] = makeMockControl();
     mocks[`${name}ZoomSlider`] = makeMockControl();
     mocks[`${name}ZoomLabel`] = makeMockControl();
     mocks[`${name}PaletteType`] = makeMockControl();
