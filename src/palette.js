@@ -1,6 +1,11 @@
-// 256-entry RGBA palette, interpolated from a small set of control colors.
+// 256-entry RGBA gradient row, interpolated from a small set of control
+// colors, plus a second 256-entry row holding a solid interior color (for
+// points that never escape). Returned as one 256x2 RGBA buffer so it can be
+// uploaded directly as the palette texture (row 0 = gradient, row 1 = interior).
+const INTERIOR_COLORS = {};
+
 export function makePalette(type) {
-  const arr = new Uint8Array(256 * 4);
+  const arr = new Uint8Array(256 * 2 * 4);
 
   const APPLE2 = [
     [0,0,0],[255,255,255],[255,0,0],[0,255,0],
@@ -48,5 +53,15 @@ export function makePalette(type) {
     arr[i*4+2]=b;
     arr[i*4+3]=255;
   }
+
+  const interior = INTERIOR_COLORS[type] || [0, 0, 0];
+  for (let i = 0; i < 256; i++) {
+    const o = 256 * 4 + i * 4;
+    arr[o+0] = interior[0];
+    arr[o+1] = interior[1];
+    arr[o+2] = interior[2];
+    arr[o+3] = 255;
+  }
+
   return arr;
 }

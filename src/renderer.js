@@ -36,7 +36,7 @@ export async function attachCanvas(device, canvas, palette256) {
   context.configure({ device, format });
 
   const paletteTex = device.createTexture({
-    size: [256, 1],
+    size: [256, 2],
     format: "rgba8unorm",
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
   });
@@ -45,12 +45,17 @@ export async function attachCanvas(device, canvas, palette256) {
       { texture: paletteTex },
       data,
       { bytesPerRow: 256 * 4 },
-      { width: 256, height: 1 }
+      { width: 256, height: 2 }
     );
   };
   writePalette(palette256);
+  // "nearest", not "linear": with few iterations (coarse maxIter), the
+  // escape-time t can land exactly on a palette LUT texel boundary. Linear
+  // filtering would blend the two neighboring texels there - invisible for
+  // smooth gradients (256 steps is already fine-grained), but it would put a
+  // visible gray ring into any future hard-edged (banded) palette.
   const paletteSampler = device.createSampler({
-    magFilter: "linear", minFilter: "linear"
+    magFilter: "nearest", minFilter: "nearest"
   });
 
   // WGSL (f32 + double-single center/julia)

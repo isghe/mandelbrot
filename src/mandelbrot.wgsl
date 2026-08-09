@@ -40,12 +40,20 @@ fn vs_main(@builtin(vertex_index) vid:u32) -> VSOut {
     return out;
 }
 
+// Palette texture is 256x2: row 0 (y=0.25) is the escape-time gradient,
+// row 1 (y=0.75) is a solid interior color for non-escaping points.
 fn palette256(t:f32)->vec3<f32>{
-    let uv=vec2<f32>(t,0.5);
+    let uv=vec2<f32>(t,0.25);
     // textureSampleLevel (not textureSample) because this function is now
     // called from behind a per-pixel branch (interior vs. escaped): a plain
     // textureSample relies on implicit derivatives, which WGSL requires to
     // come from uniform control flow across the pixel quad.
+    let col=textureSampleLevel(paletteTex,paletteSampler,uv,0.0);
+    return col.rgb;
+}
+
+fn interiorColor()->vec3<f32>{
+    let uv=vec2<f32>(0.5,0.75);
     let col=textureSampleLevel(paletteTex,paletteSampler,uv,0.0);
     return col.rgb;
 }
@@ -192,7 +200,7 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
 
     if (!escaped) {
         // Interior: point did not escape within maxIter, dedicated color.
-        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        return vec4<f32>(interiorColor(), 1.0);
     }
 
     var t : f32;
