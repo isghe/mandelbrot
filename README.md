@@ -145,12 +145,12 @@ same dropdown menu (grouped by `<optgroup>`):
 - **Banded** — row 0's colors are assigned by exact iteration class
   (`iterations % bandCount`) rather than interpolated, so a point's color
   depends only on which "band" its escape iteration falls into, not on
-  `maxIterations`. These palettes also define their own interior color
-  instead of defaulting to black. Includes Black and White - Red (alternates
-  black/white by iteration parity, red interior) and Apple II - Banded (the
-  Apple II colors used as exact bands instead of a gradient). Smooth coloring
-  is disabled automatically when a banded palette is selected, since the two
-  are incompatible.
+  `maxIterations`. Includes Black and White - Red (alternates black/white by
+  iteration parity, with its own red interior color instead of the default
+  black) and Apple II - Banded (the Apple II colors used as exact bands
+  instead of a gradient, black interior). Smooth coloring is disabled
+  automatically when a banded palette is selected, since the two are
+  incompatible.
 
 ## Testing
 
