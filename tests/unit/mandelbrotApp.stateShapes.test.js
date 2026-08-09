@@ -287,13 +287,30 @@ test('restoreDisplayPrefs(captureDisplayPrefs()) is the identity', () => {
 // snapshotView()/shareState()/captureDisplayPrefs()/restoreDisplayPrefs()/
 // restoreSettings() now derive their per-side behavior from. ---
 
-test('both models declare the same logical key sets (view/displayPrefs/show)', () => {
+test('each model derives exactly the expected flat schema names', () => {
   const app = makeApp();
-  const [mandelbrot, julia] = app.models;
-  assert.deepEqual(Object.keys(mandelbrot.schema.view).sort(), Object.keys(julia.schema.view).sort());
-  assert.deepEqual(Object.keys(mandelbrot.schema.displayPrefs).sort(), Object.keys(julia.schema.displayPrefs).sort());
-  assert.equal(typeof mandelbrot.schema.show, 'string');
-  assert.equal(typeof julia.schema.show, 'string');
+  const mandelbrot = app.models.find((m) => m.name === 'mandelbrot');
+  const julia = app.models.find((m) => m.name === 'julia');
+  assert.deepEqual(mandelbrot.schema, {
+    panel: 'mandelbrotPanel',
+    view: {
+      center: 'mandelbrotPanelCenter', scale: 'mandelbrotPanelScale', maxIter: 'mandelbrotPanelMaxIter',
+      paletteType: 'mandelbrotPanelPaletteType', progressiveMode: 'mandelbrotPanelProgressiveMode',
+      smoothColoring: 'mandelbrotPanelSmoothColoring',
+    },
+    displayPrefs: { gridOverlay: 'mandelbrotPanelGridOverlay', centerMarker: 'mandelbrotPanelCenterMarker' },
+    show: 'showMandelbrot',
+  });
+  assert.deepEqual(julia.schema, {
+    panel: 'juliaPanel',
+    view: {
+      center: 'juliaPanelCenter', scale: 'juliaPanelScale', maxIter: 'juliaPanelMaxIter',
+      paletteType: 'juliaPanelPaletteType', progressiveMode: 'juliaPanelProgressiveMode',
+      smoothColoring: 'juliaPanelSmoothColoring',
+    },
+    displayPrefs: { gridOverlay: 'juliaPanelGridOverlay', centerMarker: 'juliaPanelCenterMarker' },
+    show: 'showJulia',
+  });
 });
 
 test('shareState round-trips through share.settingsData/localStorage/restoreSettings', () => {

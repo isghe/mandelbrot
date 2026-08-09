@@ -21,6 +21,11 @@ export class MandelbrotApp {
   // DOMPointReadOnly rather than a plain number — used by restoreSettings()
   // below to pick the right validator/constructor per field.
   static POINT_KEYS = new Set(["center"]);
+  // Logical keys each model's schema declares, shared by both sides —
+  // createModel() derives the flat per-side names from these (see below).
+  // Order matters: it's the key order of every object these produce.
+  static VIEW_KEYS = ["center", "scale", "maxIter", "paletteType", "progressiveMode", "smoothColoring"];
+  static DISPLAY_PREF_KEYS = ["gridOverlay", "centerMarker"];
   // State (JS = f64). maxIter/paletteType/smoothColoring/progressiveMode/
   // gridOverlay/centerMarker live per-model (model.panel.X, see
   // modelNamed()) — see FractalPanel. juliaSeed is the one piece of
@@ -56,41 +61,20 @@ export class MandelbrotApp {
   rafPending = false;
 
   constructor() {
-    // juliaMode/showJuliaMarker/onGenuineClick/schema are the only facts that
+    // juliaMode/showJuliaMarker/onGenuineClick are the only facts that
     // distinguish Mandelbrot from Julia anywhere in this file — supplied
     // once here, at the one call site that has to know which is which.
     // Everything downstream (event wiring, rendering, visibility,
-    // snapshotting) operates on this.models generically. `schema` declares
-    // each model's flat URL/localStorage field names (see share.js), split
-    // by tier — `view` is Tier 1 (undo history), `displayPrefs`/`show` are
-    // Tier 2 — and drives snapshotView()/shareState()/captureDisplayPrefs()/
-    // restoreDisplayPrefs()/restoreSettings() below generically.
+    // snapshotting) operates on this.models generically. Each model's flat
+    // URL/localStorage field names (see share.js) are derived from `name`
+    // inside createModel() itself, not passed in here — see its comment.
+    // Declaration order below is arbitrary: every consumer resolves models
+    // by name (modelNamed()) or loops all of them uniformly, never by
+    // position — verified by swapping this order and rerunning the suite.
     this.models = [
+      this.createModel("julia", { juliaMode: 1, showJuliaMarker: false }),
       this.createModel("mandelbrot", {
         juliaMode: 0, showJuliaMarker: true, onGenuineClick: (p) => this.setJuliaSeed(p),
-        schema: {
-          panel: "mandelbrotPanel",
-          view: {
-            center: "mandelbrotPanelCenter", scale: "mandelbrotPanelScale", maxIter: "mandelbrotPanelMaxIter",
-            paletteType: "mandelbrotPanelPaletteType", progressiveMode: "mandelbrotPanelProgressiveMode",
-            smoothColoring: "mandelbrotPanelSmoothColoring",
-          },
-          displayPrefs: { gridOverlay: "mandelbrotPanelGridOverlay", centerMarker: "mandelbrotPanelCenterMarker" },
-          show: "showMandelbrot",
-        },
-      }),
-      this.createModel("julia", {
-        juliaMode: 1, showJuliaMarker: false,
-        schema: {
-          panel: "juliaPanel",
-          view: {
-            center: "juliaPanelCenter", scale: "juliaPanelScale", maxIter: "juliaPanelMaxIter",
-            paletteType: "juliaPanelPaletteType", progressiveMode: "juliaPanelProgressiveMode",
-            smoothColoring: "juliaPanelSmoothColoring",
-          },
-          displayPrefs: { gridOverlay: "juliaPanelGridOverlay", centerMarker: "juliaPanelCenterMarker" },
-          show: "showJulia",
-        },
       }),
     ];
     // Julia's view center keeps FractalPanel's own default (same as
@@ -213,13 +197,25 @@ export class MandelbrotApp {
   // constructor). juliaMode/showJuliaMarker/onGenuineClick are stored right
   // on the model so every later consumer (event wiring, rendering,
   // visibility) can stay agnostic about which side it's looking at. `schema`
-  // is the model's flat URL/localStorage field names (see share.js),
-  // consumed by snapshotView()/shareState()/captureDisplayPrefs()/
-  // restoreDisplayPrefs()/restoreSettings() below — declared here, at
-  // insertion time, so it ends up alongside juliaMode/showJuliaMarker as the
-  // third kind of fact that's genuinely known only at this one call site.
-  createModel(name, { juliaMode, showJuliaMarker, onGenuineClick, schema }) {
+  // — the model's flat URL/localStorage field names (see share.js), consumed
+  // by snapshotView()/shareState()/captureDisplayPrefs()/
+  // restoreDisplayPrefs()/restoreSettings() below — is derived from `name`
+  // the same mechanical way as the DOM ids above, not passed in: every flat
+  // name is `${name}Panel${Cap(key)}` (show is `show${cap}`, already
+  // computed below for showChk) with zero exceptions, so writing it out by
+  // hand twice per model was a fourth copy of a formula already applied
+  // three other places (this method's DOM ids, share.js's own field names,
+  // and the pinning test's literal key lists).
+  createModel(name, { juliaMode, showJuliaMarker, onGenuineClick }) {
     const cap = name[0].toUpperCase() + name.slice(1);
+    const prefix = `${name}Panel`;
+    const flat = (key) => prefix + key[0].toUpperCase() + key.slice(1);
+    const schema = {
+      panel: prefix,
+      view: Object.fromEntries(MandelbrotApp.VIEW_KEYS.map((key) => [key, flat(key)])),
+      displayPrefs: Object.fromEntries(MandelbrotApp.DISPLAY_PREF_KEYS.map((key) => [key, flat(key)])),
+      show: `show${cap}`,
+    };
     const model = {
       name,
       panel: new FractalPanel(document.getElementById(`${name}Gfx`), document.getElementById(`${name}Overlay`)),
