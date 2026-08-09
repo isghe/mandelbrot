@@ -68,6 +68,9 @@ export class MandelbrotApp {
     // snapshotting) operates on this.models generically. Each model's flat
     // URL/localStorage field names (see share.js) are derived from `name`
     // inside createModel() itself, not passed in here — see its comment.
+    // Declaration order below is arbitrary: every consumer resolves models
+    // by name (modelNamed()) or loops all of them uniformly, never by
+    // position — verified by swapping this order and rerunning the suite.
     this.models = [
       this.createModel("julia", { juliaMode: 1, showJuliaMarker: false }),
       this.createModel("mandelbrot", {
