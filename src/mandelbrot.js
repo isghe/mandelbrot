@@ -753,22 +753,26 @@ export class MandelbrotApp {
   // panel's own overlay canvas, so no pushHistory here (unlike the toggles above).
   onGridOverlayChange(model) {
     model.panel.gridOverlay = model.gridOverlay.chk.checked ? 1 : 0;
-    this.scheduleRender();
+    this.drawOverlay();
+    this.scheduleSaveSettings();
   }
 
   onCenterMarkerChange(model) {
     model.panel.centerMarker = model.centerMarker.chk.checked ? 1 : 0;
-    this.scheduleRender();
+    this.drawOverlay();
+    this.scheduleSaveSettings();
   }
 
   onJuliaMarkerChange = () => {
     this.juliaMarker = this.juliaMarkerChk.checked ? 1 : 0;
-    this.scheduleRender();
+    this.drawOverlay();
+    this.scheduleSaveSettings();
   };
 
   onLandmarksOverlayChange = () => {
     this.landmarksOverlay = this.landmarksOverlayChk.checked ? 1 : 0;
-    this.scheduleRender();
+    this.drawOverlay();
+    this.scheduleSaveSettings();
   };
 
   // Panel visibility is a display preference, not view state — no pushHistory (mirrors overlay toggles above).
