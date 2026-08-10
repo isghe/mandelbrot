@@ -212,6 +212,19 @@ export class MandelbrotApp {
     this.drawOverlay();
   }
 
+  // Shared by populatePaletteMenu/populateLandmarksMenu: creates one
+  // <option>, appends it to `parent` (a <select> or <optgroup>), and
+  // returns it.
+  addOption(parent, value, label, { title, selected } = {}) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    if (title) option.title = title;
+    if (selected) option.selected = true;
+    parent.appendChild(option);
+    return option;
+  }
+
   // Builds the palette <select>'s <optgroup>/<option> tree from
   // PALETTE_GROUPS (see palette.js) so the two panels' menus can't drift
   // out of sync with each other or with the palette registry.
@@ -220,10 +233,7 @@ export class MandelbrotApp {
       const optgroup = document.createElement("optgroup");
       optgroup.label = group.label;
       for (const palette of group.palettes) {
-        const option = document.createElement("option");
-        option.value = palette.id;
-        option.textContent = palette.label;
-        optgroup.appendChild(option);
+        this.addOption(optgroup, palette.id, palette.label);
       }
       sel.appendChild(optgroup);
     }
@@ -236,17 +246,9 @@ export class MandelbrotApp {
   // state (see onLandmarkChange). The placeholder option is what the
   // <select> shows again right after a jump.
   populateLandmarksMenu(sel) {
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "Jump to…";
-    placeholder.selected = true;
-    sel.appendChild(placeholder);
+    this.addOption(sel, "", "Jump to…", { selected: true });
     MANDELBROT_LANDMARKS.forEach((landmark, i) => {
-      const option = document.createElement("option");
-      option.value = i;
-      option.textContent = landmark.name;
-      option.title = landmark.description;
-      sel.appendChild(option);
+      this.addOption(sel, i, landmark.name, { title: landmark.description });
     });
     return sel;
   }
