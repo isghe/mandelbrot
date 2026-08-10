@@ -1,4 +1,5 @@
 import { makePalette, paletteBandCount, PALETTE_GROUPS } from './palette.js';
+import { MANDELBROT_LANDMARKS } from './landmarks.js';
 import { overlay } from './overlay.js';
 import { share } from './share.js';
 import { ViewHistory } from './history.js';
@@ -116,6 +117,14 @@ export class MandelbrotApp {
     this.juliaMarkerChk.checked = !!this.juliaMarker;
     this.juliaMarkerChk.onchange = this.onJuliaMarkerChange;
 
+    // Landmarks menu: curated jump-to points in the Mandelbrot (c-plane)
+    // view (see landmarks.js) — meaningless on Julia's own z-plane view, so
+    // it's wired directly to the Mandelbrot model here rather than through
+    // createModel()'s per-side symmetry, same reasoning as juliaMarkerChk
+    // above.
+    this.landmarksSel = this.populateLandmarksMenu(document.getElementById("mandelbrotLandmarks"));
+    this.landmarksSel.onchange = () => this.onLandmarkChange(this.modelNamed("mandelbrot"));
+
     // [UI control key, FractalPanel field name] — mostly identical, except
     // "progressive" (UI) vs "progressiveMode" (FractalPanel), kept short on
     // the UI side since model.progressive already reads unambiguously as
@@ -207,6 +216,27 @@ export class MandelbrotApp {
       }
       sel.appendChild(optgroup);
     }
+    return sel;
+  }
+
+  // Builds the Landmarks <select> from MANDELBROT_LANDMARKS (see
+  // landmarks.js) — flat (no groups) and indexed by array position rather
+  // than a stable id, since landmarks are a curated list, not persisted
+  // state (see onLandmarkChange). The placeholder option is what the
+  // <select> shows again right after a jump.
+  populateLandmarksMenu(sel) {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Jump to…";
+    placeholder.selected = true;
+    sel.appendChild(placeholder);
+    MANDELBROT_LANDMARKS.forEach((landmark, i) => {
+      const option = document.createElement("option");
+      option.value = i;
+      option.textContent = landmark.name;
+      option.title = landmark.description;
+      sel.appendChild(option);
+    });
     return sel;
   }
 
@@ -612,6 +642,24 @@ export class MandelbrotApp {
   onPaletteChange(model) {
     this.history.push(this.snapshotView());
     this.applyPalette(model, Number(model.palette.sel.value));
+    this.scheduleRender();
+  }
+
+  // Recenters the Mandelbrot panel on a curated landmark, keeping its
+  // current zoom/iterations so the jump composes with whatever quality
+  // settings are already in effect — same center/pivot bookkeeping as a
+  // genuine click (see fractalPanel.js's onPointerUp). Not part of any
+  // model's schema: it's a one-shot navigation action, not persisted state,
+  // so the <select> resets to its placeholder right after.
+  onLandmarkChange(model) {
+    const landmark = MANDELBROT_LANDMARKS[Number(this.landmarksSel.value)];
+    if (!landmark) return;
+    this.history.push(this.snapshotView());
+    model.panel.center = new DOMPointReadOnly(landmark.x, landmark.y);
+    model.panel.pivot = model.panel.center;
+    model.panel.pivotScreen = new DOMPointReadOnly(0.5, 0.5);
+    this.resetProgressive(model.panel);
+    this.landmarksSel.value = "";
     this.scheduleRender();
   }
 

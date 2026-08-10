@@ -99,6 +99,11 @@ clear that state before dialing the iteration count back up more gradually.
   at both the low and deep-zoom ends of their range), plus **-1 / +1** buttons next to the
   iteration slider for single-step adjustments; palette is also adjustable via the UI
   panel.
+- **Landmarks** menu (Mandelbrot panel only) — jump straight to a curated point of interest
+  (e.g. the main cardioid cusp, Seahorse Valley, the Feigenbaum point), keeping the current
+  zoom and iteration count. Counts as a single Back/Forward history step, like a click. The
+  menu resets to its placeholder after each jump; it isn't part of Copy URL/localStorage,
+  since it's a one-shot action rather than persisted state.
 - **Copy URL** button — copy a link to the clipboard that reproduces the current view,
   iterations, palette, Julia seed, the Julia panel's own independent pan/zoom,
   progressive mode, smooth coloring, grid/marker overlay checkboxes, and Mandelbrot/Julia

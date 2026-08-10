@@ -99,6 +99,7 @@ function buildDomMocks() {
   for (const id of [
     'selectionBox', 'noVizMessage', 'gpuError', 'gpuErrorMessage', 'gpuReloadBtn',
     'uiToggleBtn', 'ui', 'juliaMarker', 'backBtn', 'forwardBtn', 'resetBtn', 'shareBtn',
+    'mandelbrotLandmarks',
   ]) {
     mocks[id] = makeMockControl();
   }
