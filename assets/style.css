@@ -5,7 +5,7 @@ body { margin:0; overflow:hidden; background:#000; }
    panel is actively being dragged always slides *under* the stationary one
    in dual view, regardless of which side it's on or DOM order. */
 #mandelbrotGfx, #mandelbrotOverlay, #juliaGfx, #juliaOverlay { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; z-index:1; }
-#mandelbrotOverlay, #juliaOverlay { pointer-events:none; }
+#mandelbrotOverlay, #juliaOverlay { pointer-events:none; mix-blend-mode:difference; }
 
 /* Each panel is independently shown/hidden (toggled in JS from the
    Mandelbrot/Julia checkboxes); if both are hidden, the screen is black.

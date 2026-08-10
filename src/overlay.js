@@ -1,4 +1,5 @@
 import { domPoint, view, grid } from './geometry.js';
+import { MANDELBROT_LANDMARKS } from './landmarks.js';
 
 function drawGrid(ctx, w, h, center, scale, aspect) {
   const step = grid.niceGridStep(scale, 8);
@@ -7,7 +8,7 @@ function drawGrid(ctx, w, h, center, scale, aspect) {
   const max = domPoint.add(center, half);
   const eps = step * 1e-9;
 
-  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (const x of grid.gridLines(min.x, max.x, step)) {
@@ -24,7 +25,7 @@ function drawGrid(ctx, w, h, center, scale, aspect) {
   }
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   if (min.x <= 0 && 0 <= max.x) {
@@ -96,4 +97,28 @@ function strokeDiamond(ctx, p, r) {
   ctx.stroke();
 }
 
-export const overlay = { drawGrid, drawCenterMarker, drawJuliaMarker };
+// Each landmark's position is independent of `center`, same as the Julia
+// seed above, so it gets the same per-point cull rather than always being
+// on-screen like the grid/center marker.
+function drawLandmarks(ctx, w, h, center, scale, aspect) {
+  for (const landmark of MANDELBROT_LANDMARKS) {
+    const p = view.fractalToPixel(new DOMPointReadOnly(landmark.x, landmark.y), center, scale, aspect, w, h);
+    if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
+    const r = 4;
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    strokeLandmarkDot(ctx, p, r);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#33ccff";
+    strokeLandmarkDot(ctx, p, r);
+  }
+}
+
+function strokeLandmarkDot(ctx, p, r) {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+export const overlay = { drawGrid, drawCenterMarker, drawJuliaMarker, drawLandmarks };
