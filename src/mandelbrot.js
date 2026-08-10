@@ -648,10 +648,15 @@ export class MandelbrotApp {
   // Recenters the Mandelbrot panel on a curated landmark, keeping its
   // current zoom/iterations so the jump composes with whatever quality
   // settings are already in effect — same center/pivot bookkeeping as a
-  // genuine click (see fractalPanel.js's onPointerUp). Not part of any
-  // model's schema: it's a one-shot navigation action, not persisted state,
-  // so the <select> resets to its placeholder right after.
+  // drag-end or selection-rect recenter (fractalPanel.js's onPointerUp),
+  // not a genuine click (which only moves pivot, not center). Not part of
+  // any model's schema: it's a one-shot navigation action, not persisted
+  // state, so the <select> resets to its placeholder right after.
   onLandmarkChange(model) {
+    // Guards both "no selection" and the placeholder itself: Number("") is
+    // 0, which would otherwise resolve to MANDELBROT_LANDMARKS[0] instead
+    // of a no-op.
+    if (this.landmarksSel.value === "") return;
     const landmark = MANDELBROT_LANDMARKS[Number(this.landmarksSel.value)];
     if (!landmark) return;
     this.history.push(this.snapshotView());
