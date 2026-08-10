@@ -11,6 +11,7 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
 };
 
 const { overlay } = await import('../../src/overlay.js');
+const { MANDELBROT_LANDMARKS } = await import('../../src/landmarks.js');
 
 // Minimal CanvasRenderingContext2D stand-in: strokeStyle/lineWidth are
 // plain writable properties (never asserted on), draw calls are recorded
@@ -79,6 +80,22 @@ test('drawGrid draws the x/y axes when the origin is within the visible range', 
   const axisSegment = calls.slice(beginPathIndices[1]);
   const axisMoveTos = axisSegment.filter(([method]) => method === 'moveTo');
   assert.strictEqual(axisMoveTos.length, 2, 'both x and y axis lines are drawn');
+});
+
+test('drawLandmarks strokes a circle (shadow + color) for every landmark within the current view', () => {
+  const { ctx, calls } = makeMockCtx();
+  // Wide enough to contain every MANDELBROT_LANDMARKS point (x in [-2, 0.25], y in [-1, 1]).
+  overlay.drawLandmarks(ctx, 800, 600, new DOMPointReadOnly(-0.5, 0), 6, 800 / 600);
+
+  const arcCalls = calls.filter(([method]) => method === 'arc');
+  assert.strictEqual(arcCalls.length, MANDELBROT_LANDMARKS.length * 2, 'each landmark stroked twice (shadow + cyan)');
+});
+
+test('drawLandmarks draws nothing when every landmark falls outside the canvas', () => {
+  const { ctx, calls } = makeMockCtx();
+  overlay.drawLandmarks(ctx, 100, 100, new DOMPointReadOnly(1000, 1000), 0.001, 1);
+
+  assert.deepStrictEqual(calls, []);
 });
 
 test('drawGrid skips the x/y axes when the origin is outside the visible range', () => {

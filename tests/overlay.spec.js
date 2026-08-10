@@ -28,6 +28,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#mandelbrotGridOverlay')).not.toBeChecked();
   await expect(page.locator('#mandelbrotCenterMarker')).not.toBeChecked();
   await expect(page.locator('#juliaMarker')).not.toBeChecked();
+  await expect(page.locator('#landmarksOverlay')).not.toBeChecked();
 
   // Every test in this file targets the Mandelbrot panel/overlay alone
   // (full-viewport geometry, fractalShot()'s clip assumes full width) — hide
@@ -107,13 +108,52 @@ test('Julia marker checkbox toggles visible pixels with the Julia panel hidden t
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
+test('enabling landmarks draws non-transparent pixels on the overlay canvas', async ({ page }) => {
+  const before = await page.evaluate(() => {
+    const c = document.getElementById('mandelbrotOverlay');
+    const ctx = c.getContext('2d');
+    const data = ctx.getImageData(0, 0, c.width, c.height).data;
+    let opaque = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) opaque++;
+    return opaque;
+  });
+  expect(before).toBe(0);
+
+  await page.check('#landmarksOverlay');
+  await page.waitForTimeout(200);
+
+  const after = await page.evaluate(() => {
+    const c = document.getElementById('mandelbrotOverlay');
+    const ctx = c.getContext('2d');
+    const data = ctx.getImageData(0, 0, c.width, c.height).data;
+    let opaque = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) opaque++;
+    return opaque;
+  });
+  expect(after).toBeGreaterThan(0);
+});
+
+test('landmarks checkbox toggles visible pixels and round-trips to baseline', async ({ page }) => {
+  const baseline = await fractalShot(page);
+
+  await page.check('#landmarksOverlay');
+  await page.waitForTimeout(200);
+  expect((await fractalShot(page)).equals(baseline)).toBe(false);
+
+  await page.uncheck('#landmarksOverlay');
+  await page.waitForTimeout(200);
+  expect((await fractalShot(page)).equals(baseline)).toBe(true);
+});
+
 test('toggling overlay checkboxes does not enable Back/Forward', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
 
   await page.check('#mandelbrotGridOverlay');
   await page.check('#mandelbrotCenterMarker');
   await page.check('#juliaMarker');
+  await page.check('#landmarksOverlay');
   await page.uncheck('#mandelbrotGridOverlay');
+  await page.uncheck('#landmarksOverlay');
   await page.waitForTimeout(200);
 
   await expect(backBtn).toBeDisabled();
@@ -141,6 +181,7 @@ test('Reset unchecks the grid/marker overlay checkboxes', async ({ page }) => {
   await page.check('#mandelbrotGridOverlay');
   await page.check('#mandelbrotCenterMarker');
   await page.check('#juliaMarker');
+  await page.check('#landmarksOverlay');
   await page.waitForTimeout(200);
 
   await page.click('#resetBtn');
@@ -149,4 +190,5 @@ test('Reset unchecks the grid/marker overlay checkboxes', async ({ page }) => {
   await expect(page.locator('#mandelbrotGridOverlay')).not.toBeChecked();
   await expect(page.locator('#mandelbrotCenterMarker')).not.toBeChecked();
   await expect(page.locator('#juliaMarker')).not.toBeChecked();
+  await expect(page.locator('#landmarksOverlay')).not.toBeChecked();
 });

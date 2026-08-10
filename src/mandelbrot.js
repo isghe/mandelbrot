@@ -39,6 +39,11 @@ export class MandelbrotApp {
   // panel's own view — see drawOverlayForPanel's showJuliaMarker.
   juliaMarker = 0;
 
+  // Same reasoning as juliaMarker above: marks MANDELBROT_LANDMARKS'
+  // positions on the Mandelbrot plane, meaningless on Julia's own z-plane
+  // view — see drawOverlayForPanel's showLandmarks.
+  landmarksOverlay = 0;
+
   // Panel visibility (display preferences, not view history — mirrors the
   // overlay toggles above): the Mandelbrot panel and Julia panel are each
   // independently shown/hidden. Both on = split screen; either alone =
@@ -62,10 +67,10 @@ export class MandelbrotApp {
   rafPending = false;
 
   constructor() {
-    // juliaMode/showJuliaMarker/onGenuineClick are the only facts that
-    // distinguish Mandelbrot from Julia anywhere in this file — supplied
-    // once here, at the one call site that has to know which is which.
-    // Everything downstream (event wiring, rendering, visibility,
+    // juliaMode/showJuliaMarker/showLandmarks/onGenuineClick are the only
+    // facts that distinguish Mandelbrot from Julia anywhere in this file —
+    // supplied once here, at the one call site that has to know which is
+    // which. Everything downstream (event wiring, rendering, visibility,
     // snapshotting) operates on this.models generically. Each model's flat
     // URL/localStorage field names (see share.js) are derived from `name`
     // inside createModel() itself, not passed in here — see its comment.
@@ -73,9 +78,9 @@ export class MandelbrotApp {
     // by name (modelNamed()) or loops all of them uniformly, never by
     // position — verified by swapping this order and rerunning the suite.
     this.models = [
-      this.createModel("julia", { juliaMode: 1, showJuliaMarker: false }),
+      this.createModel("julia", { juliaMode: 1, showJuliaMarker: false, showLandmarks: false }),
       this.createModel("mandelbrot", {
-        juliaMode: 0, showJuliaMarker: true, onGenuineClick: (p) => this.setJuliaSeed(p),
+        juliaMode: 0, showJuliaMarker: true, showLandmarks: true, onGenuineClick: (p) => this.setJuliaSeed(p),
       }),
     ];
     // Julia's view center keeps FractalPanel's own default (same as
@@ -124,6 +129,12 @@ export class MandelbrotApp {
     // above.
     this.landmarksSel = this.populateLandmarksMenu(document.getElementById("mandelbrotLandmarks"));
     this.landmarksSel.onchange = () => this.onLandmarkChange(this.modelNamed("mandelbrot"));
+
+    // Same app-level pattern as juliaMarkerChk above: draws MANDELBROT_LANDMARKS'
+    // positions on the Mandelbrot panel, meaningless on Julia's own view.
+    this.landmarksOverlayChk = document.getElementById("landmarksOverlay");
+    this.landmarksOverlayChk.checked = !!this.landmarksOverlay;
+    this.landmarksOverlayChk.onchange = this.onLandmarksOverlayChange;
 
     // [UI control key, FractalPanel field name] — mostly identical, except
     // "progressive" (UI) vs "progressiveMode" (FractalPanel), kept short on
@@ -244,8 +255,8 @@ export class MandelbrotApp {
   // ranges. `name` composes every DOM id mechanically (`${name}Gfx`,
   // `show${Cap}`, `${name}IterSlider`, ...) — index.html has no exceptions
   // to this beyond the Julia-seed-marker checkbox, which is app-level (see
-  // constructor). juliaMode/showJuliaMarker/onGenuineClick are stored right
-  // on the model so every later consumer (event wiring, rendering,
+  // constructor). juliaMode/showJuliaMarker/showLandmarks/onGenuineClick are
+  // stored right on the model so every later consumer (event wiring, rendering,
   // visibility) can stay agnostic about which side it's looking at. `schema`
   // — the model's flat URL/localStorage field names (see share.js), consumed
   // by snapshotView()/shareState()/captureDisplayPrefs()/
@@ -256,7 +267,7 @@ export class MandelbrotApp {
   // hand twice per model was a fourth copy of a formula already applied
   // three other places (this method's DOM ids, share.js's own field names,
   // and the pinning test's literal key lists).
-  createModel(name, { juliaMode, showJuliaMarker, onGenuineClick }) {
+  createModel(name, { juliaMode, showJuliaMarker, showLandmarks, onGenuineClick }) {
     const cap = name[0].toUpperCase() + name.slice(1);
     const prefix = `${name}Panel`;
     const flat = (key) => prefix + key[0].toUpperCase() + key.slice(1);
@@ -272,6 +283,7 @@ export class MandelbrotApp {
       show: 1,
       juliaMode,
       showJuliaMarker,
+      showLandmarks,
       onGenuineClick,
       schema,
       iter: {
@@ -331,11 +343,11 @@ export class MandelbrotApp {
 
   // Tier 2 ("display preferences"): overlay toggles (per panel) and panel
   // visibility — persisted (see shareState() above) but deliberately outside
-  // undo history, unlike snapshotView()'s Tier 1. juliaMarker stays a single
-  // app-level flag (it marks where juliaSeed sits on the Mandelbrot plane,
+  // undo history, unlike snapshotView()'s Tier 1. juliaMarker/landmarksOverlay
+  // stay single app-level flags (they mark points on the Mandelbrot plane,
   // meaningless on Julia's own view — see drawOverlayForPanel).
   captureDisplayPrefs() {
-    const prefs = { juliaMarker: this.juliaMarker };
+    const prefs = { juliaMarker: this.juliaMarker, landmarksOverlay: this.landmarksOverlay };
     for (const model of this.models) {
       for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) prefs[flatName] = model.panel[key];
       prefs[model.schema.show] = model.show;
@@ -354,6 +366,8 @@ export class MandelbrotApp {
     }
     this.juliaMarker = p.juliaMarker;
     this.juliaMarkerChk.checked = !!p.juliaMarker;
+    this.landmarksOverlay = p.landmarksOverlay;
+    this.landmarksOverlayChk.checked = !!p.landmarksOverlay;
 
     this.updatePanelVisibility();
     this.resizeVisiblePanels();
@@ -418,7 +432,8 @@ export class MandelbrotApp {
     // Driven by each model's own schema (see createModel()) instead of a
     // reverse flat-name lookup: for every logical key the model declares,
     // read s[flatName] and validate/route it by type (POINT_KEYS vs number).
-    // juliaSeed/juliaMarker are the only truly flat app-level fields left.
+    // juliaSeed/juliaMarker/landmarksOverlay are the only truly flat
+    // app-level fields left.
     for (const model of this.models) {
       for (const [key, flatName] of Object.entries(model.schema.view)) {
         (MandelbrotApp.POINT_KEYS.has(key) ? restorePoint : restoreNumber)(flatName, model.panel, key);
@@ -428,6 +443,7 @@ export class MandelbrotApp {
     }
     restorePoint("juliaSeed", this, "juliaSeed");
     restoreNumber("juliaMarker", this, "juliaMarker");
+    restoreNumber("landmarksOverlay", this, "landmarksOverlay");
 
     for (const model of this.models) model.panel.pivot = model.panel.center;
 
@@ -511,10 +527,10 @@ export class MandelbrotApp {
     });
   };
 
-  // `showJuliaMarker` is false for the Julia panel itself: the marker
-  // points at where juliaSeed sits on the *Mandelbrot* plane, which is
-  // meaningless overlaid on the Julia panel's own view.
-  drawOverlayForPanel(panel, { showJuliaMarker }) {
+  // `showJuliaMarker`/`showLandmarks` are false for the Julia panel itself:
+  // both mark points on the *Mandelbrot* plane, meaningless overlaid on the
+  // Julia panel's own view.
+  drawOverlayForPanel(panel, { showJuliaMarker, showLandmarks }) {
     const ctx = panel.overlayCtx;
     const w = panel.overlayCssWidth;
     const h = panel.overlayCssHeight;
@@ -523,11 +539,12 @@ export class MandelbrotApp {
     if (panel.gridOverlay) overlay.drawGrid(ctx, w, h, panel.center, panel.scale, aspect);
     if (panel.centerMarker) overlay.drawCenterMarker(ctx, w, h, panel.center, panel.scale, aspect);
     if (showJuliaMarker && this.juliaMarker) overlay.drawJuliaMarker(ctx, w, h, this.juliaSeed, panel.center, panel.scale, aspect);
+    if (showLandmarks && this.landmarksOverlay) overlay.drawLandmarks(ctx, w, h, panel.center, panel.scale, aspect);
   }
 
   drawOverlay = () => {
-    for (const { panel, showJuliaMarker } of this.panels) {
-      this.drawOverlayForPanel(panel, { showJuliaMarker });
+    for (const { panel, showJuliaMarker, showLandmarks } of this.panels) {
+      this.drawOverlayForPanel(panel, { showJuliaMarker, showLandmarks });
     }
   };
 
@@ -745,6 +762,11 @@ export class MandelbrotApp {
 
   onJuliaMarkerChange = () => {
     this.juliaMarker = this.juliaMarkerChk.checked ? 1 : 0;
+    this.scheduleRender();
+  };
+
+  onLandmarksOverlayChange = () => {
+    this.landmarksOverlay = this.landmarksOverlayChk.checked ? 1 : 0;
     this.scheduleRender();
   };
 

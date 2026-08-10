@@ -85,15 +85,20 @@ clear that state before dialing the iteration count back up more gradually.
   view center.
 - **Show Julia seed marker** checkbox (off by default) — overlay a diamond at the current
   Julia seed, in either mode.
+- **Show landmarks** checkbox (off by default, Mandelbrot panel only) — overlay a small
+  cyan marker at each curated point from the Landmarks menu below, so you can see at a
+  glance where they sit relative to the current view. Purely visual: the menu remains the
+  only way to actually jump to one; markers outside the current pan/zoom simply don't
+  appear.
 - **Back / Forward** buttons — step through the view history (center, zoom, iterations,
   palette, Julia seed, progressive mode, smooth coloring). Continuous wheel-zoom
-  and slider drags each count as a single history step. The grid/marker checkboxes and the
-  Mandelbrot/Julia panel-visibility checkboxes above are display preferences, not view
-  state, and are not part of this history — panning/zooming the Julia panel independently
-  is likewise not undoable.
+  and slider drags each count as a single history step. The grid/marker/landmarks
+  checkboxes and the Mandelbrot/Julia panel-visibility checkboxes above are display
+  preferences, not view state, and are not part of this history — panning/zooming the
+  Julia panel independently is likewise not undoable.
 - **Reset to initial condition** button — restore the default view, iterations, palette,
-  Julia seed, progressive mode, smooth coloring, the grid/marker overlay checkboxes
-  (unchecked), and panel visibility (both panels shown, split screen) — even though none of
+  Julia seed, progressive mode, smooth coloring, the grid/marker/landmarks overlay
+  checkboxes (unchecked), and panel visibility (both panels shown, split screen) — even though none of
   these are part of the Back/Forward history. Also clears the Back/Forward history. Note
   this also overwrites the persisted settings below with these defaults, once the next
   render fires.
@@ -108,14 +113,14 @@ clear that state before dialing the iteration count back up more gradually.
   since it's a one-shot action rather than persisted state.
 - **Copy URL** button — copy a link to the clipboard that reproduces the current view,
   iterations, palette, Julia seed, the Julia panel's own independent pan/zoom,
-  progressive mode, smooth coloring, grid/marker overlay checkboxes, and Mandelbrot/Julia
-  panel visibility. Only fields that differ from the app's built-in defaults are encoded,
-  so the address bar also updates live as you interact and collapses back to a bare URL
-  after **Reset to initial condition**.
+  progressive mode, smooth coloring, grid/marker/landmarks overlay checkboxes, and
+  Mandelbrot/Julia panel visibility. Only fields that differ from the app's built-in
+  defaults are encoded, so the address bar also updates live as you interact and
+  collapses back to a bare URL after **Reset to initial condition**.
 
 All of the above (view, iterations, palette, Julia seed, the Julia panel's own
-pan/zoom, progressive mode, smooth coloring, the grid/marker overlay checkboxes, and
-Mandelbrot/Julia panel visibility) is persisted to `localStorage` and restored on the
+pan/zoom, progressive mode, smooth coloring, the grid/marker/landmarks overlay
+checkboxes, and Mandelbrot/Julia panel visibility) is persisted to `localStorage` and restored on the
 next page load, so the app reopens where you left it. Settings-panel visibility (the ☰
 toggle / **H** key) is a session-only preference and is not persisted.
 

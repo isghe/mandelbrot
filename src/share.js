@@ -108,6 +108,7 @@ function buildShareUrl(state, initialState, origin, pathname) {
   if (state.juliaPanelGridOverlay) params.set("jgrid", state.juliaPanelGridOverlay);
   if (state.juliaPanelCenterMarker) params.set("jcenterMark", state.juliaPanelCenterMarker);
   if (state.juliaMarker) params.set("juliaMark", state.juliaMarker);
+  if (state.landmarksOverlay) params.set("landmarksMark", state.landmarksOverlay);
   if (!state.showMandelbrot) params.set("mandelbrot", 0);
   if (!state.showJulia) params.set("julia", 0);
 
@@ -175,6 +176,7 @@ function parseShareParams(search) {
     ["juliaPanelCenterMarker", "jcenterMark"],
     ["juliaPanelGridOverlay", "jgrid"],
     ["juliaMarker", "juliaMark"],
+    ["landmarksOverlay", "landmarksMark"],
     ["juliaPanelScale", "jscale"],
     ["juliaPanelMaxIter", "jiter"],
     ["juliaPanelPaletteType", "jpalette"],
@@ -253,6 +255,7 @@ function settingsData(state) {
       centerMarker: state.juliaPanelCenterMarker,
     },
     juliaMarker: state.juliaMarker,
+    landmarksOverlay: state.landmarksOverlay,
   };
 }
 

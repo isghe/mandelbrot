@@ -99,7 +99,7 @@ function buildDomMocks() {
   for (const id of [
     'selectionBox', 'noVizMessage', 'gpuError', 'gpuErrorMessage', 'gpuReloadBtn',
     'uiToggleBtn', 'ui', 'juliaMarker', 'backBtn', 'forwardBtn', 'resetBtn', 'shareBtn',
-    'mandelbrotLandmarks',
+    'mandelbrotLandmarks', 'landmarksOverlay',
   ]) {
     mocks[id] = makeMockControl();
   }
@@ -133,7 +133,7 @@ const { MandelbrotApp } = await import('../../src/mandelbrot.js');
 const TIER1_PANEL_KEYS = ['center', 'scale', 'maxIter', 'paletteType', 'smoothColoring', 'progressiveMode'];
 const TIER1_PANEL_FORBIDDEN = ['gridOverlay', 'centerMarker', 'show'];
 const SNAPSHOT_VIEW_TOP_KEYS = ['mandelbrotPanel', 'juliaPanel', 'juliaSeed'];
-const SNAPSHOT_VIEW_TOP_FORBIDDEN = ['showMandelbrot', 'showJulia', 'juliaMarker'];
+const SNAPSHOT_VIEW_TOP_FORBIDDEN = ['showMandelbrot', 'showJulia', 'juliaMarker', 'landmarksOverlay'];
 const FLATTEN_SHARE_KEYS = [
   'mandelbrotPanelCenter', 'mandelbrotPanelScale', 'mandelbrotPanelMaxIter',
   'mandelbrotPanelPaletteType', 'mandelbrotPanelProgressiveMode', 'mandelbrotPanelSmoothColoring',
@@ -144,12 +144,12 @@ const FLATTEN_SHARE_KEYS = [
 const FLATTEN_SHARE_FORBIDDEN = [
   'mandelbrotPanelGridOverlay', 'mandelbrotPanelCenterMarker',
   'juliaPanelGridOverlay', 'juliaPanelCenterMarker',
-  'showMandelbrot', 'showJulia', 'juliaMarker',
+  'showMandelbrot', 'showJulia', 'juliaMarker', 'landmarksOverlay',
 ];
 const DISPLAY_PREFS_KEYS = [
   'mandelbrotPanelGridOverlay', 'mandelbrotPanelCenterMarker',
   'juliaPanelGridOverlay', 'juliaPanelCenterMarker',
-  'juliaMarker', 'showMandelbrot', 'showJulia',
+  'juliaMarker', 'landmarksOverlay', 'showMandelbrot', 'showJulia',
 ];
 const DISPLAY_PREFS_FORBIDDEN = [
   'mandelbrotPanelCenter', 'mandelbrotPanelScale', 'mandelbrotPanelMaxIter',
@@ -194,6 +194,7 @@ function mutateEveryField(app) {
   }
   app.juliaSeed = new DOMPointReadOnly(0.33, -0.44);
   app.juliaMarker = 1;
+  app.landmarksOverlay = 1;
 }
 
 // --- P0: snapshotView() (undo-history, Tier 1 only) ---
@@ -221,6 +222,7 @@ test('snapshotView is unchanged when only Tier-2 display prefs are mutated', () 
   app.modelNamed('julia').panel.gridOverlay = 1;
   app.modelNamed('mandelbrot').show = 0;
   app.juliaMarker = 1;
+  app.landmarksOverlay = 1;
 
   const after = app.snapshotView();
   assert.deepEqual(Object.keys(after).sort(), Object.keys(before).sort());
@@ -295,6 +297,7 @@ test('restoreDisplayPrefs(captureDisplayPrefs()) is the identity', () => {
   app.modelNamed('mandelbrot').show = 0;
   app.modelNamed('julia').show = 0;
   app.juliaMarker = 1;
+  app.landmarksOverlay = 1;
 
   app.restoreDisplayPrefs(original);
 

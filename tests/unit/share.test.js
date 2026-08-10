@@ -32,6 +32,7 @@ function baseState(overrides = {}) {
     juliaPanelGridOverlay: 0,
     juliaPanelCenterMarker: 0,
     juliaMarker: 0,
+    landmarksOverlay: 0,
     showMandelbrot: 1,
     showJulia: 1,
     ...overrides,
@@ -77,7 +78,7 @@ test('buildShareUrl encodes juliaSeed as sx/sy when it differs', () => {
 
 test('buildShareUrl encodes overlay display flags whenever truthy, regardless of initialState', () => {
   const url = share.buildShareUrl(
-    baseState({ mandelbrotPanelGridOverlay: 1, mandelbrotPanelCenterMarker: 1, juliaMarker: 1 }),
+    baseState({ mandelbrotPanelGridOverlay: 1, mandelbrotPanelCenterMarker: 1, juliaMarker: 1, landmarksOverlay: 1 }),
     initialState,
     'https://example.com',
     '/'
@@ -86,6 +87,7 @@ test('buildShareUrl encodes overlay display flags whenever truthy, regardless of
   assert.strictEqual(params.get('mgrid'), '1');
   assert.strictEqual(params.get('mcenterMark'), '1');
   assert.strictEqual(params.get('juliaMark'), '1');
+  assert.strictEqual(params.get('landmarksMark'), '1');
 });
 
 test('buildShareUrl omits falsy overlay display flags', () => {
@@ -94,6 +96,7 @@ test('buildShareUrl omits falsy overlay display flags', () => {
   assert.strictEqual(params.has('mgrid'), false);
   assert.strictEqual(params.has('mcenterMark'), false);
   assert.strictEqual(params.has('juliaMark'), false);
+  assert.strictEqual(params.has('landmarksMark'), false);
 });
 
 test('buildShareUrl encodes julia=0 when the Julia panel is hidden, omitting it by default', () => {
@@ -188,7 +191,7 @@ test('buildShareUrl encodes the Julia panel\'s own grid/center-marker overlay fl
 });
 
 test('parseShareParams (v3) maps scalar params to their field names', () => {
-  const s = share.parseShareParams('?v=3&iter=999&mandelbrot=0&julia=1&palette=2&progressive=1&smooth=1&grid=1&centerMark=1&juliaMark=1&mscale=1.5');
+  const s = share.parseShareParams('?v=3&iter=999&mandelbrot=0&julia=1&palette=2&progressive=1&smooth=1&grid=1&centerMark=1&juliaMark=1&landmarksMark=1&mscale=1.5');
   assert.deepStrictEqual(s, {
     mandelbrotPanelMaxIter: 999,
     showMandelbrot: 0,
@@ -199,6 +202,7 @@ test('parseShareParams (v3) maps scalar params to their field names', () => {
     mandelbrotPanelGridOverlay: 1,
     mandelbrotPanelCenterMarker: 1,
     juliaMarker: 1,
+    landmarksOverlay: 1,
     mandelbrotPanelScale: 1.5,
   });
 });
@@ -314,6 +318,7 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
     mandelbrotPanelGridOverlay: 1,
     mandelbrotPanelCenterMarker: 1,
     juliaMarker: 1,
+    landmarksOverlay: 1,
     // showJulia stays at its (now-default) 1 — only showMandelbrot is a real
     // change here, exercising the "Julia exclusive" combo without needing to
     // redundantly encode julia=1.
@@ -333,6 +338,7 @@ test('buildShareUrl -> parseShareParams round-trips every changed field', () => 
     mandelbrotPanelGridOverlay: 1,
     mandelbrotPanelCenterMarker: 1,
     juliaMarker: 1,
+    landmarksOverlay: 1,
     showMandelbrot: 0,
   });
 });
@@ -356,6 +362,7 @@ test('settingsData produces a plain JSON-serializable snapshot of state', () => 
       gridOverlay: 0, centerMarker: 0,
     },
     juliaMarker: 0,
+    landmarksOverlay: 0,
   });
   assert.strictEqual(JSON.stringify(data), JSON.stringify(JSON.parse(JSON.stringify(data))));
 });
