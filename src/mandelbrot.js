@@ -254,10 +254,11 @@ export class MandelbrotApp {
   // Builds one side's FractalPanel plus its DOM control refs and slider
   // ranges. `name` composes every DOM id mechanically (`${name}Gfx`,
   // `show${Cap}`, `${name}IterSlider`, ...) — index.html has no exceptions
-  // to this beyond the Julia-seed-marker checkbox, which is app-level (see
-  // constructor). juliaMode/showJuliaMarker/showLandmarks/onGenuineClick are
-  // stored right on the model so every later consumer (event wiring, rendering,
-  // visibility) can stay agnostic about which side it's looking at. `schema`
+  // to this beyond the Julia-seed-marker and landmarks-overlay checkboxes,
+  // both app-level (see constructor). juliaMode/showJuliaMarker/
+  // showLandmarks/onGenuineClick are stored right on the model so every
+  // later consumer (event wiring, rendering, visibility) can stay agnostic
+  // about which side it's looking at. `schema`
   // — the model's flat URL/localStorage field names (see share.js), consumed
   // by snapshotView()/shareState()/captureDisplayPrefs()/
   // restoreDisplayPrefs()/restoreSettings() below — is derived from `name`
