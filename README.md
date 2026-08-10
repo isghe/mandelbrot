@@ -15,6 +15,8 @@ precision arithmetic in the shader for deep zooms (~1e-13/1e-14).
   ~1e-7 wall of native `f32` down to ~1e-13/1e-14.
 - **Interactive Julia panel** — click anywhere on the Mandelbrot set to pin the
   corresponding Julia set; show it side by side with the Mandelbrot set, or on its own.
+- **Curated landmarks menu** — jump straight to well-known points of interest (the
+  cusp, Seahorse Valley, the Feigenbaum point, ...) without hunting for them by hand.
 - **Shareable view URLs** — copy a link that reproduces the exact view, iterations,
   palette, and mode you're looking at.
 
@@ -170,7 +172,8 @@ npm test
 
 This runs a [Playwright](https://playwright.dev/) suite (`tests/`) that drives a
 real headless browser against the app: pan, wheel-zoom, palette/Julia/progressive/
-smooth toggles, the Back/Forward view history, and the grid/marker overlay checkboxes.
+smooth toggles, the landmarks jump menu, the Back/Forward view history, and the
+grid/marker overlay checkboxes.
 It launches Chromium with software rendering flags (SwiftShader) so WebGPU works in
 headless/CI environments without a real GPU.
 
