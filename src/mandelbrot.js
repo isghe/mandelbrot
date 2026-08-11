@@ -17,8 +17,8 @@ export class MandelbrotApp {
   static SETTINGS_KEY = 'isghe-mandelbrot-settings';
   static SETTINGS_SAVE_MS = 400;
   // Which per-panel schema.view logical keys (see createModel()) hold a
-  // DOMPointReadOnly rather than a plain number — used by restoreSettings()
-  // below to pick the right validator/constructor per field.
+  // DOMPointReadOnly rather than a plain number — used by settings.js's
+  // restoreSettings() to pick the right validator/constructor per field.
   static POINT_KEYS = new Set(["center"]);
   // Logical keys each model's schema declares, shared by both sides —
   // createModel() derives the flat per-side names from these (see below).
@@ -91,9 +91,9 @@ export class MandelbrotApp {
     // seed is a distinct concept (the fractal's "c" constant, see juliaSeed
     // above) from where the view is panned to. Sharing the same default
     // center/scale as Mandelbrot also keeps both panels' grid overlays
-    // aligned at reset. restoreSettings() overrides this if the
-    // URL/localStorage carries a juliaPanelCenter. pivot follows in
-    // restoreSettings() below.
+    // aligned at reset. settings.js's restoreSettings() (called below)
+    // overrides this if the URL/localStorage carries a juliaPanelCenter.
+    // pivot follows along with it.
 
     // Captured via snapshotView() itself: both panels are freshly constructed
     // here, using FractalPanel's own class defaults, so this captures the
@@ -265,8 +265,9 @@ export class MandelbrotApp {
   // later consumer (event wiring, rendering, visibility) can stay agnostic
   // about which side it's looking at. `schema`
   // — the model's flat URL/localStorage field names (see share.js), consumed
-  // by snapshotView()/shareState()/captureDisplayPrefs()/
-  // restoreDisplayPrefs()/restoreSettings() below — is derived from `name`
+  // by snapshotView() below and by settings.js's shareState()/
+  // captureDisplayPrefs()/restoreSettings() plus restoreDisplayPrefs() below
+  // — is derived from `name`
   // the same mechanical way as the DOM ids above, not passed in: every flat
   // name is `${name}Panel${Cap(key)}` (show is `show${cap}`, already
   // computed below for showChk) with zero exceptions, so writing it out by

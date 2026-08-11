@@ -7,9 +7,10 @@ import { share } from '../../src/share.js';
 // so a lightweight fake app — not the full MandelbrotApp + DOM mock harness
 // mandelbrotApp.stateShapes.test.js builds — is enough here. That file
 // already covers snapshotView/captureDisplayPrefs/shareState/
-// flattenSnapshotForShare/restoreSettings' shapes through app.X() delegates;
-// this file covers what's genuinely untested elsewhere: saveSettings,
-// loadSettings, scheduleSaveSettings and buildShareUrl's own composition.
+// flattenSnapshotForShare/restoreSettings' shapes (via app.snapshotView()
+// and direct settings.X(app) calls); this file covers what's genuinely
+// untested elsewhere: saveSettings, loadSettings, scheduleSaveSettings and
+// buildShareUrl's own composition.
 
 globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
   constructor(x = 0, y = 0) {
