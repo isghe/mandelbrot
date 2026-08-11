@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { share } from '../../src/share.js';
+import { settings } from '../../src/settings.js';
 
 // mandelbrot.js relies on a full browser environment (DOM, WebGPU, storage).
 // This file only exercises MandelbrotApp's constructor (state shapes are all
@@ -238,7 +239,7 @@ test('snapshotView is unchanged when only Tier-2 display prefs are mutated', () 
 
 test('captureDisplayPrefs keys are exactly the Tier-2 set, no Tier-1 fields', () => {
   const app = makeApp();
-  const prefs = app.captureDisplayPrefs();
+  const prefs = settings.captureDisplayPrefs(app);
   assertExactKeys(prefs, DISPLAY_PREFS_KEYS, 'captureDisplayPrefs');
   assertNoKeys(prefs, DISPLAY_PREFS_FORBIDDEN, 'captureDisplayPrefs');
 });
@@ -246,14 +247,14 @@ test('captureDisplayPrefs keys are exactly the Tier-2 set, no Tier-1 fields', ()
 test('captureDisplayPrefs reflects live model mutations', () => {
   const app = makeApp();
   app.modelNamed('mandelbrot').panel.gridOverlay = 1;
-  assert.equal(app.captureDisplayPrefs().mandelbrotPanelGridOverlay, 1);
+  assert.equal(settings.captureDisplayPrefs(app).mandelbrotPanelGridOverlay, 1);
 });
 
 // --- P1: flattenSnapshotForShare() (Tier 1 flat bridge) ---
 
 test('flattenSnapshotForShare emits exactly the Tier-1 flat key set', () => {
   const app = makeApp();
-  const flat = app.flattenSnapshotForShare(app.snapshotView());
+  const flat = settings.flattenSnapshotForShare(app, app.snapshotView());
   assertExactKeys(flat, FLATTEN_SHARE_KEYS, 'flattenSnapshotForShare');
   assertNoKeys(flat, FLATTEN_SHARE_FORBIDDEN, 'flattenSnapshotForShare');
 });
@@ -261,7 +262,7 @@ test('flattenSnapshotForShare emits exactly the Tier-1 flat key set', () => {
 test('flattenSnapshotForShare values match the nested snapshotView fields', () => {
   const app = makeApp();
   const snap = app.snapshotView();
-  const flat = app.flattenSnapshotForShare(snap);
+  const flat = settings.flattenSnapshotForShare(app, snap);
   assert.deepEqual(flat.mandelbrotPanelScale, snap.mandelbrotPanel.scale);
   assert.deepEqual(flat.juliaPanelMaxIter, snap.juliaPanel.maxIter);
   assert.deepEqual(flat.juliaSeed, snap.juliaSeed);
@@ -271,12 +272,12 @@ test('flattenSnapshotForShare values match the nested snapshotView fields', () =
 
 test('shareState keys are exactly the union of Tier-1 flat and Tier-2 keys', () => {
   const app = makeApp();
-  assertExactKeys(app.shareState(), SHARE_STATE_KEYS, 'shareState');
+  assertExactKeys(settings.shareState(app), SHARE_STATE_KEYS, 'shareState');
 });
 
 test('shareState is a superset of flattenSnapshotForShare and captureDisplayPrefs keys', () => {
   const app = makeApp();
-  const shareKeys = new Set(Object.keys(app.shareState()));
+  const shareKeys = new Set(Object.keys(settings.shareState(app)));
   for (const key of FLATTEN_SHARE_KEYS) assert.ok(shareKeys.has(key), `shareState missing ${key}`);
   for (const key of DISPLAY_PREFS_KEYS) assert.ok(shareKeys.has(key), `shareState missing ${key}`);
 });
@@ -287,7 +288,7 @@ test('shareState is a superset of flattenSnapshotForShare and captureDisplayPref
 
 test('restoreDisplayPrefs(captureDisplayPrefs()) is the identity', () => {
   const app = makeApp();
-  const original = app.captureDisplayPrefs();
+  const original = settings.captureDisplayPrefs(app);
 
   // Mutate every Tier-2 field away from its captured value.
   app.modelNamed('mandelbrot').panel.gridOverlay = 1;
@@ -301,7 +302,7 @@ test('restoreDisplayPrefs(captureDisplayPrefs()) is the identity', () => {
 
   app.restoreDisplayPrefs(original);
 
-  assert.deepEqual(app.captureDisplayPrefs(), original);
+  assert.deepEqual(settings.captureDisplayPrefs(app), original);
 });
 
 // --- each model's schema declaration (see createModel()) is what
@@ -338,11 +339,11 @@ test('shareState round-trips through share.settingsData/localStorage/restoreSett
   const store = {};
   const app1 = makeApp({ store });
   mutateEveryField(app1);
-  const before = app1.shareState();
+  const before = settings.shareState(app1);
   localStorage.setItem(app1.constructor.SETTINGS_KEY, JSON.stringify(share.settingsData(before)));
 
   const app2 = makeApp({ store });
-  const after = app2.shareState();
+  const after = settings.shareState(app2);
 
   assert.deepEqual(after, before);
 });
