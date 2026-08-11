@@ -667,10 +667,10 @@ export class MandelbrotApp {
 
   // The one place a caller needs "the model called X" instead of "every
   // model" — used by setJuliaSeed, genuinely side-specific (the other former
-  // user, restoreSettings(), now drives its dispatch off model.schema in a
-  // loop over this.models instead). Throws on a bad name (e.g. a typo in a
-  // createModel() call site) instead of handing back undefined for a
-  // confusing failure several lines later.
+  // user, settings.js's restoreSettings(), now drives its dispatch off
+  // model.schema in a loop over this.models instead). Throws on a bad name
+  // (e.g. a typo in a createModel() call site) instead of handing back
+  // undefined for a confusing failure several lines later.
   modelNamed(name) {
     const model = this.models.find((m) => m.name === name);
     if (!model) throw new Error(`No model named "${name}"`);
