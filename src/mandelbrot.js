@@ -57,6 +57,11 @@ export class MandelbrotApp {
   // Set once the shared WebGPU device is lost; blocks further render
   // attempts on both panels (the device, not the canvas, was lost).
   deviceLost = false;
+  renderHalted = false;
+  // Timestamp of the last resizeVisiblePanels() call (window resize, panel
+  // visibility toggle, or initial layout) — used only to enrich the deformed-
+  // frame diagnostic below with "how recently did the layout change".
+  lastResizeAt = 0;
 
   // view history (Back / Forward)
   history = new ViewHistory(MandelbrotApp.WHEEL_HISTORY_MS, () => this.updateHistoryButtons());
@@ -497,6 +502,7 @@ export class MandelbrotApp {
   }
 
   resizeVisiblePanels() {
+    this.lastResizeAt = Date.now();
     for (const { panel } of this.panels) {
       panel.resizeCanvas();
       panel.resizeOverlayCanvas();
@@ -566,6 +572,35 @@ export class MandelbrotApp {
     this.reloadBtn.style.display = "inline-block";
   }
 
+  // Not just a banner: an uncaptured GPU error means the device already
+  // signaled a problem, so any frame rendered from here on (until reload)
+  // can't be trusted — e.g. the transient X-squashed Mandelbrot seen during
+  // a deep, high-iteration zoom coincided with one of these. Same
+  // fatal/halt treatment as onDeviceLost, not a lesser one.
+  //
+  // The raw WebGPU message alone doesn't say what the app was doing when the
+  // device flagged it (which panel, how deep the zoom, how many iterations —
+  // see the double-single precision floor) — log an app-state snapshot
+  // alongside it so a recurrence can be root-caused instead of just
+  // re-observed. Extracted from initGPU's device wiring so it's testable
+  // without a real/mocked GPU device.
+  handleUncapturedError(message) {
+    this.renderHalted = true;
+    const snapshot = this.models.map((model) => ({
+      name: model.name,
+      show: !!model.show,
+      scale: model.panel.scale,
+      maxIter: model.panel.maxIter,
+      canvas: `${model.panel.canvas.width}x${model.panel.canvas.height}`,
+    }));
+    console.error(
+      `WebGPU uncaptured error at ${new Date().toISOString()}: ${message}\n`
+      + `Context: devicePixelRatio=${window.devicePixelRatio || 1}, `
+      + `msSinceLastResize=${Date.now() - this.lastResizeAt}, panels=${JSON.stringify(snapshot)}`
+    );
+    this.showFatalError(`WebGPU error: ${message}`);
+  }
+
   async init() {
     if (!navigator.gpu) {
       this.showError("WebGPU is not supported in this browser.");
@@ -580,7 +615,7 @@ export class MandelbrotApp {
         this.deviceLost = true;
         this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
       },
-      onUncapturedError: (message) => this.showError(`WebGPU error: ${message}`),
+      onUncapturedError: (message) => this.handleUncapturedError(message),
     });
     if (!this.gpuDevice) {
       this.showError("No WebGPU adapter available.");
@@ -875,6 +910,45 @@ export class MandelbrotApp {
   // Renders one panel with the given juliaMode/displayIter — each panel's
   // own maxIter/smoothColoring/progressiveMode/progressiveIter, computed by
   // renderOnce below.
+  // Guards against writing a visibly deformed frame (e.g. an X-squashed
+  // Mandelbrot) caused by a stale/torn canvas backing-store size — seen once
+  // in the wild coinciding with a WebGPU error during a deep, high-iteration
+  // zoom (getBoundingClientRect() read mid-layout-thrash leaving the backing
+  // store's X/Y ratio out of sync with the canvas's actual on-screen shape).
+  // The shader only applies aspect correction to X (mandelbrot.wgsl), so any
+  // such mismatch shows up as an X-only squash/stretch. Rather than let a
+  // corrupt frame reach the screen, halt all rendering and surface the
+  // reason, same as a fatal device loss.
+  isDeformedFrame(panel) {
+    const { width: bw, height: bh } = panel.canvas;
+    const rect = panel.canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false; // panel hidden/collapsed, not a render pass
+    const backingAspect = bw / bh;
+    const cssAspect = rect.width / rect.height;
+    if (!Number.isFinite(backingAspect) || !Number.isFinite(cssAspect)) return true;
+    return Math.abs(backingAspect - cssAspect) / cssAspect > 0.01;
+  }
+
+  // Logs the diagnostic and halts the whole app (not just this panel) on a
+  // detected deformation — see isDeformedFrame's comment for why.
+  reportDeformedFrame(panel) {
+    const { width: bw, height: bh } = panel.canvas;
+    const rect = panel.canvas.getBoundingClientRect();
+    // Diagnostic context beyond the raw mismatch, so a recurrence can be
+    // root-caused rather than just re-confirmed: how recently the layout
+    // changed (resize/panel-toggle — the suspected trigger), the zoom
+    // depth/iteration count in play, and whether a WebGPU error was
+    // already in flight when this was detected.
+    const msg = `Deformed frame detected on panel "${panel.canvas.id}" at ${new Date().toISOString()}: `
+      + `canvas backing store ${bw}x${bh} (aspect ${(bw / bh).toFixed(4)}) does not match on-screen size `
+      + `${rect.width.toFixed(1)}x${rect.height.toFixed(1)} (aspect ${(rect.width / rect.height).toFixed(4)}) — halting rendering. `
+      + `Context: scale=${panel.scale}, maxIter=${panel.maxIter}, devicePixelRatio=${window.devicePixelRatio || 1}, `
+      + `msSinceLastResize=${Date.now() - this.lastResizeAt}, deviceLost=${this.deviceLost}.`;
+    console.error(msg);
+    this.renderHalted = true;
+    this.showFatalError(msg);
+  }
+
   renderPanel(panel, juliaMode, displayIter) {
     if (!panel.renderer) return;
     const data = buildUniformData({
@@ -895,13 +969,29 @@ export class MandelbrotApp {
   // scheduleRender's re-arm check (this.anyProgressiveBelowCap) re-arms while
   // at least one panel's ramp hasn't yet reached its own cap.
   renderOnce = () => {
-    // Gated on deviceLost, not on any single panel's renderer — renderPanel
-    // already skips a panel whose own renderer isn't attached yet, so a
-    // missing Mandelbrot renderer shouldn't also block an already-ready
-    // Julia panel from rendering.
-    if (this.deviceLost) {
+    // Gated on deviceLost/renderHalted, not on any single panel's renderer —
+    // renderPanel already skips a panel whose own renderer isn't attached
+    // yet, so a missing Mandelbrot renderer shouldn't also block an
+    // already-ready Julia panel from rendering.
+    if (this.deviceLost || this.renderHalted) {
       this.anyProgressiveBelowCap = false;
       return;
+    }
+
+    // Checked for every visible, GPU-attached panel before any of them is
+    // rendered — agnostic of which side it is, Mandelbrot or Julia: a
+    // deformity on either one must block the whole frame, including an
+    // otherwise-healthy other panel that would otherwise have already been
+    // submitted to the GPU by the time the deformed one is reached below.
+    // Skips panels not yet attached to a renderer (pre-initGPU) — nothing to
+    // deform yet, and isDeformedFrame's on-screen-size check can be noisy
+    // before the page's first layout pass has settled.
+    for (const { panel } of this.panels) {
+      if (panel.renderer && this.isDeformedFrame(panel)) {
+        this.reportDeformedFrame(panel);
+        this.anyProgressiveBelowCap = false;
+        return;
+      }
     }
 
     let anyBelowCap = false;
