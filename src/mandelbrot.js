@@ -887,7 +887,7 @@ export class MandelbrotApp {
     const onUp = (e) => {
       panel.onPointerUp(e, {
         selectionBox: this.selectionBox,
-        scale: MandelbrotApp.SCALE,
+        scaleBounds: MandelbrotApp.SCALE,
         snapshotView: () => this.snapshotView(),
         pushHistory,
         resetProgressive: () => this.resetProgressive(panel),
@@ -903,7 +903,7 @@ export class MandelbrotApp {
     });
     panel.canvas.addEventListener("wheel", (e) => {
       panel.onWheel(e, {
-        scale: MandelbrotApp.SCALE,
+        scaleBounds: MandelbrotApp.SCALE,
         armWheelHistory,
         resetProgressive: () => this.resetProgressive(panel),
         scheduleRender: () => this.scheduleRender(),

@@ -230,14 +230,14 @@ test('keyboard steps on a slider are undoable', async ({ page }) => {
   await expect(backBtn).toBeDisabled();
 });
 
-test('the iterations -1/+1 buttons are undoable, and clamping at MIN_ITER pushes no spurious history entry', async ({ page }) => {
+test('the iterations -1/+1 buttons are undoable, and clamping at ITER.min pushes no spurious history entry', async ({ page }) => {
   const backBtn = page.locator('#backBtn');
   const iterLabel = page.locator('#mandelbrotIterLabel');
   const iterMinus = page.locator('#mandelbrotIterMinus');
 
   await expect(iterLabel).toHaveText('256');
 
-  // Home on a focused range input jumps straight to its min (MIN_ITER = 1),
+  // Home on a focused range input jumps straight to its min (ITER.min = 1),
   // firing input+change like the arrow-key test above — one real history
   // entry, going from 256 to 1.
   await page.locator('#mandelbrotIterSlider').focus();
@@ -245,7 +245,7 @@ test('the iterations -1/+1 buttons are undoable, and clamping at MIN_ITER pushes
   await expect(iterLabel).toHaveText('1');
   await expect(backBtn).toBeEnabled();
 
-  // Already at MIN_ITER: this click's clamp is a no-op. If onIterStep still
+  // Already at ITER.min: this click's clamp is a no-op. If onIterStep still
   // pushed history unconditionally, it would add a second entry identical in
   // maxIter to the first, and a single Back below would land on that
   // duplicate (still showing "1") instead of jumping straight back to "256".

@@ -133,8 +133,8 @@ export class FractalPanel {
     return view.normalizedToFractal(normPoint, anchor, this.scale, aspect);
   }
 
-  setScale(next, scale) {
-    this.scale = Math.min(scale.max, Math.max(scale.min, next));
+  setScale(next, scaleBounds) {
+    this.scale = Math.min(scaleBounds.max, Math.max(scaleBounds.min, next));
     return this.scale;
   }
 
@@ -211,7 +211,7 @@ export class FractalPanel {
   }
 
   onPointerUp(e, {
-    selectionBox, scale, snapshotView, pushHistory,
+    selectionBox, scaleBounds, snapshotView, pushHistory,
     resetProgressive, scheduleRender, onGenuineClick, onScaleChange,
   }) {
     // Matches a button onPointerDown ignored (see there) — without this, a
@@ -246,7 +246,7 @@ export class FractalPanel {
 
       const selWidth  = Math.abs(f2.x - f1.x);
       const selHeight = Math.abs(f1.y - f2.y);
-      this.setScale(Math.max(selHeight, selWidth / aspect), scale);
+      this.setScale(Math.max(selHeight, selWidth / aspect), scaleBounds);
       onScaleChange?.(this.scale);
 
       this.pivot = this.center;
@@ -304,13 +304,13 @@ export class FractalPanel {
   }
 
   // WHEEL → zoom centered on the pivot
-  onWheel(e, { scale, armWheelHistory, resetProgressive, scheduleRender, onScaleChange }) {
+  onWheel(e, { scaleBounds, armWheelHistory, resetProgressive, scheduleRender, onScaleChange }) {
     e.preventDefault();
     armWheelHistory();
     const aspect = this.canvas.width / this.canvas.height;
     const zoomFactor = (e.deltaY > 0 ? 1.1 : 0.9);
 
-    this.setScale(this.scale * zoomFactor, scale);
+    this.setScale(this.scale * zoomFactor, scaleBounds);
     onScaleChange?.(this.scale);
 
     // Keeps the fractal point under pivotScreen fixed at the new scale.
