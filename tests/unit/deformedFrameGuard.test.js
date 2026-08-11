@@ -241,6 +241,44 @@ test('handleUncapturedError halts rendering, shows a fatal error, and logs an ap
   assert.match(logs[0], /"canvas":"800x600"/);
 });
 
+// Regression coverage for a diagnostic gap found from a real DEVICE_HUNG/TDR
+// (D3D12) hit in the wild: onDeviceLost used to just show the raw
+// driver message with no app-state context, unlike handleUncapturedError —
+// so a real device loss couldn't be correlated with what the app was doing
+// (which panel, scale, iteration count) when it happened.
+test('handleDeviceLost sets deviceLost, shows a fatal error, and logs the same app-state snapshot as handleUncapturedError', () => {
+  const app = makeApp();
+  const julia = app.modelNamed('julia').panel;
+  julia.scale = 2.3e-14;
+  julia.maxIter = 8192;
+  julia.canvas.width = 640;
+  julia.canvas.height = 480;
+  app.lastResizeAt = Date.now() - 10;
+
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (msg) => logs.push(msg);
+  try {
+    app.handleDeviceLost({ reason: 'unknown', message: 'DXGI_ERROR_DEVICE_HUNG (0x887A0006)' });
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(app.deviceLost, true);
+  assert.equal(app.errorBox.style.display, 'block');
+  assert.match(app.errorMessage.textContent, /WebGPU device lost \(unknown\): DXGI_ERROR_DEVICE_HUNG/);
+  assert.equal(app.reloadBtn.style.display, 'inline-block');
+
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /DXGI_ERROR_DEVICE_HUNG/);
+  assert.match(logs[0], /devicePixelRatio=/);
+  assert.match(logs[0], /msSinceLastResize=\d+/);
+  assert.match(logs[0], /"name":"julia"/);
+  assert.match(logs[0], /"scale":2\.3e-14/);
+  assert.match(logs[0], /"maxIter":8192/);
+  assert.match(logs[0], /"canvas":"640x480"/);
+});
+
 // End-to-end reproduction of the reported scenario: a resize/layout-thrash
 // event (window resize, panel visibility toggle) is caught mid-transition,
 // so resizeCanvasBackingStore() (fractalPanel.js) bakes a torn width/height
