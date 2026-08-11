@@ -316,7 +316,7 @@ export class MandelbrotApp {
   }
 
   setPanelScale(model, next) {
-    model.panel.setScale(next, MandelbrotApp.SCALE.min, MandelbrotApp.SCALE.max);
+    model.panel.setScale(next, MandelbrotApp.SCALE);
     this.syncZoomSliderUI(model);
   }
 
@@ -887,8 +887,7 @@ export class MandelbrotApp {
     const onUp = (e) => {
       panel.onPointerUp(e, {
         selectionBox: this.selectionBox,
-        minScale: MandelbrotApp.SCALE.min,
-        maxScale: MandelbrotApp.SCALE.max,
+        scale: MandelbrotApp.SCALE,
         snapshotView: () => this.snapshotView(),
         pushHistory,
         resetProgressive: () => this.resetProgressive(panel),
@@ -904,8 +903,7 @@ export class MandelbrotApp {
     });
     panel.canvas.addEventListener("wheel", (e) => {
       panel.onWheel(e, {
-        minScale: MandelbrotApp.SCALE.min,
-        maxScale: MandelbrotApp.SCALE.max,
+        scale: MandelbrotApp.SCALE,
         armWheelHistory,
         resetProgressive: () => this.resetProgressive(panel),
         scheduleRender: () => this.scheduleRender(),

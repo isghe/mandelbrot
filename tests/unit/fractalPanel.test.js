@@ -133,8 +133,7 @@ function makeMockSelectionBox() {
 
 const noopHooks = (overrides = {}) => ({
   selectionBox: makeMockSelectionBox(),
-  minScale: 0.1,
-  maxScale: 10,
+  scale: { min: 0.1, max: 10 },
   snapshotView: () => ({}),
   pushHistory: () => {},
   resetProgressive: () => {},
