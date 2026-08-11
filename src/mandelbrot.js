@@ -1,10 +1,10 @@
 import { makePalette, paletteBandCount, PALETTE_GROUPS } from './palette.js';
 import { MANDELBROT_LANDMARKS } from './landmarks.js';
 import { overlay } from './overlay.js';
-import { share } from './share.js';
 import { ViewHistory } from './history.js';
 import { requestGPUDevice, attachCanvas } from './renderer.js';
 import { FractalPanel, buildUniformData } from './fractalPanel.js';
+import { settings } from './settings.js';
 
 // Exported so tests/unit/mandelbrotApp.stateShapes.test.js can `new
 // MandelbrotApp()` directly against a mocked DOM, instead of only through
@@ -330,35 +330,23 @@ export class MandelbrotApp {
   // view (it's the Julia-family constant), so it stays a separate top-level
   // field rather than living inside either panel's sub-object.
   snapshotView() {
-    const snap = { juliaSeed: this.juliaSeed };
-    for (const model of this.models) {
-      const panelSnap = {};
-      for (const key of Object.keys(model.schema.view)) panelSnap[key] = model.panel[key];
-      snap[model.schema.panel] = panelSnap;
-    }
-    return snap;
+    return settings.snapshotView(this);
   }
 
   // share.js expects this flat shape (schema v5): exactly the union of
-  // Tier 1 (flattened) and Tier 2 — every field either method below already
+  // Tier 1 (flattened) and Tier 2 — every field either function already
   // produces, so this is their composition rather than a third hand-written
-  // copy of the same field list.
+  // copy of the same field list. See settings.js for the implementation.
   shareState() {
-    return { ...this.flattenSnapshotForShare(this.snapshotView()), ...this.captureDisplayPrefs() };
+    return settings.shareState(this);
   }
 
   // Tier 2 ("display preferences"): overlay toggles (per panel) and panel
   // visibility — persisted (see shareState() above) but deliberately outside
-  // undo history, unlike snapshotView()'s Tier 1. juliaMarker/landmarksOverlay
-  // stay single app-level flags (they mark points on the Mandelbrot plane,
-  // meaningless on Julia's own view — see drawOverlayForPanel).
+  // undo history, unlike snapshotView()'s Tier 1. See settings.js for the
+  // implementation.
   captureDisplayPrefs() {
-    const prefs = { juliaMarker: this.juliaMarker, landmarksOverlay: this.landmarksOverlay };
-    for (const model of this.models) {
-      for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) prefs[flatName] = model.panel[key];
-      prefs[model.schema.show] = model.show;
-    }
-    return prefs;
+    return settings.captureDisplayPrefs(this);
   }
 
   restoreDisplayPrefs(p) {
@@ -380,80 +368,32 @@ export class MandelbrotApp {
   }
 
   saveSettings() {
-    const data = share.settingsData(this.shareState());
-    try {
-      localStorage.setItem(MandelbrotApp.SETTINGS_KEY, JSON.stringify(data));
-    } catch {
-      // localStorage unavailable (private browsing, quota, etc.) — ignore
-    }
-    history.replaceState(null, '', this.buildShareUrl());
+    settings.saveSettings(this);
   }
 
   loadSettings() {
-    try {
-      const raw = localStorage.getItem(MandelbrotApp.SETTINGS_KEY);
-      return raw ? share.loadSettingsData(JSON.parse(raw)) : null;
-    } catch {
-      return null;
-    }
+    return settings.loadSettings(this);
   }
 
   scheduleSaveSettings = () => {
-    clearTimeout(this.saveSettingsTimer);
-    this.saveSettingsTimer = setTimeout(() => this.saveSettings(), MandelbrotApp.SETTINGS_SAVE_MS);
+    settings.scheduleSaveSettings(this);
   };
 
   // share.js's buildShareUrl diffs the live shareState() against this same
   // flat shape applied to this.initialState (snapshotView()'s nested Tier 1
-  // shape, used for applySnapshot/Reset) — hence the bridge. Only Tier 1
-  // fields, deliberately: buildShareUrl diffs these against initialState but
-  // includes Tier 2 (gridOverlay/centerMarker) unconditionally instead, since
-  // Reset always zeroes those rather than restoring a captured initial value
-  // — see shareState()'s call site in buildShareUrl().
+  // shape, used for applySnapshot/Reset) — hence the bridge. See settings.js
+  // for the implementation and the disambiguation from share.js's own
+  // buildShareUrl.
   flattenSnapshotForShare(s) {
-    const flat = { juliaSeed: s.juliaSeed };
-    for (const model of this.models) {
-      const panelSnap = s[model.schema.panel];
-      for (const [key, flatName] of Object.entries(model.schema.view)) flat[flatName] = panelSnap[key];
-    }
-    return flat;
+    return settings.flattenSnapshotForShare(this, s);
   }
 
   buildShareUrl() {
-    return share.buildShareUrl(this.shareState(), this.flattenSnapshotForShare(this.initialState), location.origin, location.pathname);
+    return settings.buildShareUrl(this);
   }
 
   restoreSettings() {
-    const shared = share.parseShareParams(location.search);
-    const s = shared || this.loadSettings();
-    if (!s) return;
-
-    const restoreNumber = (flatName, target, key) => {
-      if (typeof s[flatName] === "number") target[key] = s[flatName];
-    };
-    const restorePoint = (flatName, target, key) => {
-      const p = s[flatName];
-      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) target[key] = new DOMPointReadOnly(p.x, p.y);
-    };
-    // Driven by each model's own schema (see createModel()) instead of a
-    // reverse flat-name lookup: for every logical key the model declares,
-    // read s[flatName] and validate/route it by type (POINT_KEYS vs number).
-    // juliaSeed/juliaMarker/landmarksOverlay are the only truly flat
-    // app-level fields left.
-    for (const model of this.models) {
-      for (const [key, flatName] of Object.entries(model.schema.view)) {
-        (MandelbrotApp.POINT_KEYS.has(key) ? restorePoint : restoreNumber)(flatName, model.panel, key);
-      }
-      for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) restoreNumber(flatName, model.panel, key);
-      restoreNumber(model.schema.show, model, "show");
-    }
-    restorePoint("juliaSeed", this, "juliaSeed");
-    restoreNumber("juliaMarker", this, "juliaMarker");
-    restoreNumber("landmarksOverlay", this, "landmarksOverlay");
-
-    for (const model of this.models) model.panel.pivot = model.panel.center;
-
-    if (shared) this.saveSettings();
+    settings.restoreSettings(this);
   }
 
   updateHistoryButtons() {
