@@ -102,9 +102,9 @@ export class MandelbrotApp {
     // Tier 2 ("display preferences"): captured pre-restore too, same as
     // initialState above, so Reset always goes back to the app's built-in
     // defaults rather than whatever was last persisted.
-    this.initialDisplayPrefs = this.captureDisplayPrefs();
+    this.initialDisplayPrefs = settings.captureDisplayPrefs(this);
 
-    this.restoreSettings();
+    settings.restoreSettings(this);
 
     this.selectionBox = document.getElementById("selectionBox");
     this.noVizMessage = document.getElementById("noVizMessage");
@@ -333,22 +333,6 @@ export class MandelbrotApp {
     return settings.snapshotView(this);
   }
 
-  // share.js expects this flat shape (schema v5): exactly the union of
-  // Tier 1 (flattened) and Tier 2 — every field either function already
-  // produces, so this is their composition rather than a third hand-written
-  // copy of the same field list. See settings.js for the implementation.
-  shareState() {
-    return settings.shareState(this);
-  }
-
-  // Tier 2 ("display preferences"): overlay toggles (per panel) and panel
-  // visibility — persisted (see shareState() above) but deliberately outside
-  // undo history, unlike snapshotView()'s Tier 1. See settings.js for the
-  // implementation.
-  captureDisplayPrefs() {
-    return settings.captureDisplayPrefs(this);
-  }
-
   restoreDisplayPrefs(p) {
     for (const model of this.models) {
       for (const [key, flatName] of Object.entries(model.schema.displayPrefs)) {
@@ -367,34 +351,9 @@ export class MandelbrotApp {
     this.resizeVisiblePanels();
   }
 
-  saveSettings() {
-    settings.saveSettings(this);
-  }
-
-  loadSettings() {
-    return settings.loadSettings(this);
-  }
-
   scheduleSaveSettings = () => {
     settings.scheduleSaveSettings(this);
   };
-
-  // share.js's buildShareUrl diffs the live shareState() against this same
-  // flat shape applied to this.initialState (snapshotView()'s nested Tier 1
-  // shape, used for applySnapshot/Reset) — hence the bridge. See settings.js
-  // for the implementation and the disambiguation from share.js's own
-  // buildShareUrl.
-  flattenSnapshotForShare(s) {
-    return settings.flattenSnapshotForShare(this, s);
-  }
-
-  buildShareUrl() {
-    return settings.buildShareUrl(this);
-  }
-
-  restoreSettings() {
-    settings.restoreSettings(this);
-  }
 
   updateHistoryButtons() {
     this.backBtn.disabled = !this.history.canGoBack;
@@ -765,7 +724,7 @@ export class MandelbrotApp {
   };
 
   onShare = async () => {
-    const url = this.buildShareUrl();
+    const url = settings.buildShareUrl(this);
     const originalLabel = this.shareBtn.textContent;
     try {
       await navigator.clipboard.writeText(url);
