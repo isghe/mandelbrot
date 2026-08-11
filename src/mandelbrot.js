@@ -572,20 +572,13 @@ export class MandelbrotApp {
     this.reloadBtn.style.display = "inline-block";
   }
 
-  // Not just a banner: an uncaptured GPU error means the device already
-  // signaled a problem, so any frame rendered from here on (until reload)
-  // can't be trusted — e.g. the transient X-squashed Mandelbrot seen during
-  // a deep, high-iteration zoom coincided with one of these. Same
-  // fatal/halt treatment as onDeviceLost, not a lesser one.
-  //
-  // The raw WebGPU message alone doesn't say what the app was doing when the
-  // device flagged it (which panel, how deep the zoom, how many iterations —
-  // see the double-single precision floor) — log an app-state snapshot
-  // alongside it so a recurrence can be root-caused instead of just
-  // re-observed. Extracted from initGPU's device wiring so it's testable
-  // without a real/mocked GPU device.
-  handleUncapturedError(message) {
-    this.renderHalted = true;
+  // Every panel's scale/maxIter/canvas size at the moment of a fatal GPU
+  // error — the raw WebGPU/driver message alone doesn't say what the app was
+  // doing when it was flagged (which panel, how deep the zoom, how many
+  // iterations — see the double-single precision floor), so this gets logged
+  // alongside it, letting a recurrence be root-caused instead of just
+  // re-observed.
+  appStateSnapshot() {
     const snapshot = this.models.map((model) => ({
       name: model.name,
       show: !!model.show,
@@ -593,12 +586,31 @@ export class MandelbrotApp {
       maxIter: model.panel.maxIter,
       canvas: `${model.panel.canvas.width}x${model.panel.canvas.height}`,
     }));
-    console.error(
-      `WebGPU uncaptured error at ${new Date().toISOString()}: ${message}\n`
-      + `Context: devicePixelRatio=${window.devicePixelRatio || 1}, `
-      + `msSinceLastResize=${Date.now() - this.lastResizeAt}, panels=${JSON.stringify(snapshot)}`
-    );
+    return `devicePixelRatio=${window.devicePixelRatio || 1}, `
+      + `msSinceLastResize=${Date.now() - this.lastResizeAt}, panels=${JSON.stringify(snapshot)}`;
+  }
+
+  // Not just a banner: an uncaptured GPU error means the device already
+  // signaled a problem, so any frame rendered from here on (until reload)
+  // can't be trusted — e.g. the transient X-squashed Mandelbrot seen during
+  // a deep, high-iteration zoom coincided with one of these. Same
+  // fatal/halt treatment as onDeviceLost, not a lesser one. Extracted from
+  // initGPU's device wiring so it's testable without a real/mocked GPU
+  // device.
+  handleUncapturedError(message) {
+    this.renderHalted = true;
+    console.error(`WebGPU uncaptured error at ${new Date().toISOString()}: ${message}\nContext: ${this.appStateSnapshot()}`);
     this.showFatalError(`WebGPU error: ${message}`);
+  }
+
+  // A real device loss (e.g. a driver-level DEVICE_HUNG/TDR after too long a
+  // shader pass at extreme zoom/iteration counts) can leave the swapchain's
+  // last presented frame visibly corrupted — the frame frozen behind this
+  // banner, not just this message, is evidence worth capturing.
+  handleDeviceLost(info) {
+    this.deviceLost = true;
+    console.error(`WebGPU device lost at ${new Date().toISOString()} (${info.reason}): ${info.message}\nContext: ${this.appStateSnapshot()}`);
+    this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
   }
 
   async init() {
@@ -611,10 +623,7 @@ export class MandelbrotApp {
 
   async initGPU() {
     this.gpuDevice = await requestGPUDevice({
-      onDeviceLost: (info) => {
-        this.deviceLost = true;
-        this.showFatalError(`WebGPU device lost (${info.reason}): ${info.message}`);
-      },
+      onDeviceLost: (info) => this.handleDeviceLost(info),
       onUncapturedError: (message) => this.handleUncapturedError(message),
     });
     if (!this.gpuDevice) {
