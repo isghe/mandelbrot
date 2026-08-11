@@ -13,8 +13,9 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
   }
 };
 
-function makeMockCanvas({ cssWidth = 800, cssHeight = 600 } = {}) {
+function makeMockCanvas({ id = '', cssWidth = 800, cssHeight = 600 } = {}) {
   return {
+    id,
     width: 0,
     height: 0,
     classList: { toggle() {} },
@@ -64,7 +65,7 @@ function buildDomMocks() {
   const mocks = {};
   for (const name of ['mandelbrot', 'julia']) {
     const cap = name[0].toUpperCase() + name.slice(1);
-    mocks[`${name}Gfx`] = makeMockCanvas();
+    mocks[`${name}Gfx`] = makeMockCanvas({ id: `${name}Gfx` });
     mocks[`${name}Overlay`] = makeMockOverlayCanvas();
     mocks[`${name}IterSlider`] = makeMockControl();
     mocks[`${name}IterLabel`] = makeMockControl();
@@ -281,7 +282,7 @@ test('a transient near-zero-width rect during a resize, followed by renderOnce o
   assert.equal(juliaRendered, false, 'renderHalted stops the whole app, not just the offending panel');
   assert.equal(app.renderHalted, true);
   assert.equal(app.errorBox.style.display, 'block');
-  assert.match(app.errorMessage.textContent, /Deformed frame detected on panel "undefined"/);
+  assert.match(app.errorMessage.textContent, /Deformed frame detected on panel "mandelbrotGfx"/);
 
   // The diagnostic console.error actually fires, with the numbers that
   // would let this exact scenario be root-caused: the backing store's
