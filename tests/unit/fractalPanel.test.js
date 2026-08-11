@@ -91,6 +91,19 @@ test('toFractal delegates to view.normalizedToFractal with the panel aspect rati
   assert.strictEqual(actual.y, expected.y);
 });
 
+test('setScale clamps to the given {min,max} bounds and returns the clamped value', () => {
+  const canvas = makeMockCanvas();
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+  const scaleBounds = { min: 0.1, max: 10 };
+
+  assert.strictEqual(panel.setScale(5, scaleBounds), 5, 'within bounds: unchanged');
+  assert.strictEqual(panel.scale, 5);
+
+  assert.strictEqual(panel.setScale(50, scaleBounds), 10, 'above max: clamped to max');
+  assert.strictEqual(panel.setScale(0.001, scaleBounds), 0.1, 'below min: clamped to min');
+});
+
 test('buildUniformData packs a 16-float array in the WGSL Params layout', () => {
   const center = new DOMPointReadOnly(-0.5, 0.25);
   const juliaSeed = new DOMPointReadOnly(-0.8, 0.156);
@@ -133,8 +146,7 @@ function makeMockSelectionBox() {
 
 const noopHooks = (overrides = {}) => ({
   selectionBox: makeMockSelectionBox(),
-  minScale: 0.1,
-  maxScale: 10,
+  scaleBounds: { min: 0.1, max: 10 },
   snapshotView: () => ({}),
   pushHistory: () => {},
   resetProgressive: () => {},

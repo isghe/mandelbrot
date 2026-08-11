@@ -11,10 +11,8 @@ import { FractalPanel, buildUniformData } from './fractalPanel.js';
 // the real app instance the top-level bootstrap below constructs (see the
 // __MANDELBROT_TEST__ guard at the bottom of this file).
 export class MandelbrotApp {
-  static MIN_SCALE = 1e-14;
-  static MAX_SCALE = 4.0;
-  static MIN_ITER = 1;
-  static MAX_ITER = 8192;
+  static SCALE = { min: 1e-14, max: 4.0 };
+  static ITER = { min: 1, max: 8192 };
   static WHEEL_HISTORY_MS = 250;
   static SETTINGS_KEY = 'isghe-mandelbrot-settings';
   static SETTINGS_SAVE_MS = 400;
@@ -310,15 +308,15 @@ export class MandelbrotApp {
       showChk: document.getElementById(`show${cap}`),
       uiSection: document.getElementById(`ui${cap}`),
     };
-    model.iter.slider.min = Math.log10(MandelbrotApp.MIN_ITER);
-    model.iter.slider.max = Math.log10(MandelbrotApp.MAX_ITER);
-    model.zoom.slider.min = Math.log10(MandelbrotApp.MIN_SCALE);
-    model.zoom.slider.max = Math.log10(MandelbrotApp.MAX_SCALE);
+    for (const [obj, bounds] of [[model.iter, MandelbrotApp.ITER], [model.zoom, MandelbrotApp.SCALE]]) {
+      obj.slider.min = Math.log10(bounds.min);
+      obj.slider.max = Math.log10(bounds.max);
+    }
     return model;
   }
 
   setPanelScale(model, next) {
-    model.panel.setScale(next, MandelbrotApp.MIN_SCALE, MandelbrotApp.MAX_SCALE);
+    model.panel.setScale(next, MandelbrotApp.SCALE);
     this.syncZoomSliderUI(model);
   }
 
@@ -488,7 +486,7 @@ export class MandelbrotApp {
   }
 
   static clampMaxIter(next) {
-    return Math.round(Math.min(MandelbrotApp.MAX_ITER, Math.max(MandelbrotApp.MIN_ITER, next)));
+    return Math.round(Math.min(MandelbrotApp.ITER.max, Math.max(MandelbrotApp.ITER.min, next)));
   }
 
   // History bookkeeping (pushHistory) is done by the caller (see the
@@ -680,7 +678,7 @@ export class MandelbrotApp {
 
   onIterStep(model, delta) {
     // Skip the history push (and re-render) entirely when already at
-    // MIN_ITER/MAX_ITER — otherwise a step at the clamp boundary is a no-op
+    // ITER.min/ITER.max — otherwise a step at the clamp boundary is a no-op
     // that still pollutes Back/Forward with a state identical to the last.
     const clamped = MandelbrotApp.clampMaxIter(model.panel.maxIter + delta);
     if (clamped === model.panel.maxIter) return;
@@ -889,8 +887,7 @@ export class MandelbrotApp {
     const onUp = (e) => {
       panel.onPointerUp(e, {
         selectionBox: this.selectionBox,
-        minScale: MandelbrotApp.MIN_SCALE,
-        maxScale: MandelbrotApp.MAX_SCALE,
+        scaleBounds: MandelbrotApp.SCALE,
         snapshotView: () => this.snapshotView(),
         pushHistory,
         resetProgressive: () => this.resetProgressive(panel),
@@ -906,8 +903,7 @@ export class MandelbrotApp {
     });
     panel.canvas.addEventListener("wheel", (e) => {
       panel.onWheel(e, {
-        minScale: MandelbrotApp.MIN_SCALE,
-        maxScale: MandelbrotApp.MAX_SCALE,
+        scaleBounds: MandelbrotApp.SCALE,
         armWheelHistory,
         resetProgressive: () => this.resetProgressive(panel),
         scheduleRender: () => this.scheduleRender(),
