@@ -30,7 +30,7 @@ export async function requestGPUDevice({ onDeviceLost, onUncapturedError }) {
 // individual submit short — on the hardware that produced the DEVICE_HUNG,
 // throughput was ≤~3G iterations/s, so 1e8 targets ~30-50ms per submit,
 // well under the watchdog. The worst case (972px height, maxIter 8192)
-// produces ~75 submits per frame.
+// produces ~81 submits per frame.
 export const BAND_WORK_BUDGET = 1e8;
 
 // Splits [0, height) into horizontal bands, each with worst-case pixel-
