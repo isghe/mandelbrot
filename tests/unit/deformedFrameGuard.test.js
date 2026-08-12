@@ -248,6 +248,23 @@ test('updatePanelVisibility keeps canvases hidden after a fatal error, even when
   }
 });
 
+// Same guarantee via the other halt flag — renderHalted alone (no device
+// loss) must also survive a visibility toggle, not just deviceLost.
+test('updatePanelVisibility keeps canvases hidden when only renderHalted is set', () => {
+  const app = makeApp();
+  app.handleUncapturedError('Validation Error: simulated GPU error');
+
+  app.modelNamed('mandelbrot').show = true;
+  app.modelNamed('julia').show = true;
+  app.updatePanelVisibility();
+
+  for (const name of ['mandelbrot', 'julia']) {
+    const panel = app.modelNamed(name).panel;
+    assert.equal(panel.canvas.classList.contains('panel-hidden'), true, `${name} gfx canvas must stay hidden`);
+    assert.equal(panel.overlayCanvas.classList.contains('panel-hidden'), true, `${name} overlay canvas must stay hidden`);
+  }
+});
+
 test('handleUncapturedError halts rendering, shows a fatal error, and logs an app-state snapshot', () => {
   const app = makeApp();
   const mandelbrot = app.modelNamed('mandelbrot').panel;
