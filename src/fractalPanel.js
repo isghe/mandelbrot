@@ -27,18 +27,29 @@ export function buildUniformData({
   ]);
 }
 
+// Indices into buildUniformData's array (see its layout above) that a
+// non-Julia panel's fragment shader never reads — juliaSeed only feeds the
+// Julia iteration formula. Skipping them below means clicking a new Julia
+// seed doesn't force a pointless re-render of the Mandelbrot panel, whose
+// image is unaffected by it.
+const JULIA_MODE_INDEX = 12;
+const JULIA_SEED_INDICES = [5, 6, 7, 8]; // sx_hi, sx_lo, sy_hi, sy_lo
+
 // True when `next` (the uniform data + paletteType about to be rendered)
 // would produce a pixel-identical frame to `prev` (what's already on
 // screen) — the two together fully determine one panel's rendered pixels
 // (paletteType isn't in the uniform array; it drives the palette texture
 // written separately by MandelbrotApp.applyPalette). A null/undefined
-// `prev` (nothing rendered yet) or a NaN anywhere in the uniform data never
-// compares equal, so both cases conservatively fall through to a real render.
+// `prev` (nothing rendered yet) or a NaN anywhere in the compared uniform
+// data never compares equal, so both cases conservatively fall through to a
+// real render.
 export function sameRenderSignature(prev, next) {
   if (!prev || !next) return false;
   if (prev.paletteType !== next.paletteType) return false;
   if (prev.data.length !== next.data.length) return false;
-  for (let i = 0; i < prev.data.length; i++) {
+  const juliaMode = next.data[JULIA_MODE_INDEX];
+  for (let i = 0; i < next.data.length; i++) {
+    if (juliaMode === 0 && JULIA_SEED_INDICES.includes(i)) continue;
     if (prev.data[i] !== next.data[i]) return false;
   }
   return true;

@@ -281,6 +281,33 @@ test('sameRenderSignature: same uniform data but different paletteType is not a 
   assert.strictEqual(sameRenderSignature(a, b), false);
 });
 
+function makeUniformArgs(overrides = {}) {
+  return {
+    center: { x: -0.5, y: 0 },
+    scale: 3.0,
+    juliaSeed: { x: -0.7, y: 0.27 },
+    displayIter: 256,
+    canvasWidth: 800,
+    canvasHeight: 600,
+    juliaMode: 0,
+    smoothColoring: 0,
+    bandCount: 0,
+    ...overrides,
+  };
+}
+
+test('sameRenderSignature: a juliaSeed change is ignored for a non-Julia panel (juliaMode 0)', () => {
+  const a = { data: buildUniformData(makeUniformArgs()), paletteType: 4 };
+  const b = { data: buildUniformData(makeUniformArgs({ juliaSeed: { x: 0.1, y: -0.6 } })), paletteType: 4 };
+  assert.strictEqual(sameRenderSignature(a, b), true);
+});
+
+test('sameRenderSignature: a juliaSeed change is not ignored for the Julia panel (juliaMode 1)', () => {
+  const a = { data: buildUniformData(makeUniformArgs({ juliaMode: 1 })), paletteType: 4 };
+  const b = { data: buildUniformData(makeUniformArgs({ juliaMode: 1, juliaSeed: { x: 0.1, y: -0.6 } })), paletteType: 4 };
+  assert.strictEqual(sameRenderSignature(a, b), false);
+});
+
 test('sameRenderSignature: a null/undefined previous signature is never a match', () => {
   const next = { data: new Float32Array([1, 2, 3]), paletteType: 4 };
   assert.strictEqual(sameRenderSignature(null, next), false);
