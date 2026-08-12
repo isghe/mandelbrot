@@ -468,6 +468,13 @@ export class MandelbrotApp {
   showFatalError(msg) {
     this.showError(msg);
     this.reloadBtn.style.display = "inline-block";
+    // The last presented frame can be corrupted (e.g. DEVICE_HUNG) and
+    // nothing renders again until reload — hide it instead of leaving it
+    // visible behind/around the error box.
+    for (const { panel } of this.panels) {
+      panel.canvas.classList.add("panel-hidden");
+      panel.overlayCanvas.classList.add("panel-hidden");
+    }
   }
 
   // Every panel's scale/maxIter/canvas size at the moment of a fatal GPU
@@ -503,8 +510,9 @@ export class MandelbrotApp {
 
   // A real device loss (e.g. a driver-level DEVICE_HUNG/TDR after too long a
   // shader pass at extreme zoom/iteration counts) can leave the swapchain's
-  // last presented frame visibly corrupted — the frame frozen behind this
-  // banner, not just this message, is evidence worth capturing.
+  // last presented frame visibly corrupted; showFatalError hides every
+  // canvas so that corrupted frame is never shown, and appStateSnapshot()
+  // below is the diagnostic record instead.
   handleDeviceLost(info) {
     this.deviceLost = true;
     console.error(`WebGPU device lost at ${new Date().toISOString()} (${info.reason}): ${info.message}\nContext: ${this.appStateSnapshot()}`);
@@ -649,8 +657,9 @@ export class MandelbrotApp {
     for (const model of this.models) {
       const show = !!model.show;
       anyVisible = anyVisible || show;
-      model.panel.canvas.classList.toggle("panel-hidden", !show);
-      model.panel.overlayCanvas.classList.toggle("panel-hidden", !show);
+      const canvasHidden = !show || this.renderHalted || this.deviceLost;
+      model.panel.canvas.classList.toggle("panel-hidden", canvasHidden);
+      model.panel.overlayCanvas.classList.toggle("panel-hidden", canvasHidden);
       model.uiSection.classList.toggle("panel-hidden", !show);
     }
     // Generic over however many visualization modes eventually exist, not

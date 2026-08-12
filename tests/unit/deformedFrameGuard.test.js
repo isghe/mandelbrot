@@ -14,11 +14,16 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
 };
 
 function makeMockCanvas({ id = '', cssWidth = 800, cssHeight = 600 } = {}) {
+  const classes = new Set();
   return {
     id,
     width: 0,
     height: 0,
-    classList: { toggle() {} },
+    classList: {
+      toggle(name, force) { force ? classes.add(name) : classes.delete(name); },
+      add(name) { classes.add(name); },
+      contains(name) { return classes.has(name); },
+    },
     getBoundingClientRect: () => ({ width: cssWidth, height: cssHeight }),
     addEventListener() {},
   };
@@ -206,6 +211,58 @@ test('renderOnce is a no-op once renderHalted is set', () => {
   app.renderOnce();
 
   assert.equal(rendered, false);
+});
+
+// The last frame presented before a fatal error (e.g. a real DEVICE_HUNG)
+// can be visibly corrupted, and nothing renders again until reload — a
+// centered error box alone left that corrupted frame visible around/behind
+// it. showFatalError must hide every panel's canvas so no corrupted pixels
+// can remain on screen once a fatal error is shown.
+test('showFatalError hides every panel\'s gfx and overlay canvas', () => {
+  const app = makeApp();
+  app.showFatalError('boom');
+
+  for (const name of ['mandelbrot', 'julia']) {
+    const panel = app.modelNamed(name).panel;
+    assert.equal(panel.canvas.classList.contains('panel-hidden'), true, `${name} gfx canvas must be hidden`);
+    assert.equal(panel.overlayCanvas.classList.contains('panel-hidden'), true, `${name} overlay canvas must be hidden`);
+  }
+});
+
+// Reset (or any other panel-visibility toggle) after a fatal error must not
+// re-expose the corrupted canvas: updatePanelVisibility toggles
+// panel-hidden based on `show`, which would otherwise remove the class
+// showFatalError just added.
+test('updatePanelVisibility keeps canvases hidden after a fatal error, even when the panel is shown', () => {
+  const app = makeApp();
+  app.handleDeviceLost({ reason: 'unknown', message: 'DXGI_ERROR_DEVICE_HUNG (0x887A0006)' });
+
+  app.modelNamed('mandelbrot').show = true;
+  app.modelNamed('julia').show = true;
+  app.updatePanelVisibility();
+
+  for (const name of ['mandelbrot', 'julia']) {
+    const panel = app.modelNamed(name).panel;
+    assert.equal(panel.canvas.classList.contains('panel-hidden'), true, `${name} gfx canvas must stay hidden`);
+    assert.equal(panel.overlayCanvas.classList.contains('panel-hidden'), true, `${name} overlay canvas must stay hidden`);
+  }
+});
+
+// Same guarantee via the other halt flag — renderHalted alone (no device
+// loss) must also survive a visibility toggle, not just deviceLost.
+test('updatePanelVisibility keeps canvases hidden when only renderHalted is set', () => {
+  const app = makeApp();
+  app.handleUncapturedError('Validation Error: simulated GPU error');
+
+  app.modelNamed('mandelbrot').show = true;
+  app.modelNamed('julia').show = true;
+  app.updatePanelVisibility();
+
+  for (const name of ['mandelbrot', 'julia']) {
+    const panel = app.modelNamed(name).panel;
+    assert.equal(panel.canvas.classList.contains('panel-hidden'), true, `${name} gfx canvas must stay hidden`);
+    assert.equal(panel.overlayCanvas.classList.contains('panel-hidden'), true, `${name} overlay canvas must stay hidden`);
+  }
 });
 
 test('handleUncapturedError halts rendering, shows a fatal error, and logs an app-state snapshot', () => {

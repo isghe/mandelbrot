@@ -70,6 +70,11 @@ test('handleUncapturedError halts rendering and shows the fatal error banner in 
 
   const renderHalted = await page.evaluate(() => window.app.renderHalted);
   expect(renderHalted).toBe(true);
+
+  for (const name of ['mandelbrot', 'julia']) {
+    await expect(page.locator(`#${name}Gfx`)).toHaveClass(/panel-hidden/);
+    await expect(page.locator(`#${name}Overlay`)).toHaveClass(/panel-hidden/);
+  }
 });
 
 test('once halted, further renderOnce calls stay a no-op (no repeated banner flicker/render attempts)', async ({ page }) => {
