@@ -2,7 +2,9 @@ import { makePalette, paletteBandCount, PALETTE_GROUPS } from './palette.js';
 import { MANDELBROT_LANDMARKS } from './landmarks.js';
 import { overlay } from './overlay.js';
 import { ViewHistory } from './history.js';
-import { requestGPUDevice, attachCanvas, shareBands, FRAME_BAND_BUDGET } from './renderer.js';
+import {
+  requestGPUDevice, attachCanvas, shareBands, nextBandBudget, INITIAL_FRAME_BAND_BUDGET,
+} from './renderer.js';
 import { FractalPanel, buildUniformData } from './fractalPanel.js';
 import { settings } from './settings.js';
 
@@ -72,6 +74,19 @@ export class MandelbrotApp {
   // to do on a later frame — a progressive ramp short of its cap, or a frame
   // whose bands haven't all been submitted yet (see advanceRenderJobs).
   needsAnotherFrame = false;
+  // How many bands all the visible panels together may submit this animation
+  // frame, adapted from how long the last one took (see nextBandBudget).
+  bandBudget = INITIAL_FRAME_BAND_BUDGET;
+  // When the previous animation frame ran, or null if this frame starts a
+  // fresh burst. Only frames inside one continuous burst are timed against
+  // each other: the gap between bursts is the user sitting idle, not a slow
+  // frame, and feeding it to the controller would collapse the budget at the
+  // start of every interaction.
+  lastFrameAt = null;
+  // Which panel shareBands deals the budget from first, advanced every frame
+  // so that a budget too small to serve every busy panel rotates between them
+  // rather than always favouring the same one.
+  bandDealStart = 0;
 
   constructor() {
     // juliaMode/showJuliaMarker/showLandmarks/onGenuineClick are the only
@@ -432,6 +447,17 @@ export class MandelbrotApp {
     this.rafPending = true;
     requestAnimationFrame(() => {
       this.rafPending = false;
+      // Retune the band budget from the gap since the previous frame of this
+      // burst, before renderOnce() spends it. Measuring the animation frame
+      // rather than the submit loop is deliberate: submitting is cheap and
+      // returns immediately, so what stretches this interval is the browser
+      // waiting on the GPU — which is exactly the delay being controlled.
+      const now = performance.now();
+      if (this.lastFrameAt !== null) {
+        this.bandBudget = nextBandBudget(this.bandBudget, now - this.lastFrameAt);
+      }
+      this.lastFrameAt = null;
+
       // Drawn before renderOnce() so the overlay still shows up even if
       // WebGPU init failed (renderOnce() is a no-op/throws in that case).
       this.drawOverlay();
@@ -441,6 +467,7 @@ export class MandelbrotApp {
       // being dragged (see needsAnotherFrame there) — a drag on one
       // panel shouldn't stall the other panel's independent progressive reveal.
       if (this.needsAnotherFrame) {
+        this.lastFrameAt = now;
         this.scheduleRender();
       }
     });
@@ -917,8 +944,10 @@ export class MandelbrotApp {
     const attached = this.panels.filter(({ panel }) => panel.renderer);
     const share = shareBands(
       attached.map(({ panel }) => panel.renderer.pendingBands),
-      FRAME_BAND_BUDGET
+      this.bandBudget,
+      this.bandDealStart
     );
+    this.bandDealStart++;
     attached.forEach(({ panel }, i) => {
       if (share[i] <= 0) return;
       panel.renderer.advanceFrame(share[i]);

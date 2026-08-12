@@ -3,11 +3,20 @@ import { test, expect } from '@playwright/test';
 // Coverage for spreading one frame's bands across several animation frames.
 // A frame at high maxIter is seconds of GPU work; submitting all of its bands
 // in one animation frame is what froze the UI until the whole thing drained.
-// renderOnce() now hands over at most FRAME_BAND_BUDGET bands per frame,
-// shared across the visible panels, and blits the offscreen target each time
-// so the partial result is actually on screen.
+// renderOnce() now hands over a bounded number of bands per frame, shared
+// across the visible panels, and blits the offscreen target each time so the
+// partial result is actually on screen.
+//
+// Both tests park the view well outside the set (center 4,4) at a very high
+// maxIter. Band count comes from the frame's *worst case* (frameBands), so
+// that combination produces more bands than the budget can ever cover in one
+// frame — while every pixel still escapes within a couple of iterations, so
+// the real work stays small enough for SwiftShader. That keeps the multi-
+// frame drain guaranteed by construction rather than by how fast the test
+// machine happens to be.
 
 const VIEWPORT = { width: 1280, height: 720 };
+const MAX_ITER = 8192;
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
@@ -28,18 +37,14 @@ test.beforeEach(async ({ page }) => {
   await page.uncheck('#showJulia');
 });
 
-test('a frame with more bands than the per-frame budget takes several animation frames to land', async ({ page }) => {
-  const result = await page.evaluate(async () => {
-    const { FRAME_BAND_BUDGET } = await import('/src/renderer.js');
+test('a frame with more bands than the budget can ever cover takes several animation frames to land', async ({ page }) => {
+  const result = await page.evaluate(async (maxIter) => {
+    const { MAX_FRAME_BAND_BUDGET } = await import('/src/renderer.js');
     const model = window.app.modelNamed("mandelbrot");
     const panel = model.panel;
 
-    // maxIter 2048 puts the band count well above the budget, while the
-    // default (fully zoomed out) view keeps the real GPU cost low: almost
-    // every pixel escapes within a few iterations, so SwiftShader still
-    // gets through it quickly. Band count comes from the worst case, which
-    // is the point — that's what the budget is spending.
-    window.app.setMaxIter(model, 2048);
+    panel.center = new DOMPointReadOnly(4, 4); // nothing here belongs to the set
+    window.app.setMaxIter(model, maxIter);
     panel.invalidateRender();
     window.app.scheduleRender();
 
@@ -56,10 +61,11 @@ test('a frame with more bands than the per-frame budget takes several animation 
       requestAnimationFrame(check);
     });
 
-    return { budget: FRAME_BAND_BUDGET, bandCount: panel.lastTileBandCount, pendingPerFrame };
-  });
+    return { ceiling: MAX_FRAME_BAND_BUDGET, bandCount: panel.lastTileBandCount, pendingPerFrame };
+  }, MAX_ITER);
 
-  expect(result.bandCount).toBeGreaterThan(result.budget);
+  // The premise the rest of the test rests on, asserted rather than assumed.
+  expect(result.bandCount).toBeGreaterThan(result.ceiling);
 
   // The frame is not submitted in one go: at least one animation frame ended
   // with bands still outstanding.
@@ -83,17 +89,18 @@ test("a panel's progressive ramp waits for its current frame instead of restarti
   // two in: the top of the canvas would be redrawn forever at ever-higher
   // iteration counts and the bottom would never be drawn at all. The ramp
   // must therefore never step while bands are still pending.
-  const result = await page.evaluate(async () => {
+  const result = await page.evaluate(async (maxIter) => {
     const model = window.app.modelNamed("mandelbrot");
     const panel = model.panel;
 
-    window.app.setMaxIter(model, 2048);
+    panel.center = new DOMPointReadOnly(4, 4);
+    window.app.setMaxIter(model, maxIter);
     panel.progressiveMode = 1;
-    // Start the ramp already high enough that each of its steps is a frame of
-    // more bands than one animation frame's budget — the regime where the
-    // gate matters. Climbing there from progressiveIter = 1 would be ~45
-    // cheap steps of nothing to observe, and slow under SwiftShader.
-    panel.progressiveIter = 1500;
+    // Start the ramp already high enough that each of its remaining steps is
+    // a frame of more bands than the budget's ceiling — the regime where the
+    // gate matters. Climbing there from progressiveIter = 1 would be dozens
+    // of cheap steps with nothing to observe.
+    panel.progressiveIter = 6600;
     panel.invalidateRender();
     window.app.scheduleRender();
 
@@ -112,18 +119,18 @@ test("a panel's progressive ramp waits for its current frame instead of restarti
           if (now.iter !== prev.iter) violations++;
         }
         prev = now;
-        if (panel.lastDisplayIter >= 2048 && now.pending === 0) { resolve(); return; }
-        if (++frames > 300) { resolve(); return; } // safety net, never reached when healthy
+        if (panel.lastDisplayIter >= maxIter && now.pending === 0) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; } // safety net, never reached when healthy
         requestAnimationFrame(check);
       };
       requestAnimationFrame(check);
     });
     return { violations, framesWithWorkLeft, reachedCap: panel.lastDisplayIter };
-  });
+  }, MAX_ITER);
 
   // Non-vacuous: the ramp really did run while bands were outstanding.
   expect(result.framesWithWorkLeft).toBeGreaterThan(0);
   expect(result.violations).toBe(0);
   // And gating the ramp doesn't stall it — it still reaches maxIter.
-  expect(result.reachedCap).toBe(2048);
+  expect(result.reachedCap).toBe(MAX_ITER);
 });

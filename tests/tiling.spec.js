@@ -34,8 +34,7 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
   // At the default viewport/maxIter (1280x720, 256), the worst-case work
   // already exceeds BAND_WORK_BUDGET, so this needs no maxIter bump — good,
   // since SwiftShader (software WebGPU) makes a real high-maxIter render slow.
-  const { submitCount, bandCount, budget } = await page.evaluate(async () => {
-    const { FRAME_BAND_BUDGET } = await import('/src/renderer.js');
+  const { submitCount, bandCount, framesWithSubmits } = await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
     let submitCount = 0;
     const origSubmit = window.app.gpuDevice.queue.submit;
@@ -48,10 +47,15 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
     panel.invalidateRender();
     window.app.scheduleRender();
     // Wait for the whole frame to land, however many animation frames its
-    // bands are spread over (see FRAME_BAND_BUDGET), rather than a fixed
-    // number of frames.
+    // bands end up spread over — the per-frame budget adapts to measured
+    // frame time (nextBandBudget), so that count isn't a fixed number.
+    // Counting the frames that carried any band gives the blits: exactly one
+    // per such frame.
+    let framesWithSubmits = 0;
+    let seen = 0;
     await new Promise((resolve) => {
       const check = () => {
+        if (submitCount > seen) { framesWithSubmits++; seen = submitCount; }
         if (submitCount > 0 && panel.renderer.pendingBands === 0) { resolve(); return; }
         requestAnimationFrame(check);
       };
@@ -59,14 +63,13 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
     });
 
     window.app.gpuDevice.queue.submit = origSubmit;
-    return { submitCount, bandCount: panel.lastTileBandCount, budget: FRAME_BAND_BUDGET };
+    return { submitCount, bandCount: panel.lastTileBandCount, framesWithSubmits };
   });
 
   expect(bandCount).toBeGreaterThan(1);
   // One submit per band, plus one blit per animation frame that carried any
-  // of them (see present() in renderer.js) — with only the Mandelbrot panel
-  // visible, each frame takes the whole budget.
-  expect(submitCount).toBe(bandCount + Math.ceil(bandCount / budget));
+  // of them (see present() in renderer.js).
+  expect(submitCount).toBe(bandCount + framesWithSubmits);
 });
 
 test('every band is actually drawn — none is left blank in the composited frame', async ({ page }) => {

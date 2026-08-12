@@ -34,21 +34,55 @@ export async function requestGPUDevice({ onDeviceLost, onUncapturedError }) {
 export const BAND_WORK_BUDGET = 1e8;
 
 // How many bands the whole app submits per animation frame, across every
-// visible panel (see shareBands). Bands are near-equal cost by construction —
-// frameBands sizes each one to ~BAND_WORK_BUDGET pixel-iterations whatever the
-// maxIter — so counting bands is a fair proxy for counting work, including
-// between two panels at different maxIter.
+// visible panel (see shareBands), before any measurement has been taken.
+// Bands are near-equal cost by construction — frameBands sizes each one to
+// ~BAND_WORK_BUDGET pixel-iterations whatever the maxIter — so counting bands
+// is a fair proxy for counting work, including between two panels at
+// different maxIter.
 //
-// The value is a compromise a fixed constant can't win: it has to be high
-// enough that an ordinary frame still lands in one go (a 1280x720 canvas at
-// the default maxIter 256 is 3 bands, a half-width panel in split view 2), and
-// low enough that an expensive frame doesn't hand the GPU hundreds of
-// milliseconds of work at once — which is the freeze this whole mechanism
-// exists to remove. Where that line falls depends entirely on the hardware:
-// one band is ~30-50ms on the GPU that prompted this, single-digit ms on a
-// fast one. Replaced by a budget measured from actual frame times in the
-// commit that follows this one.
-export const FRAME_BAND_BUDGET = 4;
+// Only a starting point: how much work fits in a frame depends entirely on
+// the hardware (one band is ~30-50ms on the GPU that prompted this,
+// single-digit ms on a fast one), so nextBandBudget takes over from the
+// second frame of every burst onward. 4 is where it starts because it covers
+// an ordinary frame in one go — a 1280x720 canvas at the default maxIter 256
+// is 3 bands, a half-width panel in split view 2 — so a cheap view never
+// visibly arrives in pieces even before the first measurement.
+export const INITIAL_FRAME_BAND_BUDGET = 4;
+
+// Ceiling on that budget. Growth is otherwise unbounded during a long cheap
+// stretch, and since backing off is by halving, a budget that had drifted
+// into the hundreds would take many frames to come back down when a frame
+// finally turned expensive — the backlog arriving exactly when responsiveness
+// matters most. At 64 the walk back down to a single band is six frames.
+export const MAX_FRAME_BAND_BUDGET = 64;
+
+// Wall-clock time one animation frame should aim for, in ms. Deliberately
+// above the 16.7ms of a 60Hz vsync: even a frame with nothing to do takes a
+// whole vsync interval, so a target at or below one would read every frame as
+// over budget and pin the budget at its floor forever. Deliberately below two
+// intervals (33.3ms), so a frame that overruns into the next vsync is still
+// recognised as too much work.
+export const TARGET_FRAME_MS = 24;
+
+// Picks the next frame's band budget from how long the last frame actually
+// took: one more band while frames come in under target, halved when they run
+// over. Additive growth probes for throughput a band at a time; the
+// multiplicative back-off is deliberately abrupt, because an overlong frame
+// is the jank this whole mechanism exists to remove — it should be given up
+// quickly and re-earned slowly. The floor is a single band: with the deal
+// rotating between panels (see shareBands) even a budget of 1 keeps every
+// panel moving, which is what makes a floor that low safe.
+//
+// The signal lags by a frame or so — a band submitted during frame K may not
+// finish on the GPU until K+1 — so the budget hunts around its equilibrium
+// rather than settling exactly on it. That is fine for what it controls: the
+// cost of being one band off is one band's worth of frame time.
+export function nextBandBudget(current, lastFrameMs, targetMs = TARGET_FRAME_MS) {
+  const base = Number.isFinite(current) && current >= 1 ? Math.floor(current) : 1;
+  if (!Number.isFinite(lastFrameMs) || lastFrameMs <= 0) return Math.min(MAX_FRAME_BAND_BUDGET, base);
+  const next = lastFrameMs > targetMs ? Math.floor(base / 2) : base + 1;
+  return Math.max(1, Math.min(MAX_FRAME_BAND_BUDGET, next));
+}
 
 // Splits a frame's band budget across panels that still have bands pending,
 // one band at a time in round-robin order, so no panel is starved by another
@@ -56,20 +90,26 @@ export const FRAME_BAND_BUDGET = 4;
 // result is the same length, sums to at most `budget`, and never gives a
 // panel more than it asked for. Non-finite or negative entries count as 0.
 //
-// The deal always starts from panel 0 and isn't rotated between frames, so a
-// budget smaller than the number of panels with work would serve the first
-// one over and over until its frame completed, and only then the next — the
-// monopoly this is meant to break, just at a frame's granularity. The budget
-// above stays clear of that; making it variable means either keeping it at or
-// above the panel count, or rotating the starting index here.
-export function shareBands(pending, budget) {
+// `firstServed` is which panel the deal starts from, and the caller advances
+// it every frame. Without it, a budget smaller than the number of panels with
+// work would hand every band to panel 0 until its frame completed and only
+// then move on — the monopoly this exists to break, merely at a frame's
+// granularity instead of a render's. That case is reachable precisely because
+// nextBandBudget can drop the budget to 1; rotating here is what lets it,
+// rather than having to hold the budget at or above the panel count.
+export function shareBands(pending, budget, firstServed = 0) {
   const wanted = pending.map((n) => (Number.isFinite(n) && n > 0 ? Math.floor(n) : 0));
   const share = wanted.map(() => 0);
+  if (wanted.length === 0) return share;
   let left = Number.isFinite(budget) ? Math.max(0, Math.floor(budget)) : 0;
+  const start = Number.isFinite(firstServed)
+    ? ((Math.floor(firstServed) % wanted.length) + wanted.length) % wanted.length
+    : 0;
   let served = true;
   while (left > 0 && served) {
     served = false;
-    for (let i = 0; i < wanted.length && left > 0; i++) {
+    for (let k = 0; k < wanted.length && left > 0; k++) {
+      const i = (start + k) % wanted.length;
       if (share[i] >= wanted[i]) continue;
       share[i]++;
       left--;
