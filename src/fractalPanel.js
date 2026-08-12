@@ -91,10 +91,22 @@ const doubleSingle = (data, hiIndex) => data[hiIndex] + data[hiIndex + 1];
 // actually used for the previous frame. That is also what makes the precision
 // floor look after itself instead of needing a magic zoom cutoff: the pixel
 // error of the double-single representation is about
-// |center| * 1e-15 * height / scale, so it grows on its own as the view zooms
-// in and eventually breaks SHIFT_TOLERANCE_PX — at roughly scale 4e-13, about
-// where the same fractal point computed from two different centres starts to
-// differ in its last bits and a seam would become visible.
+// |center| * 3.6e-15 * height / scale, so it grows on its own as the view
+// zooms in and eventually breaks SHIFT_TOLERANCE_PX — past which the same
+// fractal point computed from two different centres differs in its last bits
+// and a seam would show.
+//
+// That floor is per axis — a purely vertical pan leaves centerX untouched, so
+// its rawX is exactly zero and only centerY's error counts, and vice versa —
+// and it is not a single depth. The residual split64 leaves is quantised, so
+// approaching the floor the error jumps around from one drag to the next
+// rather than growing smoothly: measured at centre (0.370, 0.672),
+// scale 1.3e-11, a 60px drag up came out 0.037px off an integer and the same
+// drag down 0.060px, one either side of the tolerance. So between roughly
+// scale 1e-10 and 1e-13 a pan reuses pixels or doesn't depending on where its
+// particular centre happens to land, and below that it reliably doesn't.
+// Falling back costs nothing but the saving — a rejected shift is exactly the
+// full render this panel did before reprojection existed.
 export function panShiftBetween(prev, next) {
   if (!prev || !next) return null;
   if (prev.paletteType !== next.paletteType) return null;
