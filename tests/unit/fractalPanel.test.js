@@ -12,7 +12,7 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
 
 globalThis.window ??= { devicePixelRatio: 1 };
 
-const { FractalPanel, buildUniformData, sameRenderSignature } = await import('../../src/fractalPanel.js');
+const { FractalPanel, buildUniformData, sameRenderSignature, sameViewGeometry } = await import('../../src/fractalPanel.js');
 const { split64 } = await import('../../src/precision.js');
 
 // Minimal HTMLCanvasElement stand-in: a plain object with the handful of
@@ -329,4 +329,69 @@ test('FractalPanel.isRenderUpToDate/markRendered/invalidateRender', () => {
 
   panel.invalidateRender();
   assert.strictEqual(panel.isRenderUpToDate(new Float32Array([1, 2, 3])), false);
+});
+
+// sameViewGeometry decides whether a new frame starts from black or wipes down
+// over the previous image: it separates "the panel is looking somewhere else,
+// so what's there is a picture of the wrong place" from "same place, only
+// coarser or differently coloured".
+
+test('sameViewGeometry: an unchanged view is the same view', () => {
+  const a = { data: buildUniformData(makeUniformArgs()) };
+  const b = { data: buildUniformData(makeUniformArgs()) };
+  assert.strictEqual(sameViewGeometry(a, b), true);
+});
+
+test('sameViewGeometry: panning or zooming is a new view', () => {
+  const a = { data: buildUniformData(makeUniformArgs()) };
+  for (const moved of [{ center: { x: -0.4, y: 0 } }, { center: { x: -0.5, y: 0.2 } }, { scale: 1.5 }]) {
+    const b = { data: buildUniformData(makeUniformArgs(moved)) };
+    assert.strictEqual(sameViewGeometry(a, b), false, JSON.stringify(moved));
+  }
+});
+
+test('sameViewGeometry: a resize is a new view — the shader derives each pixel from the canvas size', () => {
+  const a = { data: buildUniformData(makeUniformArgs()) };
+  for (const resized of [{ canvasWidth: 900 }, { canvasHeight: 700 }]) {
+    const b = { data: buildUniformData(makeUniformArgs(resized)) };
+    assert.strictEqual(sameViewGeometry(a, b), false, JSON.stringify(resized));
+  }
+});
+
+test('sameViewGeometry: quality and colour changes keep the same view', () => {
+  // The anti-strobe guarantee: the progressive ramp starts a fresh frame at
+  // every step, and every one of those steps must keep the previous image
+  // underneath instead of blanking the panel.
+  const a = { data: buildUniformData(makeUniformArgs()) };
+  for (const same of [{ displayIter: 512 }, { smoothColoring: 1 }, { bandCount: 8 }]) {
+    const b = { data: buildUniformData(makeUniformArgs(same)) };
+    assert.strictEqual(sameViewGeometry(a, b), true, JSON.stringify(same));
+  }
+});
+
+test('sameViewGeometry: a juliaSeed change is a new view for the Julia panel only', () => {
+  const seed = { juliaSeed: { x: 0.1, y: -0.6 } };
+  const julia = (extra) => ({ data: buildUniformData(makeUniformArgs({ juliaMode: 1, ...extra })) });
+  const mandelbrot = (extra) => ({ data: buildUniformData(makeUniformArgs({ juliaMode: 0, ...extra })) });
+  // A different seed is a different set, so every pixel of the Julia panel is stale…
+  assert.strictEqual(sameViewGeometry(julia({}), julia(seed)), false);
+  // …while the Mandelbrot panel's shader never reads it.
+  assert.strictEqual(sameViewGeometry(mandelbrot({}), mandelbrot(seed)), true);
+});
+
+test('sameViewGeometry: no previous frame counts as a new view, so the panel starts clean', () => {
+  const next = { data: buildUniformData(makeUniformArgs()) };
+  assert.strictEqual(sameViewGeometry(null, next), false);
+  assert.strictEqual(sameViewGeometry(undefined, next), false);
+});
+
+test('FractalPanel.startsNewView follows the last frame it started', () => {
+  const panel = new FractalPanel(makeMockCanvas(), makeMockOverlayCanvas());
+  const view = buildUniformData(makeUniformArgs());
+
+  assert.strictEqual(panel.startsNewView(view), true); // nothing rendered yet
+  panel.markRendered(view);
+  assert.strictEqual(panel.startsNewView(buildUniformData(makeUniformArgs())), false);
+  assert.strictEqual(panel.startsNewView(buildUniformData(makeUniformArgs({ displayIter: 512 }))), false);
+  assert.strictEqual(panel.startsNewView(buildUniformData(makeUniformArgs({ scale: 1.5 }))), true);
 });

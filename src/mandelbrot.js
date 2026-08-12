@@ -940,7 +940,13 @@ export class MandelbrotApp {
     // frame already in flight alone to finish: while its bands drain, the
     // signature keeps matching, so no new frame displaces it.
     if (panel.isRenderUpToDate(data)) return;
-    panel.lastTileBandCount = panel.renderer.beginFrame(data, displayIter);
+    // A frame that looks somewhere else starts from black rather than wiping
+    // down over an image of the wrong place; a frame that only refines or
+    // recolours the same view keeps the old one underneath, which is what
+    // stops the progressive ramp from strobing (see sameViewGeometry).
+    panel.lastTileBandCount = panel.renderer.beginFrame(data, displayIter, {
+      clear: panel.startsNewView(data),
+    });
     panel.markRendered(data);
   }
 
