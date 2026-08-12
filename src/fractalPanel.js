@@ -55,6 +55,41 @@ export function sameRenderSignature(prev, next) {
   return true;
 }
 
+// Indices (same layout) that decide *which point of the plane* each pixel
+// computes: scale, center, and the canvas dimensions the shader derives its
+// per-pixel coordinate from. Everything else in the array — displayIter,
+// smoothColoring, bandCount — changes how that point is iterated or coloured,
+// not where it is.
+const VIEW_GEOMETRY_INDICES = [
+  0,           // scale
+  1, 2, 3, 4,  // centerX hi/lo, centerY hi/lo
+  10, 11,      // canvasWidth, canvasHeight
+  12,          // juliaMode
+];
+
+// True when `next` looks at the same part of the plane as `prev` did.
+//
+// This is what decides whether a new frame starts from a cleared target or
+// wipes down over the previous image (see renderer.js's beginFrame). When the
+// view moves, every pixel on the panel is a picture of somewhere else and
+// showing it under the incoming bands would be showing the user a lie; when
+// only quality or colour changed, the old image is still a picture of the same
+// place, merely coarser or differently tinted, and clearing would make the
+// progressive ramp strobe — it starts a new frame at every step.
+//
+// juliaSeed counts as part of the view for a Julia panel: a different seed is
+// a different set, so every pixel is stale. It doesn't for a Mandelbrot panel,
+// whose shader never reads it (see JULIA_SEED_INDICES above). A null `prev`
+// (nothing rendered yet, or invalidated by a resize or visibility toggle) or a
+// NaN anywhere never compares equal, so both fall through to a clear.
+export function sameViewGeometry(prev, next) {
+  if (!prev || !next) return false;
+  const indices = next.data[JULIA_MODE_INDEX] === 1
+    ? [...VIEW_GEOMETRY_INDICES, ...JULIA_SEED_INDICES]
+    : VIEW_GEOMETRY_INDICES;
+  return indices.every((i) => prev.data[i] === next.data[i]);
+}
+
 // Per-canvas render/interaction state: one Mandelbrot canvas today, a second
 // independent Julia canvas later. `juliaSeed` (the Julia-family constant, not
 // a canvas's own view) stays app-global on MandelbrotApp; everything else
@@ -148,6 +183,18 @@ export class FractalPanel {
   // the same pixels as the frame this panel last started.
   isRenderUpToDate(data) {
     return sameRenderSignature(this.lastRenderSignature, { data, paletteType: this.paletteType });
+  }
+
+  // True when the frame about to start looks somewhere else than the one this
+  // panel last started, so what's on the panel is stale rather than just
+  // coarse — see sameViewGeometry.
+  //
+  // Deliberately hands over the uniform data alone, unlike isRenderUpToDate
+  // above: paletteType has no bearing on where the panel is looking, and
+  // passing it here would suggest the palette can make a frame count as a new
+  // view — the opposite of the rule.
+  startsNewView(data) {
+    return !sameViewGeometry(this.lastRenderSignature, { data });
   }
 
   markRendered(data) {

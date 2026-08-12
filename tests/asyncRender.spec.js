@@ -26,6 +26,9 @@ const VIEWPORT = { width: 1280, height: 720 };
 // under SwiftShader that blit is software-rasterized and far from free.
 const TARGET_BANDS = 20;
 
+// A cleared row, as sampleColumn reports it.
+const BLACK = '0,0,0';
+
 // The maxIter that produces roughly TARGET_BANDS bands, derived from
 // BAND_WORK_BUDGET instead of hardcoded. That constant is tuned against real
 // hardware and has already moved once; these tests are about how a frame is
@@ -242,12 +245,16 @@ test("a panel's progressive ramp waits for its current frame instead of restarti
   expect(result.reachedCap).toBe(maxIter);
 });
 
-test('a partly landed frame is already on screen, new content over old', async ({ page }) => {
+test('a partly landed frame is already on screen, with the view it moved off cleared', async ({ page }) => {
   // The user-facing point of the whole mechanism, and the one thing nothing
-  // else here would notice: a frame reveals itself top-down over the previous
-  // image rather than the panel sitting on the old frame until every band is
-  // in. A blit that only ever showed completed frames would pass every other
-  // test in this file.
+  // else here would notice: a frame reveals itself top-down rather than the
+  // panel sitting on the old frame until every band is in. A blit that only
+  // ever showed completed frames would pass every other test in this file.
+  //
+  // Moving the view also clears what was there, so the rows not yet drawn read
+  // as black instead of as a picture of somewhere else (see
+  // fractalPanel.js's sameViewGeometry). The companion test below covers the
+  // other half of that rule.
   //
   // Both views are deliberately flat single-colour: one where every pixel
   // escapes on the first iteration, one entirely inside the main cardioid
@@ -318,11 +325,201 @@ test('a partly landed frame is already on screen, new content over old', async (
   const [partialTop, partialBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
   // Top of the panel already shows the new view…
   expect(partialTop).not.toBe(outsideTop);
-  // …while the bottom still shows the previous one, rather than black or
-  // nothing: bands overwrite, they don't clear.
-  expect(partialBottom).toBe(outsideBottom);
+  // …and the rows it hasn't reached were cleared rather than left showing the
+  // view the panel moved off. Asserting the old view wasn't black to begin
+  // with keeps that from passing vacuously.
+  expect(outsideBottom).not.toBe(BLACK);
+  expect(partialBottom).toBe(BLACK);
 
   // Let it finish: the whole panel ends up on the new view.
+  await page.evaluate(async () => {
+    const panel = window.app.modelNamed("mandelbrot").panel;
+    panel.renderer.advanceFrame = window.__origAdvanceFrame;
+    window.app.scheduleRender();
+    await new Promise((resolve) => {
+      let frames = 0;
+      const check = () => {
+        if (panel.renderer.pendingBands === 0 && !window.app.rafPending) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
+  });
+
+  const [finalTop, finalBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
+  expect(finalTop).toBe(partialTop);
+  expect(finalBottom).toBe(partialTop);
+});
+
+test('a frame that only recolours the same view keeps the old image underneath', async ({ page }) => {
+  // The other half of the clear rule, and the reason it isn't simply "clear on
+  // every new frame": the progressive ramp starts a fresh frame at every step,
+  // so blanking the panel for anything but a view change would make the whole
+  // reveal strobe. A change of palette is the same view in different colours,
+  // exactly like a ramp step is the same view at a finer iteration count.
+  const maxIter = await maxIterForTargetBands(page);
+  const rect = await page.evaluate(async (maxIter) => {
+    const model = window.app.modelNamed("mandelbrot");
+    const panel = model.panel;
+    window.app.setMaxIter(model, maxIter);
+    window.app.applyPalette(model, 5);
+
+    panel.center = new DOMPointReadOnly(4, 4); // flat: every pixel escapes at once
+    panel.scale = 3;
+    panel.invalidateRender();
+    window.app.scheduleRender();
+    await new Promise((resolve) => {
+      let frames = 0;
+      const check = () => {
+        if (panel.renderer.pendingBands === 0 && !window.app.rafPending) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
+
+    const r = panel.canvas.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  }, maxIter);
+
+  const near = { top: 10, bottom: Math.round(rect.height) - 10 };
+  const [beforeTop, beforeBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
+  expect(beforeTop).toBe(beforeBottom);
+  expect(beforeTop).not.toBe(BLACK);
+
+  // Recolour without touching the view, then freeze after one animation frame.
+  const landed = await page.evaluate(async () => {
+    const model = window.app.modelNamed("mandelbrot");
+    const panel = model.panel;
+
+    // Palette 0 is a gradient, so an escape at iteration 1 lands at t≈0 on its
+    // first colour — a dark purple, distinct from palette 5's white. Palette 6
+    // would not do: it is banded on the same colour list whose entry 1 is also
+    // white, and the comparison below would be vacuous.
+    window.app.applyPalette(model, 0); // same geometry, different colours
+    window.app.scheduleRender();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    window.__origAdvanceFrame = panel.renderer.advanceFrame;
+    panel.renderer.advanceFrame = () => 0;
+
+    return { total: panel.lastTileBandCount, pending: panel.renderer.pendingBands };
+  });
+
+  expect(landed.pending).toBeGreaterThan(0);
+  expect(landed.total - landed.pending).toBeGreaterThan(0);
+
+  const [partialTop, partialBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
+  // The recoloured rows really did change…
+  expect(partialTop).not.toBe(beforeTop);
+  // …and the rows still to come kept the previous colours rather than going
+  // black, which is what a ramp step relies on.
+  expect(partialBottom).toBe(beforeBottom);
+
+  await page.evaluate(async () => {
+    const panel = window.app.modelNamed("mandelbrot").panel;
+    panel.renderer.advanceFrame = window.__origAdvanceFrame;
+    window.app.scheduleRender();
+    await new Promise((resolve) => {
+      let frames = 0;
+      const check = () => {
+        if (panel.renderer.pendingBands === 0 && !window.app.rafPending) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
+  });
+
+  const [finalTop, finalBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
+  expect(finalTop).toBe(partialTop);
+  expect(finalBottom).toBe(partialTop);
+});
+
+test('a clear the budget deferred is still owed when the next frame only recolours', async ({ page }) => {
+  // The clear rides on band 0's loadOp, so a frame that gets none of the
+  // per-frame budget — which happens when the other panel is draining and the
+  // budget is down to a single band — hasn't wiped anything yet. If a frame
+  // that only recolours the same view then replaces it, that frame correctly
+  // asks for no clear of its own, and the wipe owed for the earlier move would
+  // be lost: the panel would keep showing the view it moved off underneath.
+  //
+  // Freezing the drain is how the "got none of the budget" state is reached
+  // deterministically here, rather than by contriving two busy panels and a
+  // collapsed budget.
+  const maxIter = await maxIterForTargetBands(page);
+  const rect = await page.evaluate(async (maxIter) => {
+    const model = window.app.modelNamed("mandelbrot");
+    const panel = model.panel;
+    window.app.setMaxIter(model, maxIter);
+    window.app.applyPalette(model, 5);
+
+    panel.center = new DOMPointReadOnly(4, 4); // flat white: escapes at iteration 1
+    panel.scale = 3;
+    panel.invalidateRender();
+    window.app.scheduleRender();
+    await new Promise((resolve) => {
+      let frames = 0;
+      const check = () => {
+        if (panel.renderer.pendingBands === 0 && !window.app.rafPending) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
+
+    const r = panel.canvas.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  }, maxIter);
+
+  const near = { top: 10, bottom: Math.round(rect.height) - 10 };
+  const [beforeTop, beforeBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
+  expect(beforeTop).toBe(beforeBottom);
+  expect(beforeTop).not.toBe(BLACK);
+
+  const partial = await page.evaluate(async () => {
+    const model = window.app.modelNamed("mandelbrot");
+    const panel = model.panel;
+    const advanceFrame = panel.renderer.advanceFrame;
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+    // Nothing lands from here on: the frames below are started but get no bands.
+    panel.renderer.advanceFrame = () => 0;
+
+    // Move the view. This frame asks for a clear and doesn't get to perform it.
+    panel.center = new DOMPointReadOnly(-4, 4); // elsewhere, still all-escaping
+    window.app.scheduleRender();
+    await nextFrame();
+    const startedWithMove = panel.renderer.pendingBands;
+
+    // Recolour without moving. On its own this frame is right to ask for no
+    // clear — the view it was handed hasn't changed since the frame above.
+    window.app.applyPalette(model, 0);
+    window.app.scheduleRender();
+    await nextFrame();
+
+    // Let exactly one animation frame's worth of bands land, then stop again.
+    panel.renderer.advanceFrame = advanceFrame;
+    window.app.scheduleRender();
+    await nextFrame();
+    panel.renderer.advanceFrame = () => 0;
+    window.__origAdvanceFrame = advanceFrame;
+
+    return { startedWithMove, total: panel.lastTileBandCount, pending: panel.renderer.pendingBands };
+  });
+
+  // The premise: the moved frame really was started and really got nothing.
+  expect(partial.startedWithMove).toBeGreaterThan(0);
+  expect(partial.pending).toBeGreaterThan(0);
+  expect(partial.total - partial.pending).toBeGreaterThan(0);
+
+  const [partialTop, partialBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
+  // The rows that landed show the new colours…
+  expect(partialTop).not.toBe(beforeTop);
+  // …and the rest was wiped, rather than still showing the view moved off.
+  expect(partialBottom).toBe(BLACK);
+
   await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
     panel.renderer.advanceFrame = window.__origAdvanceFrame;

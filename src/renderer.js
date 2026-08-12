@@ -307,19 +307,35 @@ export async function attachCanvas(device, canvas, palette256) {
   let job = null;
 
   // Starts a frame, dropping any bands of the previous one still unsubmitted.
-  // Whatever is already on the offscreen target stays there and the new
-  // frame's bands overwrite it from the top down, so a panel interrupted
-  // mid-frame keeps showing the newest view at the top over progressively
-  // older content below, rather than going blank. Returns how many bands this
+  //
+  // `clear` says whether the offscreen target should be wiped first. Without
+  // it the new frame's bands overwrite the old image from the top down, so a
+  // panel interrupted mid-frame keeps showing the newest content at the top
+  // over progressively older content below — right when the frame is a
+  // refinement of the same view, wrong when the view itself moved, since then
+  // the untouched rows are a picture of somewhere else. The caller decides
+  // (see fractalPanel.js's sameViewGeometry). Returns how many bands this
   // frame was split into.
-  const beginFrame = (uniformData, maxIter) => {
+  const beginFrame = (uniformData, maxIter, { clear = false } = {}) => {
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
     ensureOffscreen();
     // Banded off the offscreen target's own size, not the live canvas's: the
     // canvas can be resized while a frame is still draining, and every band
     // still queued has to stay inside the attachment it was computed for.
     // ensureOffscreen above has just reconciled the two for a new frame.
-    job = { bands: frameBands(offscreenWidth, offscreenHeight, maxIter), next: 0 };
+    // A clear stays owed until it has actually happened. It rides on band 0's
+    // loadOp, so a frame replaced before that band was submitted — which the
+    // per-frame budget can cause, by handing this panel none of it while the
+    // other panel drains — never wiped anything, and the target still holds
+    // the view the panel moved off. Without carrying it over, a later frame
+    // that only recolours the same view would correctly ask for no clear and
+    // the wipe would be lost for good.
+    const owed = job !== null && job.next === 0 && job.clear;
+    job = {
+      bands: frameBands(offscreenWidth, offscreenHeight, maxIter),
+      next: 0,
+      clear: clear || owed,
+    };
     return job.bands.length;
   };
 
@@ -331,13 +347,12 @@ export async function attachCanvas(device, canvas, palette256) {
   // bands are pixel-identical to an unbanded render, just split across more,
   // shorter submits. Returns how many bands were actually submitted.
   //
-  // Every band loads rather than clears: the offscreen target keeps whatever
-  // the previous frame left there, and a band overwrites only its own rows.
-  // The old "clear on band 0" is gone with the swap-chain target it existed
-  // for — loadOp applies to the whole attachment, not to the scissor rect, so
-  // it was the only way to start from a blank frame back when each frame had
-  // to fully repaint a fresh canvas texture. Keeping the previous image
-  // underneath is what lets a partially rendered frame still be shown.
+  // A band loads rather than clears, so it overwrites only its own rows and
+  // leaves the rest of the previous frame showing. The exception is the first
+  // band of a frame that asked to be cleared (see beginFrame): loadOp applies
+  // to the whole attachment rather than to the scissor rect, so putting the
+  // clear there wipes the target and draws band 0 in the same pass, at no
+  // extra submit.
   const advanceFrame = (maxBands) => {
     if (!job) return 0;
     const wanted = Number.isFinite(maxBands) ? Math.max(0, Math.floor(maxBands)) : 0;
@@ -346,12 +361,14 @@ export async function attachCanvas(device, canvas, palette256) {
 
     for (; job.next < upTo; job.next++) {
       const band = job.bands[job.next];
+      const wipeFirst = job.clear && job.next === 0;
       const encoder = device.createCommandEncoder();
       const pass = encoder.beginRenderPass({
         colorAttachments: [{
           view: offscreenView,
-          loadOp: "load",
-          storeOp: "store"
+          loadOp: wipeFirst ? "clear" : "load",
+          storeOp: "store",
+          clearValue: { r: 0, g: 0, b: 0, a: 1 }
         }]
       });
 
