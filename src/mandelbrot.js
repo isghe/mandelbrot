@@ -75,7 +75,8 @@ export class MandelbrotApp {
   // whose bands haven't all been submitted yet (see advanceRenderJobs).
   needsAnotherFrame = false;
   // How many bands all the visible panels together may submit this animation
-  // frame, adapted from how long the last one took (see nextBandBudget).
+  // frame, adapted from how long the last one took (see nextBandBudget) and
+  // re-learned from scratch for each burst (see scheduleRender).
   bandBudget = INITIAL_FRAME_BAND_BUDGET;
   // When the previous animation frame ran, or null if this frame starts a
   // fresh burst. Only frames inside one continuous burst are timed against
@@ -469,6 +470,17 @@ export class MandelbrotApp {
       if (this.needsAnotherFrame) {
         this.lastFrameAt = now;
         this.scheduleRender();
+      } else {
+        // Burst over — the next one starts from the initial budget instead of
+        // inheriting whatever this one settled on. Carrying it over sounds
+        // harmless (the hardware's speed hasn't changed) but isn't: a cheap
+        // interaction is only a frame or two long, so a run of them walks the
+        // budget up a band at a time toward its ceiling, and the first
+        // expensive frame after that would hand the GPU the whole ceiling's
+        // worth in one go — the multi-second freeze this exists to remove.
+        // Re-earning it costs one band per frame at the start of an expensive
+        // burst, which is many frames long by definition.
+        this.bandBudget = INITIAL_FRAME_BAND_BUDGET;
       }
     });
   };

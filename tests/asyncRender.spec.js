@@ -7,16 +7,21 @@ import { test, expect } from '@playwright/test';
 // across the visible panels, and blits the offscreen target each time so the
 // partial result is actually on screen.
 //
-// Both tests park the view well outside the set (center 4,4) at a very high
-// maxIter. Band count comes from the frame's *worst case* (frameBands), so
-// that combination produces more bands than the budget can ever cover in one
-// frame — while every pixel still escapes within a couple of iterations, so
-// the real work stays small enough for SwiftShader. That keeps the multi-
-// frame drain guaranteed by construction rather than by how fast the test
-// machine happens to be.
+// Two things make these tests deterministic despite the budget adapting to
+// whatever the machine can do:
+//
+// - the budget is re-learned per burst (see the second test), so the *first*
+//   animation frame of each one always spends exactly
+//   INITIAL_FRAME_BAND_BUDGET — a frame of more bands than that is therefore
+//   guaranteed to span several animation frames, however fast the hardware;
+// - band count comes from the frame's worst case (frameBands), while the real
+//   GPU cost comes from the view. Parking the view at center (4,4), where
+//   nothing belongs to the set, gives a high band count for pixels that all
+//   escape within a couple of iterations — so SwiftShader stays fast.
 
 const VIEWPORT = { width: 1280, height: 720 };
-const MAX_ITER = 8192;
+// 19 bands at this viewport, comfortably above the initial budget of 4.
+const MAX_ITER = 2048;
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
@@ -37,9 +42,9 @@ test.beforeEach(async ({ page }) => {
   await page.uncheck('#showJulia');
 });
 
-test('a frame with more bands than the budget can ever cover takes several animation frames to land', async ({ page }) => {
+test('a frame with more bands than one animation frame can carry lands over several', async ({ page }) => {
   const result = await page.evaluate(async (maxIter) => {
-    const { MAX_FRAME_BAND_BUDGET } = await import('/src/renderer.js');
+    const { INITIAL_FRAME_BAND_BUDGET } = await import('/src/renderer.js');
     const model = window.app.modelNamed("mandelbrot");
     const panel = model.panel;
 
@@ -61,11 +66,11 @@ test('a frame with more bands than the budget can ever cover takes several anima
       requestAnimationFrame(check);
     });
 
-    return { ceiling: MAX_FRAME_BAND_BUDGET, bandCount: panel.lastTileBandCount, pendingPerFrame };
+    return { initial: INITIAL_FRAME_BAND_BUDGET, bandCount: panel.lastTileBandCount, pendingPerFrame };
   }, MAX_ITER);
 
   // The premise the rest of the test rests on, asserted rather than assumed.
-  expect(result.bandCount).toBeGreaterThan(result.ceiling);
+  expect(result.bandCount).toBeGreaterThan(result.initial);
 
   // The frame is not submitted in one go: at least one animation frame ended
   // with bands still outstanding.
@@ -83,6 +88,52 @@ test('a frame with more bands than the budget can ever cover takes several anima
   expect(result.pendingPerFrame.at(-1)).toBe(0);
 });
 
+test('the band budget is re-learned per burst instead of carried into the next one', async ({ page }) => {
+  // Carrying the budget across bursts would let a run of cheap one-frame
+  // interactions walk it up toward its ceiling, so the next expensive frame
+  // would hand the GPU the whole ceiling's worth at once — the freeze the
+  // per-frame budget exists to prevent.
+  const result = await page.evaluate(async (maxIter) => {
+    const { INITIAL_FRAME_BAND_BUDGET } = await import('/src/renderer.js');
+    const model = window.app.modelNamed("mandelbrot");
+    const panel = model.panel;
+
+    panel.center = new DOMPointReadOnly(4, 4);
+    window.app.setMaxIter(model, maxIter);
+    panel.invalidateRender();
+    window.app.scheduleRender();
+
+    // This frame's bands drain over several animation frames, so the
+    // controller takes measurements and moves the budget off its starting
+    // value. The poll runs after the app's own callback each frame, so seeing
+    // rafPending false means the app chose not to re-arm: the burst is over
+    // and its final callback — the one that resets — has already run.
+    const seen = new Set();
+    await new Promise((resolve) => {
+      let frames = 0;
+      const check = () => {
+        seen.add(window.app.bandBudget);
+        if (panel.renderer.pendingBands === 0 && !window.app.rafPending) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; } // safety net, never reached when healthy
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
+
+    return {
+      initial: INITIAL_FRAME_BAND_BUDGET,
+      budgetsSeen: [...seen],
+      budgetAfterBurst: window.app.bandBudget,
+    };
+  }, MAX_ITER);
+
+  // Non-vacuous: the controller really did move the budget while the burst ran
+  // (up or down — either direction proves it was live).
+  expect(result.budgetsSeen.some((b) => b !== result.initial)).toBe(true);
+  // And the next burst will start from the initial value regardless.
+  expect(result.budgetAfterBurst).toBe(result.initial);
+});
+
 test("a panel's progressive ramp waits for its current frame instead of restarting it every frame", async ({ page }) => {
   // Without the gate, progressiveIter would step on every animation frame,
   // so every frame would start a fresh render job and abandon it a band or
@@ -96,11 +147,11 @@ test("a panel's progressive ramp waits for its current frame instead of restarti
     panel.center = new DOMPointReadOnly(4, 4);
     window.app.setMaxIter(model, maxIter);
     panel.progressiveMode = 1;
-    // Start the ramp already high enough that each of its remaining steps is
-    // a frame of more bands than the budget's ceiling — the regime where the
-    // gate matters. Climbing there from progressiveIter = 1 would be dozens
-    // of cheap steps with nothing to observe.
-    panel.progressiveIter = 6600;
+    // Start the ramp high enough that each of its remaining steps is a frame
+    // of more bands than one animation frame carries. Climbing there from
+    // progressiveIter = 1 would be dozens of cheap steps with nothing to
+    // observe.
+    panel.progressiveIter = 1500;
     panel.invalidateRender();
     window.app.scheduleRender();
 
