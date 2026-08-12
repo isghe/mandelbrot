@@ -1,15 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { fractalShot } from './fractalShot.js';
 
-// The #ui panel overlays the full-viewport #mandelbrotGfx canvas, so an element
-// screenshot of the canvas still includes overlaid panel pixels (e.g. the
-// Back/Forward disabled styling). Clip to a region right of the panel to
-// compare only the rendered fractal.
-const FRACTAL_CLIP = { x: 250, y: 0, width: 1030, height: 720 };
 const VIEWPORT = { width: 1280, height: 720 };
-
-async function fractalShot(page) {
-  return page.screenshot({ clip: FRACTAL_CLIP });
-}
 
 // Dispatches a burst of native `wheel` events directly in-page, spaced close
 // together like a real trackpad/mouse gesture. Driving this through

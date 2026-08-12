@@ -27,11 +27,25 @@ export async function requestGPUDevice({ onDeviceLost, onUncapturedError }) {
 // full-canvas draw at high maxIter (observed: ~6.9G iterations, >2s) can
 // exceed the GPU driver's TDR watchdog and lose the device. Splitting the
 // frame into horizontal scissored bands, each under this budget, keeps every
-// individual submit short — on the hardware that produced the DEVICE_HUNG,
-// throughput was ≤~3G iterations/s, so 1e8 targets ~30-50ms per submit,
-// well under the watchdog. The worst case (972px height, maxIter 8192)
-// produces ~81 submits per frame.
-export const BAND_WORK_BUDGET = 1e8;
+// individual submit short — well under the watchdog on the hardware that
+// produced the DEVICE_HUNG, whose throughput was ≤~3G iterations/s.
+//
+// Avoiding the watchdog is no longer what sets this number, though; staying
+// interactive is, and it is the tighter of the two constraints. A band is the
+// smallest unit of work the frame scheduler can place (see
+// FRAME_BAND_BUDGET), so a band that costs more than a frame leaves that
+// scheduler nothing to do: nextBandBudget pins at its floor of one band and
+// every frame overruns TARGET_FRAME_MS anyway. At 1e8 a band was ~30-50ms on
+// that hardware — already over the target on its own, which is why controls
+// stayed usable but not smooth during a heavy render.
+//
+// 2.5e7 puts a band at roughly 8ms there, so two or three fit in a frame and
+// the budget controller has room to actually regulate. The worst case grows
+// from ~81 submits per frame to ~324, but those are spread across the many
+// animation frames the same render already took, only a handful per frame, at
+// tens of microseconds of CPU each. Shorter submits also sit further from the
+// TDR watchdog, so the original reason for banding is served better, not worse.
+export const BAND_WORK_BUDGET = 2.5e7;
 
 // How many bands the whole app submits per animation frame, across every
 // visible panel (see shareBands), before any measurement has been taken.
@@ -122,9 +136,11 @@ export function shareBands(pending, budget, firstServed = 0) {
 // Splits [0, height) into horizontal bands, each with worst-case pixel-
 // iteration cost (width * band.height * maxIter) at or under `budget`.
 // Returns [{ y, height }, ...] covering the canvas exactly, no gaps/overlap.
-// A single row can never exceed the budget in practice (max canvas width
-// 7680 * maxIter cap 8192 ≈ 63M, see ITER.max in mandelbrot.js), so rows is
-// always clamped to at least 1.
+// One row of an 8K canvas at the maxIter cap is ~63M pixel-iterations (7680 *
+// 8192, see ITER.max in mandelbrot.js), which exceeds the budget on its own —
+// a band can't be subdivided below a single row, so the clamp to at least one
+// row is what covers that case rather than a theoretical impossibility. Such a
+// frame is minutes of GPU work whatever the banding does with it.
 export function frameBands(width, height, maxIter, budget = BAND_WORK_BUDGET) {
   const safeHeight = Number.isFinite(height) && height > 0 ? height : 1;
   if (!Number.isFinite(width) || !Number.isFinite(maxIter) || width <= 0 || maxIter <= 0) {

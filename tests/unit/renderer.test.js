@@ -38,8 +38,14 @@ function assertExactCoverage(bands, height) {
 }
 
 test('frameBands: cheap frame (work under budget) returns a single band', () => {
-  const bands = frameBands(400, 300, 256);
-  assert.deepStrictEqual(bands, [{ y: 0, height: 300 }]);
+  // maxIter derived from the budget rather than hardcoded: this assertion is
+  // about "a frame comfortably under the budget isn't split", not about any
+  // particular value of BAND_WORK_BUDGET, which is tuned against real
+  // hardware and expected to move.
+  const width = 400, height = 300;
+  const maxIter = Math.floor(BAND_WORK_BUDGET / (width * height * 4));
+  assert.ok(maxIter >= 1, 'budget must leave room for a cheap frame at all');
+  assert.deepStrictEqual(frameBands(width, height, maxIter), [{ y: 0, height }]);
 });
 
 test('frameBands: expensive frame (high maxIter) splits into multiple bands', () => {

@@ -78,7 +78,19 @@ test('every band is actually drawn — none is left blank in the composited fram
     // Same as above: force the redraw past the per-panel render skip.
     panel.invalidateRender();
     window.app.scheduleRender();
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Wait for the frame to be fully submitted, not for a fixed number of
+    // animation frames: how many it takes depends on the band count and on
+    // the adaptive per-frame budget, so a fixed wait would screenshot a frame
+    // whose last bands hadn't landed yet and report them as blank.
+    await new Promise((resolve) => {
+      let frames = 0;
+      const check = () => {
+        if (panel.renderer.pendingBands === 0 && !window.app.rafPending) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; } // safety net, never reached when healthy
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
     await window.app.gpuDevice.queue.onSubmittedWorkDone();
 
     const { frameBands } = await import('/src/renderer.js');
