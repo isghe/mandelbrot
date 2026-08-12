@@ -34,7 +34,8 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
   // At the default viewport/maxIter (1280x720, 256), the worst-case work
   // already exceeds BAND_WORK_BUDGET, so this needs no maxIter bump — good,
   // since SwiftShader (software WebGPU) makes a real high-maxIter render slow.
-  const { submitCount, bandCount } = await page.evaluate(async () => {
+  const { submitCount, bandCount, budget } = await page.evaluate(async () => {
+    const { FRAME_BAND_BUDGET } = await import('/src/renderer.js');
     const panel = window.app.modelNamed("mandelbrot").panel;
     let submitCount = 0;
     const origSubmit = window.app.gpuDevice.queue.submit;
@@ -46,16 +47,26 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
     // no-op here.
     panel.invalidateRender();
     window.app.scheduleRender();
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Wait for the whole frame to land, however many animation frames its
+    // bands are spread over (see FRAME_BAND_BUDGET), rather than a fixed
+    // number of frames.
+    await new Promise((resolve) => {
+      const check = () => {
+        if (submitCount > 0 && panel.renderer.pendingBands === 0) { resolve(); return; }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
 
     window.app.gpuDevice.queue.submit = origSubmit;
-    return { submitCount, bandCount: panel.lastTileBandCount };
+    return { submitCount, bandCount: panel.lastTileBandCount, budget: FRAME_BAND_BUDGET };
   });
 
   expect(bandCount).toBeGreaterThan(1);
-  // One submit per band, plus the single blit that puts the offscreen target
-  // on screen (see present() in renderer.js).
-  expect(submitCount).toBe(bandCount + 1);
+  // One submit per band, plus one blit per animation frame that carried any
+  // of them (see present() in renderer.js) — with only the Mandelbrot panel
+  // visible, each frame takes the whole budget.
+  expect(submitCount).toBe(bandCount + Math.ceil(bandCount / budget));
 });
 
 test('every band is actually drawn — none is left blank in the composited frame', async ({ page }) => {

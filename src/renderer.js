@@ -33,6 +33,52 @@ export async function requestGPUDevice({ onDeviceLost, onUncapturedError }) {
 // produces ~81 submits per frame.
 export const BAND_WORK_BUDGET = 1e8;
 
+// How many bands the whole app submits per animation frame, across every
+// visible panel (see shareBands). Bands are near-equal cost by construction —
+// frameBands sizes each one to ~BAND_WORK_BUDGET pixel-iterations whatever the
+// maxIter — so counting bands is a fair proxy for counting work, including
+// between two panels at different maxIter.
+//
+// The value is a compromise a fixed constant can't win: it has to be high
+// enough that an ordinary frame still lands in one go (a 1280x720 canvas at
+// the default maxIter 256 is 3 bands, a half-width panel in split view 2), and
+// low enough that an expensive frame doesn't hand the GPU hundreds of
+// milliseconds of work at once — which is the freeze this whole mechanism
+// exists to remove. Where that line falls depends entirely on the hardware:
+// one band is ~30-50ms on the GPU that prompted this, single-digit ms on a
+// fast one. Replaced by a budget measured from actual frame times in the
+// commit that follows this one.
+export const FRAME_BAND_BUDGET = 4;
+
+// Splits a frame's band budget across panels that still have bands pending,
+// one band at a time in round-robin order, so no panel is starved by another
+// one's longer queue. `pending` is each panel's remaining band count; the
+// result is the same length, sums to at most `budget`, and never gives a
+// panel more than it asked for. Non-finite or negative entries count as 0.
+//
+// The deal always starts from panel 0 and isn't rotated between frames, so a
+// budget smaller than the number of panels with work would serve the first
+// one over and over until its frame completed, and only then the next — the
+// monopoly this is meant to break, just at a frame's granularity. The budget
+// above stays clear of that; making it variable means either keeping it at or
+// above the panel count, or rotating the starting index here.
+export function shareBands(pending, budget) {
+  const wanted = pending.map((n) => (Number.isFinite(n) && n > 0 ? Math.floor(n) : 0));
+  const share = wanted.map(() => 0);
+  let left = Number.isFinite(budget) ? Math.max(0, Math.floor(budget)) : 0;
+  let served = true;
+  while (left > 0 && served) {
+    served = false;
+    for (let i = 0; i < wanted.length && left > 0; i++) {
+      if (share[i] >= wanted[i]) continue;
+      share[i]++;
+      left--;
+      served = true;
+    }
+  }
+  return share;
+}
+
 // Splits [0, height) into horizontal bands, each with worst-case pixel-
 // iteration cost (width * band.height * maxIter) at or under `budget`.
 // Returns [{ y, height }, ...] covering the canvas exactly, no gaps/overlap.
@@ -196,13 +242,38 @@ export async function attachCanvas(device, canvas, palette256) {
     device.queue.submit([encoder.finish()]);
   };
 
-  // Splits the frame into scissored horizontal bands (see frameBands), each
-  // submitted as its own command buffer, so no single submit is long enough
-  // to trip the GPU driver's TDR watchdog at high maxIter. The fragment
-  // shader derives its per-pixel fractal coordinate purely from NDC
-  // position + canvas width/height (mandelbrot.wgsl), which scissoring
-  // doesn't change — so bands are pixel-identical to an unbanded render,
-  // just split across more, shorter submits. Returns the band count.
+  // The current frame's bands and how many of them have been submitted. This
+  // outlives the animation frame that started it: submitting a band is cheap
+  // on the CPU but can be tens of milliseconds of GPU work, so an expensive
+  // frame's bands are handed over a few per animation frame (see
+  // advanceFrame) instead of all at once — which is what left the UI frozen
+  // for as long as the whole frame took.
+  let job = null;
+
+  // Starts a frame, dropping any bands of the previous one still unsubmitted.
+  // Whatever is already on the offscreen target stays there and the new
+  // frame's bands overwrite it from the top down, so a panel interrupted
+  // mid-frame keeps showing the newest view at the top over progressively
+  // older content below, rather than going blank. Returns how many bands this
+  // frame was split into.
+  const beginFrame = (uniformData, maxIter) => {
+    device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+    ensureOffscreen();
+    // Banded off the offscreen target's own size, not the live canvas's: the
+    // canvas can be resized while a frame is still draining, and every band
+    // still queued has to stay inside the attachment it was computed for.
+    // ensureOffscreen above has just reconciled the two for a new frame.
+    job = { bands: frameBands(offscreenWidth, offscreenHeight, maxIter), next: 0 };
+    return job.bands.length;
+  };
+
+  // Submits up to `maxBands` of the current frame's remaining bands, each as
+  // its own command buffer, so no single submit is long enough to trip the
+  // GPU driver's TDR watchdog at high maxIter. The fragment shader derives
+  // its per-pixel fractal coordinate purely from NDC position + canvas
+  // width/height (mandelbrot.wgsl), which scissoring doesn't change — so
+  // bands are pixel-identical to an unbanded render, just split across more,
+  // shorter submits. Returns how many bands were actually submitted.
   //
   // Every band loads rather than clears: the offscreen target keeps whatever
   // the previous frame left there, and a band overwrites only its own rows.
@@ -211,13 +282,14 @@ export async function attachCanvas(device, canvas, palette256) {
   // it was the only way to start from a blank frame back when each frame had
   // to fully repaint a fresh canvas texture. Keeping the previous image
   // underneath is what lets a partially rendered frame still be shown.
-  const render = (uniformData, maxIter) => {
-    device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-    ensureOffscreen();
+  const advanceFrame = (maxBands) => {
+    if (!job) return 0;
+    const wanted = Number.isFinite(maxBands) ? Math.max(0, Math.floor(maxBands)) : 0;
+    const upTo = Math.min(job.bands.length, job.next + wanted);
+    const from = job.next;
 
-    const bands = frameBands(canvas.width, canvas.height, maxIter);
-
-    for (const band of bands) {
+    for (; job.next < upTo; job.next++) {
+      const band = job.bands[job.next];
       const encoder = device.createCommandEncoder();
       const pass = encoder.beginRenderPass({
         colorAttachments: [{
@@ -229,16 +301,23 @@ export async function attachCanvas(device, canvas, palette256) {
 
       pass.setPipeline(pipeline);
       pass.setBindGroup(0, bindGroup);
-      pass.setScissorRect(0, band.y, canvas.width, band.height);
+      pass.setScissorRect(0, band.y, offscreenWidth, band.height);
       pass.draw(3);
       pass.end();
 
       device.queue.submit([encoder.finish()]);
     }
 
-    present();
-    return bands.length;
+    return job.next - from;
   };
 
-  return { render, writePalette };
+  return {
+    beginFrame,
+    advanceFrame,
+    present,
+    writePalette,
+    // Bands of the current frame not yet submitted; 0 once it has fully
+    // landed, which is also how the caller knows the frame is complete.
+    get pendingBands() { return job ? job.bands.length - job.next : 0; },
+  };
 }

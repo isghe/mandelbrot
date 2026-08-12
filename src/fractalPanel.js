@@ -118,10 +118,12 @@ export class FractalPanel {
   // device loss isn't tracked per panel.
   renderer = null;
 
-  // Set by MandelbrotApp.renderOnce()/renderPanel() after each frame —
-  // exposed for e2e observation of "what's currently rendered" (progressive
-  // ramp position) and "how many scissored bands the tiling fix split the
-  // frame into" (see renderer.js's BAND_WORK_BUDGET). Named lastTileBandCount,
+  // Set by MandelbrotApp.renderOnce()/startRenderIfNeeded() as each frame
+  // starts — exposed for e2e observation of "what's currently rendered"
+  // (progressive ramp position) and "how many scissored bands the tiling fix
+  // split the frame into" (see renderer.js's BAND_WORK_BUDGET). How many of
+  // those bands are still to be submitted isn't mirrored here: the renderer
+  // handle's own `pendingBands` already reports it, live. Named lastTileBandCount,
   // not lastBandCount, specifically to avoid reading like a variant of
   // `bandCount` above: that one counts a banded palette's color steps, this
   // one counts GPU scissor tiles for TDR mitigation — unrelated concepts
@@ -130,7 +132,7 @@ export class FractalPanel {
   lastTileBandCount = null;
 
   // What was actually submitted for the last presented frame (uniform data +
-  // paletteType) — lets renderPanel skip a resubmit when the next frame
+  // paletteType) — lets startRenderIfNeeded skip a resubmit when the next frame
   // would be pixel-identical (see sameRenderSignature above). Null means
   // "nothing rendered yet" or "known stale" (see invalidateRender), so the
   // next render always goes through.
@@ -146,7 +148,7 @@ export class FractalPanel {
     this.lastRenderSignature = { data, paletteType: this.paletteType };
   }
 
-  // Forces the next renderPanel call through, even if the uniform data ends
+  // Forces the next startRenderIfNeeded call through, even if the uniform data ends
   // up identical to last time — for cases where the *presented* image may
   // have changed independent of the render inputs (e.g. a resize/visibility
   // toggle that drops the compositor's last frame for this canvas).

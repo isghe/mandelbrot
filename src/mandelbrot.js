@@ -2,7 +2,7 @@ import { makePalette, paletteBandCount, PALETTE_GROUPS } from './palette.js';
 import { MANDELBROT_LANDMARKS } from './landmarks.js';
 import { overlay } from './overlay.js';
 import { ViewHistory } from './history.js';
-import { requestGPUDevice, attachCanvas } from './renderer.js';
+import { requestGPUDevice, attachCanvas, shareBands, FRAME_BAND_BUDGET } from './renderer.js';
 import { FractalPanel, buildUniformData } from './fractalPanel.js';
 import { settings } from './settings.js';
 
@@ -68,6 +68,10 @@ export class MandelbrotApp {
 
   // render scheduling
   rafPending = false;
+  // Set by renderOnce() each frame: true while there is still something left
+  // to do on a later frame — a progressive ramp short of its cap, or a frame
+  // whose bands haven't all been submitted yet (see advanceRenderJobs).
+  needsAnotherFrame = false;
 
   constructor() {
     // juliaMode/showJuliaMarker/showLandmarks/onGenuineClick are the only
@@ -420,8 +424,9 @@ export class MandelbrotApp {
   };
 
   // Renders on the next animation frame at most once per call burst
-  // (rafPending guard); progressive mode re-arms itself each frame
-  // until the ramp completes or panning starts.
+  // (rafPending guard); re-arms itself for as long as there is more to do —
+  // a progressive ramp still climbing, or a frame still handing its bands to
+  // the GPU a few at a time.
   scheduleRender = () => {
     if (this.rafPending) return;
     this.rafPending = true;
@@ -433,9 +438,9 @@ export class MandelbrotApp {
       this.renderOnce();
       this.scheduleSaveSettings();
       // renderOnce() already skips advancing a panel's own ramp while it's
-      // being dragged (see anyProgressiveBelowCap there) — a drag on one
+      // being dragged (see needsAnotherFrame there) — a drag on one
       // panel shouldn't stall the other panel's independent progressive reveal.
-      if (this.anyProgressiveBelowCap) {
+      if (this.needsAnotherFrame) {
         this.scheduleRender();
       }
     });
@@ -870,7 +875,11 @@ export class MandelbrotApp {
     this.showFatalError(msg);
   }
 
-  renderPanel(panel, juliaMode, displayIter) {
+  // Starts a frame for `panel` when the one it would produce differs from the
+  // frame last started; a frame already in flight is left to finish. No band
+  // reaches the GPU here — that happens in advanceRenderJobs() below, under
+  // the budget this animation frame shares between the panels.
+  startRenderIfNeeded(panel, juliaMode, displayIter) {
     if (!panel.renderer) return;
     const data = buildUniformData({
       center: panel.center,
@@ -890,20 +899,43 @@ export class MandelbrotApp {
     // animating (e.g. Julia's progressive reveal crawling while Mandelbrot
     // sits idle at a high, unchanging maxIter).
     if (panel.isRenderUpToDate(data)) return;
-    panel.lastTileBandCount = panel.renderer.render(data, displayIter);
+    panel.lastTileBandCount = panel.renderer.beginFrame(data, displayIter);
     panel.markRendered(data);
   }
 
+  // Hands this animation frame's share of the pending bands to the GPU and
+  // puts the panels that got any on screen. The budget is shared across
+  // panels rather than granted to each, so two expensive panels split a frame
+  // between them instead of whichever comes first monopolising it — the
+  // residual case left open when the per-panel render skip shipped. A panel
+  // with nothing pending is left completely alone (no band, no blit), so an
+  // idle panel still costs nothing per frame. Returns true while any panel
+  // has bands left for a later frame.
+  advanceRenderJobs() {
+    const attached = this.panels.filter(({ panel }) => panel.renderer);
+    const share = shareBands(
+      attached.map(({ panel }) => panel.renderer.pendingBands),
+      FRAME_BAND_BUDGET
+    );
+    attached.forEach(({ panel }, i) => {
+      if (share[i] <= 0) return;
+      panel.renderer.advanceFrame(share[i]);
+      panel.renderer.present();
+    });
+    return attached.some(({ panel }) => panel.renderer.pendingBands > 0);
+  }
+
   // RENDER. Each visible panel ramps toward its own maxIter independently;
-  // scheduleRender's re-arm check (this.anyProgressiveBelowCap) re-arms while
-  // at least one panel's ramp hasn't yet reached its own cap.
+  // scheduleRender's re-arm check (this.needsAnotherFrame) re-arms while at
+  // least one panel's ramp hasn't yet reached its own cap, or still has bands
+  // to submit.
   renderOnce = () => {
     // Gated on deviceLost/renderHalted, not on any single panel's renderer —
-    // renderPanel already skips a panel whose own renderer isn't attached
-    // yet, so a missing Mandelbrot renderer shouldn't also block an
+    // startRenderIfNeeded already skips a panel whose own renderer isn't
+    // attached yet, so a missing Mandelbrot renderer shouldn't also block an
     // already-ready Julia panel from rendering.
     if (this.deviceLost || this.renderHalted) {
-      this.anyProgressiveBelowCap = false;
+      this.needsAnotherFrame = false;
       return;
     }
 
@@ -918,7 +950,7 @@ export class MandelbrotApp {
     for (const { panel } of this.panels) {
       if (panel.renderer && this.isDeformedFrame(panel)) {
         this.reportDeformedFrame(panel);
-        this.anyProgressiveBelowCap = false;
+        this.needsAnotherFrame = false;
         return;
       }
     }
@@ -932,15 +964,25 @@ export class MandelbrotApp {
       if (panel.progressiveMode && !panel.isDragging) {
         displayIter = Math.min(panel.progressiveIter, panel.maxIter);
         if (panel.progressiveIter < panel.maxIter) {
-          panel.progressiveIter = Math.min(panel.maxIter, Math.ceil(panel.progressiveIter * 1.08 + 1));
           anyBelowCap = true;
+          // The ramp steps only once this panel's frame has fully landed.
+          // Stepping it every animation frame was right while a frame was
+          // submitted in one go, but now it would start a new frame before
+          // the previous one had handed over more than a band or two, and
+          // every frame restarts from the top: the top of the canvas would be
+          // redrawn forever at ever-higher iteration counts while the bottom
+          // was never drawn at all.
+          if (!panel.renderer?.pendingBands) {
+            panel.progressiveIter = Math.min(panel.maxIter, Math.ceil(panel.progressiveIter * 1.08 + 1));
+          }
         }
       }
-      this.renderPanel(panel, juliaMode, displayIter);
+      this.startRenderIfNeeded(panel, juliaMode, displayIter);
       panel.lastDisplayIter = displayIter;
     }
 
-    this.anyProgressiveBelowCap = anyBelowCap;
+    const bandsPending = this.advanceRenderJobs();
+    this.needsAnotherFrame = bandsPending || anyBelowCap;
   };
 }
 
