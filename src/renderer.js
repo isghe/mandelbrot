@@ -133,23 +133,36 @@ export function shareBands(pending, budget, firstServed = 0) {
   return share;
 }
 
-// Splits [0, height) into horizontal bands, each with worst-case pixel-
-// iteration cost (width * band.height * maxIter) at or under `budget`.
-// Returns [{ y, height }, ...] covering the canvas exactly, no gaps/overlap.
+// Splits one or more rectangular regions into horizontal bands, each with
+// worst-case pixel-iteration cost (band.width * band.height * maxIter) at or
+// under `budget`. Returns [{ x, y, width, height }, ...] covering every
+// region exactly, no gaps/overlap, region by region in the order given.
+// Regions rather than a single width/height is what lets a caller ask for
+// only the part of a panel that actually needs redrawing — e.g. the L-shaped
+// strip a pan uncovers — instead of always banding the whole canvas.
 // One row of an 8K canvas at the maxIter cap is ~63M pixel-iterations (7680 *
 // 8192, see ITER.max in mandelbrot.js), which exceeds the budget on its own —
 // a band can't be subdivided below a single row, so the clamp to at least one
 // row is what covers that case rather than a theoretical impossibility. Such a
 // frame is minutes of GPU work whatever the banding does with it.
-export function frameBands(width, height, maxIter, budget = BAND_WORK_BUDGET) {
-  const safeHeight = Number.isFinite(height) && height > 0 ? height : 1;
-  if (!Number.isFinite(width) || !Number.isFinite(maxIter) || width <= 0 || maxIter <= 0) {
-    return [{ y: 0, height: safeHeight }];
-  }
-  const rows = Math.min(safeHeight, Math.max(1, Math.floor(budget / (width * maxIter))));
+export function frameBands(regions, maxIter, budget = BAND_WORK_BUDGET) {
+  const safeRegions = Array.isArray(regions) && regions.length > 0
+    ? regions
+    : [{ x: 0, y: 0, width: 1, height: 1 }];
   const bands = [];
-  for (let y = 0; y < safeHeight; y += rows) {
-    bands.push({ y, height: Math.min(rows, safeHeight - y) });
+  for (const region of safeRegions) {
+    const x = Number.isFinite(region?.x) ? region.x : 0;
+    const y = Number.isFinite(region?.y) ? region.y : 0;
+    const safeWidth = Number.isFinite(region?.width) && region.width > 0 ? region.width : 1;
+    const safeHeight = Number.isFinite(region?.height) && region.height > 0 ? region.height : 1;
+    if (!Number.isFinite(maxIter) || maxIter <= 0) {
+      bands.push({ x, y, width: safeWidth, height: safeHeight });
+      continue;
+    }
+    const rows = Math.min(safeHeight, Math.max(1, Math.floor(budget / (safeWidth * maxIter))));
+    for (let dy = 0; dy < safeHeight; dy += rows) {
+      bands.push({ x, y: y + dy, width: safeWidth, height: Math.min(rows, safeHeight - dy) });
+    }
   }
   return bands;
 }
@@ -332,7 +345,7 @@ export async function attachCanvas(device, canvas, palette256) {
     // the wipe would be lost for good.
     const owed = job !== null && job.next === 0 && job.clear;
     job = {
-      bands: frameBands(offscreenWidth, offscreenHeight, maxIter),
+      bands: frameBands([{ x: 0, y: 0, width: offscreenWidth, height: offscreenHeight }], maxIter),
       next: 0,
       clear: clear || owed,
     };
@@ -374,7 +387,7 @@ export async function attachCanvas(device, canvas, palette256) {
 
       pass.setPipeline(pipeline);
       pass.setBindGroup(0, bindGroup);
-      pass.setScissorRect(0, band.y, offscreenWidth, band.height);
+      pass.setScissorRect(band.x, band.y, band.width, band.height);
       pass.draw(3);
       pass.end();
 

@@ -27,14 +27,16 @@ test('attachCanvas is exported as a function', () => {
 // frameBands is pure (no WebGPU dependency), so it gets real coverage here —
 // see renderer.js's BAND_WORK_BUDGET comment for why bands exist at all.
 
-function assertExactCoverage(bands, height) {
-  let y = 0;
+function assertExactCoverage(bands, region) {
+  let y = region.y;
   for (const band of bands) {
+    assert.strictEqual(band.x, region.x);
+    assert.strictEqual(band.width, region.width);
     assert.strictEqual(band.y, y);
     assert.ok(band.height > 0);
     y += band.height;
   }
-  assert.strictEqual(y, height);
+  assert.strictEqual(y, region.y + region.height);
 }
 
 test('frameBands: cheap frame (work under budget) returns a single band', () => {
@@ -45,43 +47,85 @@ test('frameBands: cheap frame (work under budget) returns a single band', () => 
   const width = 400, height = 300;
   const maxIter = Math.floor(BAND_WORK_BUDGET / (width * height * 4));
   assert.ok(maxIter >= 1, 'budget must leave room for a cheap frame at all');
-  assert.deepStrictEqual(frameBands(width, height, maxIter), [{ y: 0, height }]);
+  const region = { x: 0, y: 0, width, height };
+  assert.deepStrictEqual(frameBands([region], maxIter), [region]);
 });
 
 test('frameBands: expensive frame (high maxIter) splits into multiple bands', () => {
-  const width = 972, height = 972, maxIter = 8192;
-  const bands = frameBands(width, height, maxIter);
+  const region = { x: 0, y: 0, width: 972, height: 972 };
+  const maxIter = 8192;
+  const bands = frameBands([region], maxIter);
   assert.ok(bands.length > 1);
-  assertExactCoverage(bands, height);
+  assertExactCoverage(bands, region);
   for (const band of bands.slice(0, -1)) {
-    assert.ok(width * band.height * maxIter <= BAND_WORK_BUDGET);
+    assert.ok(band.width * band.height * maxIter <= BAND_WORK_BUDGET);
   }
 });
 
-test('frameBands: bands are contiguous with no gaps or overlap, covering exactly [0, height)', () => {
-  const bands = frameBands(1920, 1000, 4677);
-  assertExactCoverage(bands, 1000);
+test('frameBands: bands are contiguous with no gaps or overlap, covering exactly the region', () => {
+  const region = { x: 0, y: 0, width: 1920, height: 1000 };
+  assertExactCoverage(frameBands([region], 4677), region);
 });
 
-test('frameBands: never returns 0 rows and never more rows than the canvas height', () => {
+test('frameBands: never returns 0 rows and never more rows than the region height', () => {
   // Single row would already exceed the budget many times over — clamp to 1.
-  const bands = frameBands(10000, 5, 8192, 1);
+  const bands = frameBands([{ x: 0, y: 0, width: 10000, height: 5 }], 8192, 1);
   assert.strictEqual(bands.length, 5);
   for (const band of bands) assert.strictEqual(band.height, 1);
 });
 
-test('frameBands: a custom budget larger than the whole frame yields a single band', () => {
-  const bands = frameBands(1920, 1080, 8192, Number.MAX_SAFE_INTEGER);
-  assert.deepStrictEqual(bands, [{ y: 0, height: 1080 }]);
+test('frameBands: a custom budget larger than the whole region yields a single band', () => {
+  const region = { x: 0, y: 0, width: 1920, height: 1080 };
+  const bands = frameBands([region], 8192, Number.MAX_SAFE_INTEGER);
+  assert.deepStrictEqual(bands, [region]);
+});
+
+test('frameBands: multiple regions are banded independently and concatenated in order', () => {
+  const maxIter = 8192;
+  const regionA = { x: 0, y: 0, width: 972, height: 972 };
+  const regionB = { x: 972, y: 100, width: 50, height: 400 };
+  const bands = frameBands([regionA, regionB], maxIter);
+  const bandsA = bands.filter((b) => b.x === regionA.x);
+  const bandsB = bands.filter((b) => b.x === regionB.x);
+  assertExactCoverage(bandsA, regionA);
+  assertExactCoverage(bandsB, regionB);
+  assert.deepStrictEqual(bands, [...bandsA, ...bandsB]);
+});
+
+test('frameBands: a narrow tall strip (horizontal-pan exposure) never yields a zero-row band', () => {
+  const region = { x: 1200, y: 0, width: 5, height: 720 };
+  const bands = frameBands([region], 8192);
+  assert.ok(bands.length > 0);
+  for (const band of bands) assert.ok(band.height > 0);
+  assertExactCoverage(bands, region);
 });
 
 test('frameBands: degenerate/non-finite inputs fall back to a single band, no infinite loop', () => {
-  assert.deepStrictEqual(frameBands(0, 720, 256), [{ y: 0, height: 720 }]);
-  assert.deepStrictEqual(frameBands(1280, 720, 0), [{ y: 0, height: 720 }]);
-  assert.deepStrictEqual(frameBands(NaN, 720, 256), [{ y: 0, height: 720 }]);
-  assert.deepStrictEqual(frameBands(1280, 720, NaN), [{ y: 0, height: 720 }]);
-  assert.deepStrictEqual(frameBands(1280, 0, 256), [{ y: 0, height: 1 }]);
-  assert.deepStrictEqual(frameBands(1280, NaN, 256), [{ y: 0, height: 1 }]);
+  assert.deepStrictEqual(
+    frameBands([{ x: 0, y: 0, width: 0, height: 720 }], 256),
+    [{ x: 0, y: 0, width: 1, height: 720 }]
+  );
+  assert.deepStrictEqual(
+    frameBands([{ x: 0, y: 0, width: 1280, height: 720 }], 0),
+    [{ x: 0, y: 0, width: 1280, height: 720 }]
+  );
+  assert.deepStrictEqual(
+    frameBands([{ x: 0, y: 0, width: NaN, height: 720 }], 256),
+    [{ x: 0, y: 0, width: 1, height: 720 }]
+  );
+  assert.deepStrictEqual(
+    frameBands([{ x: 0, y: 0, width: 1280, height: 720 }], NaN),
+    [{ x: 0, y: 0, width: 1280, height: 720 }]
+  );
+  assert.deepStrictEqual(
+    frameBands([{ x: 0, y: 0, width: 1280, height: 0 }], 256),
+    [{ x: 0, y: 0, width: 1280, height: 1 }]
+  );
+  assert.deepStrictEqual(
+    frameBands([{ x: 0, y: 0, width: 1280, height: NaN }], 256),
+    [{ x: 0, y: 0, width: 1280, height: 1 }]
+  );
+  assert.deepStrictEqual(frameBands([], 256), [{ x: 0, y: 0, width: 1, height: 1 }]);
 });
 
 // shareBands splits one animation frame's band budget across the panels that
