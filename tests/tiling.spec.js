@@ -94,7 +94,8 @@ test('every band is actually drawn — none is left blank in the composited fram
     await window.app.gpuDevice.queue.onSubmittedWorkDone();
 
     const { frameBands } = await import('/src/renderer.js');
-    const bands = frameBands(panel.canvas.width, panel.canvas.height, panel.lastDisplayIter);
+    const region = { x: 0, y: 0, width: panel.canvas.width, height: panel.canvas.height };
+    const bands = frameBands([region], panel.lastDisplayIter);
     const rect = panel.canvas.getBoundingClientRect();
     return { bands, canvasWidth: panel.canvas.width, canvasHeight: panel.canvas.height, rect };
   });

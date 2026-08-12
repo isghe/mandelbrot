@@ -147,6 +147,36 @@ test('pan is the inverse of itself for the opposite screenDelta', () => {
   assertPointClose(back, anchor.x, anchor.y, 'round-trip');
 });
 
+test('snapDeltaToPixels: a delta already a whole number of pixels is unchanged', () => {
+  const r = view.snapDeltaToPixels(new DOMPointReadOnly(120 / 1280, -64 / 720), 1280, 720);
+  assertPointClose(r, 120 / 1280, -64 / 720);
+});
+
+test('snapDeltaToPixels: an arbitrary delta lands on a whole number of device pixels', () => {
+  // Closeness to the nearest integer, not exact equality: floating-point
+  // rounding on an "ugly" (non-power-of-2) w/h can leave r.x * w a hair off
+  // an exact integer even though the shift is meant to be whole-pixel.
+  for (const [dx, dy, w, h] of [[0.1013, 0.2987, 1280, 720], [-0.0041, 0.5, 1920, 1080], [0.999, -0.999, 400, 300], [0.4173, -0.2861, 1366, 641]]) {
+    const r = view.snapDeltaToPixels(new DOMPointReadOnly(dx, dy), w, h);
+    assert.ok(Math.abs(r.x * w - Math.round(r.x * w)) < 1e-9, `x*w should be ~integer (got ${r.x * w})`);
+    assert.ok(Math.abs(r.y * h - Math.round(r.y * h)) < 1e-9, `y*h should be ~integer (got ${r.y * h})`);
+  }
+});
+
+test('snapDeltaToPixels: never moves the delta by more than half a device pixel', () => {
+  for (const [dx, dy, w, h] of [[0.1013, 0.2987, 1280, 720], [-0.0041, 0.5, 1920, 1080], [0.999, -0.999, 400, 300]]) {
+    const r = view.snapDeltaToPixels(new DOMPointReadOnly(dx, dy), w, h);
+    assert.ok(Math.abs(r.x - dx) * w <= 0.5 + 1e-9, `x error should be <= half a pixel (got ${Math.abs(r.x - dx) * w})`);
+    assert.ok(Math.abs(r.y - dy) * h <= 0.5 + 1e-9, `y error should be <= half a pixel (got ${Math.abs(r.y - dy) * h})`);
+  }
+});
+
+test('snapDeltaToPixels: a degenerate (zero) backing store falls back to a safe size, no NaN/Infinity', () => {
+  const r = view.snapDeltaToPixels(new DOMPointReadOnly(0.3, -0.7), 0, 0);
+  assert.ok(Number.isFinite(r.x));
+  assert.ok(Number.isFinite(r.y));
+});
+
 test('fractalToNormalized maps the anchor to the screen center', () => {
   const anchor = new DOMPointReadOnly(0, 0);
   const r = view.fractalToNormalized(new DOMPointReadOnly(0, 0), anchor, 2, 1);

@@ -944,8 +944,13 @@ export class MandelbrotApp {
     // down over an image of the wrong place; a frame that only refines or
     // recolours the same view keeps the old one underneath, which is what
     // stops the progressive ramp from strobing (see sameViewGeometry).
+    // A pan is the one case that looks somewhere else and still has pixels
+    // worth keeping: they are the same picture, only moved (see
+    // panShiftBetween), so the renderer slides them across and computes only
+    // the strips the pan uncovered.
     panel.lastTileBandCount = panel.renderer.beginFrame(data, displayIter, {
       clear: panel.startsNewView(data),
+      shift: panel.panShiftFor(data),
     });
     panel.markRendered(data);
   }

@@ -133,25 +133,67 @@ export function shareBands(pending, budget, firstServed = 0) {
   return share;
 }
 
-// Splits [0, height) into horizontal bands, each with worst-case pixel-
-// iteration cost (width * band.height * maxIter) at or under `budget`.
-// Returns [{ y, height }, ...] covering the canvas exactly, no gaps/overlap.
+// Splits one or more rectangular regions into horizontal bands, each with
+// worst-case pixel-iteration cost (band.width * band.height * maxIter) at or
+// under `budget`. Returns [{ x, y, width, height }, ...] covering every
+// region exactly, no gaps/overlap, region by region in the order given.
+// Regions rather than a single width/height is what lets a caller ask for
+// only the part of a panel that actually needs redrawing — e.g. the L-shaped
+// strip a pan uncovers — instead of always banding the whole canvas.
 // One row of an 8K canvas at the maxIter cap is ~63M pixel-iterations (7680 *
 // 8192, see ITER.max in mandelbrot.js), which exceeds the budget on its own —
 // a band can't be subdivided below a single row, so the clamp to at least one
 // row is what covers that case rather than a theoretical impossibility. Such a
 // frame is minutes of GPU work whatever the banding does with it.
-export function frameBands(width, height, maxIter, budget = BAND_WORK_BUDGET) {
-  const safeHeight = Number.isFinite(height) && height > 0 ? height : 1;
-  if (!Number.isFinite(width) || !Number.isFinite(maxIter) || width <= 0 || maxIter <= 0) {
-    return [{ y: 0, height: safeHeight }];
-  }
-  const rows = Math.min(safeHeight, Math.max(1, Math.floor(budget / (width * maxIter))));
+export function frameBands(regions, maxIter, budget = BAND_WORK_BUDGET) {
+  const safeRegions = Array.isArray(regions) && regions.length > 0
+    ? regions
+    : [{ x: 0, y: 0, width: 1, height: 1 }];
   const bands = [];
-  for (let y = 0; y < safeHeight; y += rows) {
-    bands.push({ y, height: Math.min(rows, safeHeight - y) });
+  for (const region of safeRegions) {
+    const x = Number.isFinite(region?.x) ? region.x : 0;
+    const y = Number.isFinite(region?.y) ? region.y : 0;
+    const safeWidth = Number.isFinite(region?.width) && region.width > 0 ? region.width : 1;
+    const safeHeight = Number.isFinite(region?.height) && region.height > 0 ? region.height : 1;
+    if (!Number.isFinite(maxIter) || maxIter <= 0) {
+      bands.push({ x, y, width: safeWidth, height: safeHeight });
+      continue;
+    }
+    const rows = Math.min(safeHeight, Math.max(1, Math.floor(budget / (safeWidth * maxIter))));
+    for (let dy = 0; dy < safeHeight; dy += rows) {
+      bands.push({ x, y: y + dy, width: safeWidth, height: Math.min(rows, safeHeight - dy) });
+    }
   }
   return bands;
+}
+
+// The region a pan uncovers, as the rectangles frameBands wants: a vertical
+// strip spanning the full height on the side the image came from, plus a
+// horizontal strip covering only the columns that strip doesn't already — so
+// the two never overlap and no pixel is computed twice. Returns 0, 1 or 2
+// rectangles: 1 when the pan was purely horizontal or purely vertical, 0 when
+// the shift is zero or big enough that nothing of the old frame survives (in
+// which case there is nothing to reproject and the caller should be rendering
+// the whole panel anyway).
+export function exposedRegions(width, height, shift) {
+  if (!(width > 0) || !(height > 0)) return [];
+  const dx = Number.isFinite(shift?.x) ? Math.trunc(shift.x) : 0;
+  const dy = Number.isFinite(shift?.y) ? Math.trunc(shift.y) : 0;
+  if (Math.abs(dx) >= width || Math.abs(dy) >= height) return [];
+
+  const regions = [];
+  if (dx !== 0) {
+    regions.push({ x: dx > 0 ? 0 : width + dx, y: 0, width: Math.abs(dx), height });
+  }
+  if (dy !== 0) {
+    regions.push({
+      x: dx > 0 ? dx : 0,
+      y: dy > 0 ? 0 : height + dy,
+      width: width - Math.abs(dx),
+      height: Math.abs(dy),
+    });
+  }
+  return regions;
 }
 
 // Sets up the pipeline/uniforms for one canvas's fractal render pass and
@@ -239,45 +281,111 @@ export async function attachCanvas(device, canvas, palette256) {
     primitive: { topology: "triangle-list" }
   });
 
-  // The frame's bands are rendered into this texture rather than straight
+  // A frame's bands are rendered into a texture we own rather than straight
   // into the swap-chain texture, then blitted onto the canvas in one draw.
   // A WebGPU canvas texture doesn't carry its contents over from the previous
   // frame, so it can't accumulate anything across animation frames; a texture
-  // we own can, which is what lets a frame's bands later be spread over
-  // several frames instead of all being submitted in one.
-  let offscreen = null;
-  let offscreenView = null;
-  let blitBindGroup = null;
-  // Tracked here rather than read back off `offscreen` so the size check
-  // doesn't depend on GPUTexture's width/height attributes.
-  let offscreenWidth = 0;
-  let offscreenHeight = 0;
-
-  // (Re)creates the offscreen target whenever the canvas backing store has
-  // changed size. A freshly created WebGPU texture is zero-initialized by
-  // spec, so the new target starts as transparent black and needs no explicit
-  // clear pass — and the canvas is configured with the default "opaque" alpha
-  // mode, so any not-yet-drawn region reads as plain black on screen.
-  const ensureOffscreen = () => {
-    if (offscreen && offscreenWidth === canvas.width && offscreenHeight === canvas.height) return;
-    // Already-submitted work referencing the old texture stays valid; destroy
-    // only bars further use of it, which the reassignment below ends anyway.
-    offscreen?.destroy();
-    offscreenWidth = canvas.width;
-    offscreenHeight = canvas.height;
-    offscreen = device.createTexture({
-      size: [offscreenWidth, offscreenHeight],
+  // we own can, which is what lets a frame's bands be spread over several
+  // frames instead of all being submitted in one.
+  //
+  // Texture, view, bind group and size are one object rather than four
+  // parallel variables: a render target is useless without all four agreeing,
+  // and keeping them together means a second target is one more object rather
+  // than four more variables to hold in sync.
+  //
+  // The size is the one passed in, not read back off the GPUTexture, so the
+  // staleness check below doesn't depend on GPUTexture exposing width/height.
+  const createTarget = (width, height) => {
+    const texture = device.createTexture({
+      size: [width, height],
       format,
+      // COPY_SRC and COPY_DST both, on both targets: reprojection copies one
+      // into the other and then swaps their roles, so each has to be able to
+      // play either end of the copy.
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+        | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
     });
-    offscreenView = offscreen.createView();
-    blitBindGroup = device.createBindGroup({
-      layout: blitPipeline.getBindGroupLayout(0),
-      entries: [{ binding: 3, resource: offscreenView }]
-    });
+    const view = texture.createView();
+    return {
+      texture,
+      view,
+      width,
+      height,
+      blitBindGroup: device.createBindGroup({
+        layout: blitPipeline.getBindGroupLayout(0),
+        entries: [{ binding: 3, resource: view }]
+      }),
+    };
   };
 
-  // Puts the offscreen target on screen. getCurrentTexture() is called here
+  // Where the current frame's bands land, and what present() puts on screen.
+  let target = null;
+  // Ping-pong partner for reprojection: a texture can't be sampled and
+  // rendered into at once, so a shifted copy of the target has to land
+  // somewhere else and take its place. Allocated the first time a pan actually
+  // reuses a frame, so a session that never pans never pays for it (per panel:
+  // one extra full-canvas texture, ~33 MB at 4K).
+  let spare = null;
+
+  // (Re)creates the render target whenever the canvas backing store has
+  // changed size, and reports whether it did — a target created just now holds
+  // no previous frame, so there is nothing for a reprojection to reuse. A
+  // freshly created WebGPU texture is zero-initialized by spec, so it starts
+  // as transparent black and needs no explicit clear pass — and the canvas is
+  // configured with the default "opaque" alpha mode, so any not-yet-drawn
+  // region reads as plain black on screen.
+  const ensureTarget = () => {
+    if (target && target.width === canvas.width && target.height === canvas.height) return false;
+    // Already-submitted work referencing the old textures stays valid; destroy
+    // only bars further use of them, which the reassignment below ends anyway.
+    target?.texture.destroy();
+    spare?.texture.destroy();
+    spare = null;
+    target = createTarget(canvas.width, canvas.height);
+    return true;
+  };
+
+  // Slides the target's image by `shift` device pixels into the spare target,
+  // then makes that the target — the pixels a pan didn't uncover, moved to
+  // where they now belong instead of being computed again.
+  //
+  // The spare is cleared first and the overlap copied over it, rather than the
+  // copy going in first: the part a pan uncovers must come out black, not
+  // holding whatever the spare kept from two frames ago, so that no pixel ever
+  // shows a picture of somewhere else while the exposed strips fill in.
+  //
+  // copyTextureToTexture rather than a shifted draw: no second WGSL entry
+  // point, no uniform to carry the offset, and the copy is texel-exact by
+  // construction. Both it and the clear cost memory bandwidth rather than
+  // iterations, which is the whole point — they don't scale with maxIter.
+  const reprojectTarget = (shift) => {
+    if (!spare) spare = createTarget(target.width, target.height);
+    const encoder = device.createCommandEncoder();
+    const wipe = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: spare.view,
+        loadOp: "clear",
+        storeOp: "store",
+        clearValue: { r: 0, g: 0, b: 0, a: 1 }
+      }]
+    });
+    wipe.end();
+    // A pixel at x in the old frame is at x + shift.x in the new one, so the
+    // surviving overlap starts at max(0, -shift) in the source and lands at
+    // max(0, shift) in the destination.
+    encoder.copyTextureToTexture(
+      { texture: target.texture, origin: { x: Math.max(0, -shift.x), y: Math.max(0, -shift.y) } },
+      { texture: spare.texture, origin: { x: Math.max(0, shift.x), y: Math.max(0, shift.y) } },
+      { width: target.width - Math.abs(shift.x), height: target.height - Math.abs(shift.y) }
+    );
+    device.queue.submit([encoder.finish()]);
+
+    const displaced = target;
+    target = spare;
+    spare = displaced;
+  };
+
+  // Puts the render target on screen. getCurrentTexture() is called here
   // and nowhere else, so the canvas texture is always acquired and used
   // within the same task, as WebGPU requires. loadOp "clear" is nominal —
   // the blit triangle covers every pixel of the attachment.
@@ -292,7 +400,7 @@ export async function attachCanvas(device, canvas, palette256) {
       }]
     });
     pass.setPipeline(blitPipeline);
-    pass.setBindGroup(0, blitBindGroup);
+    pass.setBindGroup(0, target.blitBindGroup);
     pass.draw(3);
     pass.end();
     device.queue.submit([encoder.finish()]);
@@ -308,21 +416,27 @@ export async function attachCanvas(device, canvas, palette256) {
 
   // Starts a frame, dropping any bands of the previous one still unsubmitted.
   //
-  // `clear` says whether the offscreen target should be wiped first. Without
+  // `clear` says whether the render target should be wiped first. Without
   // it the new frame's bands overwrite the old image from the top down, so a
   // panel interrupted mid-frame keeps showing the newest content at the top
   // over progressively older content below — right when the frame is a
   // refinement of the same view, wrong when the view itself moved, since then
   // the untouched rows are a picture of somewhere else. The caller decides
-  // (see fractalPanel.js's sameViewGeometry). Returns how many bands this
-  // frame was split into.
-  const beginFrame = (uniformData, maxIter, { clear = false } = {}) => {
+  // (see fractalPanel.js's sameViewGeometry).
+  //
+  // `shift`, when non-null, says the new frame is the old one translated by
+  // that many device pixels (fractalPanel.js's panShiftBetween) — so the
+  // overlap can be copied across and only the strips the pan uncovered need
+  // computing. That makes a frame cost what the pan uncovered rather than what
+  // the panel holds, which for the short drags of ordinary exploring is an
+  // order of magnitude less. Returns how many bands this frame was split into.
+  const beginFrame = (uniformData, maxIter, { clear = false, shift = null } = {}) => {
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-    ensureOffscreen();
-    // Banded off the offscreen target's own size, not the live canvas's: the
+    const freshTarget = ensureTarget();
+    // Banded off the render target's own size, not the live canvas's: the
     // canvas can be resized while a frame is still draining, and every band
     // still queued has to stay inside the attachment it was computed for.
-    // ensureOffscreen above has just reconciled the two for a new frame.
+    // ensureTarget above has just reconciled the two for a new frame.
     // A clear stays owed until it has actually happened. It rides on band 0's
     // loadOp, so a frame replaced before that band was submitted — which the
     // per-frame budget can cause, by handing this panel none of it while the
@@ -331,10 +445,29 @@ export async function attachCanvas(device, canvas, palette256) {
     // that only recolours the same view would correctly ask for no clear and
     // the wipe would be lost for good.
     const owed = job !== null && job.next === 0 && job.clear;
+    // Reprojecting is only sound if the target really holds the whole frame
+    // the shift was measured against: not one created this very call, and not
+    // one still missing bands of the frame before — a half-drained target is
+    // part old view, part new, and sliding that across would smear the two.
+    // That second condition also subsumes `owed`, which can only be true while
+    // band 0 is still pending, so a wipe deferred by the budget is never lost
+    // to a reprojection that suppresses it.
+    const draining = job !== null && job.next < job.bands.length;
+    const reproject = shift !== null && !freshTarget && !draining;
+    if (reproject) reprojectTarget(shift);
+
     job = {
-      bands: frameBands(offscreenWidth, offscreenHeight, maxIter),
+      bands: frameBands(
+        reproject
+          ? exposedRegions(target.width, target.height, shift)
+          : [{ x: 0, y: 0, width: target.width, height: target.height }],
+        maxIter
+      ),
       next: 0,
-      clear: clear || owed,
+      // A reprojection has already cleared what it didn't copy, so the frame
+      // must not also ask band 0 to wipe the attachment — that would erase the
+      // overlap it just went to the trouble of preserving.
+      clear: !reproject && (clear || owed),
     };
     return job.bands.length;
   };
@@ -365,7 +498,7 @@ export async function attachCanvas(device, canvas, palette256) {
       const encoder = device.createCommandEncoder();
       const pass = encoder.beginRenderPass({
         colorAttachments: [{
-          view: offscreenView,
+          view: target.view,
           loadOp: wipeFirst ? "clear" : "load",
           storeOp: "store",
           clearValue: { r: 0, g: 0, b: 0, a: 1 }
@@ -374,7 +507,7 @@ export async function attachCanvas(device, canvas, palette256) {
 
       pass.setPipeline(pipeline);
       pass.setBindGroup(0, bindGroup);
-      pass.setScissorRect(0, band.y, offscreenWidth, band.height);
+      pass.setScissorRect(band.x, band.y, band.width, band.height);
       pass.draw(3);
       pass.end();
 
