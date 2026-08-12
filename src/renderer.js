@@ -252,45 +252,56 @@ export async function attachCanvas(device, canvas, palette256) {
     primitive: { topology: "triangle-list" }
   });
 
-  // The frame's bands are rendered into this texture rather than straight
+  // A frame's bands are rendered into a texture we own rather than straight
   // into the swap-chain texture, then blitted onto the canvas in one draw.
   // A WebGPU canvas texture doesn't carry its contents over from the previous
   // frame, so it can't accumulate anything across animation frames; a texture
-  // we own can, which is what lets a frame's bands later be spread over
-  // several frames instead of all being submitted in one.
-  let offscreen = null;
-  let offscreenView = null;
-  let blitBindGroup = null;
-  // Tracked here rather than read back off `offscreen` so the size check
-  // doesn't depend on GPUTexture's width/height attributes.
-  let offscreenWidth = 0;
-  let offscreenHeight = 0;
+  // we own can, which is what lets a frame's bands be spread over several
+  // frames instead of all being submitted in one.
+  //
+  // Texture, view, bind group and size are one object rather than four
+  // parallel variables: a render target is useless without all four agreeing,
+  // and keeping them together means a second target is one more object rather
+  // than four more variables to hold in sync.
+  //
+  // The size is the one passed in, not read back off the GPUTexture, so the
+  // staleness check below doesn't depend on GPUTexture exposing width/height.
+  const createTarget = (width, height) => {
+    const texture = device.createTexture({
+      size: [width, height],
+      format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
+    const view = texture.createView();
+    return {
+      texture,
+      view,
+      width,
+      height,
+      blitBindGroup: device.createBindGroup({
+        layout: blitPipeline.getBindGroupLayout(0),
+        entries: [{ binding: 3, resource: view }]
+      }),
+    };
+  };
 
-  // (Re)creates the offscreen target whenever the canvas backing store has
+  // Where the current frame's bands land, and what present() puts on screen.
+  let target = null;
+
+  // (Re)creates the render target whenever the canvas backing store has
   // changed size. A freshly created WebGPU texture is zero-initialized by
   // spec, so the new target starts as transparent black and needs no explicit
   // clear pass — and the canvas is configured with the default "opaque" alpha
   // mode, so any not-yet-drawn region reads as plain black on screen.
-  const ensureOffscreen = () => {
-    if (offscreen && offscreenWidth === canvas.width && offscreenHeight === canvas.height) return;
+  const ensureTarget = () => {
+    if (target && target.width === canvas.width && target.height === canvas.height) return;
     // Already-submitted work referencing the old texture stays valid; destroy
     // only bars further use of it, which the reassignment below ends anyway.
-    offscreen?.destroy();
-    offscreenWidth = canvas.width;
-    offscreenHeight = canvas.height;
-    offscreen = device.createTexture({
-      size: [offscreenWidth, offscreenHeight],
-      format,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-    });
-    offscreenView = offscreen.createView();
-    blitBindGroup = device.createBindGroup({
-      layout: blitPipeline.getBindGroupLayout(0),
-      entries: [{ binding: 3, resource: offscreenView }]
-    });
+    target?.texture.destroy();
+    target = createTarget(canvas.width, canvas.height);
   };
 
-  // Puts the offscreen target on screen. getCurrentTexture() is called here
+  // Puts the render target on screen. getCurrentTexture() is called here
   // and nowhere else, so the canvas texture is always acquired and used
   // within the same task, as WebGPU requires. loadOp "clear" is nominal —
   // the blit triangle covers every pixel of the attachment.
@@ -305,7 +316,7 @@ export async function attachCanvas(device, canvas, palette256) {
       }]
     });
     pass.setPipeline(blitPipeline);
-    pass.setBindGroup(0, blitBindGroup);
+    pass.setBindGroup(0, target.blitBindGroup);
     pass.draw(3);
     pass.end();
     device.queue.submit([encoder.finish()]);
@@ -321,7 +332,7 @@ export async function attachCanvas(device, canvas, palette256) {
 
   // Starts a frame, dropping any bands of the previous one still unsubmitted.
   //
-  // `clear` says whether the offscreen target should be wiped first. Without
+  // `clear` says whether the render target should be wiped first. Without
   // it the new frame's bands overwrite the old image from the top down, so a
   // panel interrupted mid-frame keeps showing the newest content at the top
   // over progressively older content below — right when the frame is a
@@ -331,11 +342,11 @@ export async function attachCanvas(device, canvas, palette256) {
   // frame was split into.
   const beginFrame = (uniformData, maxIter, { clear = false } = {}) => {
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-    ensureOffscreen();
-    // Banded off the offscreen target's own size, not the live canvas's: the
+    ensureTarget();
+    // Banded off the render target's own size, not the live canvas's: the
     // canvas can be resized while a frame is still draining, and every band
     // still queued has to stay inside the attachment it was computed for.
-    // ensureOffscreen above has just reconciled the two for a new frame.
+    // ensureTarget above has just reconciled the two for a new frame.
     // A clear stays owed until it has actually happened. It rides on band 0's
     // loadOp, so a frame replaced before that band was submitted — which the
     // per-frame budget can cause, by handing this panel none of it while the
@@ -345,7 +356,7 @@ export async function attachCanvas(device, canvas, palette256) {
     // the wipe would be lost for good.
     const owed = job !== null && job.next === 0 && job.clear;
     job = {
-      bands: frameBands([{ x: 0, y: 0, width: offscreenWidth, height: offscreenHeight }], maxIter),
+      bands: frameBands([{ x: 0, y: 0, width: target.width, height: target.height }], maxIter),
       next: 0,
       clear: clear || owed,
     };
@@ -378,7 +389,7 @@ export async function attachCanvas(device, canvas, palette256) {
       const encoder = device.createCommandEncoder();
       const pass = encoder.beginRenderPass({
         colorAttachments: [{
-          view: offscreenView,
+          view: target.view,
           loadOp: wipeFirst ? "clear" : "load",
           storeOp: "store",
           clearValue: { r: 0, g: 0, b: 0, a: 1 }
