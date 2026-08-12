@@ -40,6 +40,11 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
     const origSubmit = window.app.gpuDevice.queue.submit;
     window.app.gpuDevice.queue.submit = (...args) => { submitCount++; return origSubmit.apply(window.app.gpuDevice.queue, args); };
 
+    // Force the redraw through: this state is otherwise identical to the
+    // panel's last presented frame, and the per-panel render skip
+    // (fractalPanel.js's sameRenderSignature) would make scheduleRender() a
+    // no-op here.
+    panel.invalidateRender();
     window.app.scheduleRender();
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
@@ -54,6 +59,8 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
 test('every band is actually drawn — no band is left blank by a stray clear', async ({ page }) => {
   const panelInfo = await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
+    // Same as above: force the redraw past the per-panel render skip.
+    panel.invalidateRender();
     window.app.scheduleRender();
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     await window.app.gpuDevice.queue.onSubmittedWorkDone();
