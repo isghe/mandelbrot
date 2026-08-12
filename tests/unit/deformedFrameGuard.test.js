@@ -14,11 +14,16 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
 };
 
 function makeMockCanvas({ id = '', cssWidth = 800, cssHeight = 600 } = {}) {
+  const classes = new Set();
   return {
     id,
     width: 0,
     height: 0,
-    classList: { toggle() {} },
+    classList: {
+      toggle(name, force) { force ? classes.add(name) : classes.delete(name); },
+      add(name) { classes.add(name); },
+      contains(name) { return classes.has(name); },
+    },
     getBoundingClientRect: () => ({ width: cssWidth, height: cssHeight }),
     addEventListener() {},
   };
@@ -206,6 +211,22 @@ test('renderOnce is a no-op once renderHalted is set', () => {
   app.renderOnce();
 
   assert.equal(rendered, false);
+});
+
+// The last frame presented before a fatal error (e.g. a real DEVICE_HUNG)
+// can be visibly corrupted, and nothing renders again until reload — a
+// centered error box alone left that corrupted frame visible around/behind
+// it. showFatalError must hide every panel's canvas so no corrupted pixels
+// can remain on screen once a fatal error is shown.
+test('showFatalError hides every panel\'s gfx and overlay canvas', () => {
+  const app = makeApp();
+  app.showFatalError('boom');
+
+  for (const name of ['mandelbrot', 'julia']) {
+    const panel = app.modelNamed(name).panel;
+    assert.equal(panel.canvas.classList.contains('panel-hidden'), true, `${name} gfx canvas must be hidden`);
+    assert.equal(panel.overlayCanvas.classList.contains('panel-hidden'), true, `${name} overlay canvas must be hidden`);
+  }
 });
 
 test('handleUncapturedError halts rendering, shows a fatal error, and logs an app-state snapshot', () => {
