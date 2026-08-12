@@ -229,6 +229,25 @@ test('showFatalError hides every panel\'s gfx and overlay canvas', () => {
   }
 });
 
+// Reset (or any other panel-visibility toggle) after a fatal error must not
+// re-expose the corrupted canvas: updatePanelVisibility toggles
+// panel-hidden based on `show`, which would otherwise remove the class
+// showFatalError just added.
+test('updatePanelVisibility keeps canvases hidden after a fatal error, even when the panel is shown', () => {
+  const app = makeApp();
+  app.handleDeviceLost({ reason: 'unknown', message: 'DXGI_ERROR_DEVICE_HUNG (0x887A0006)' });
+
+  app.modelNamed('mandelbrot').show = true;
+  app.modelNamed('julia').show = true;
+  app.updatePanelVisibility();
+
+  for (const name of ['mandelbrot', 'julia']) {
+    const panel = app.modelNamed(name).panel;
+    assert.equal(panel.canvas.classList.contains('panel-hidden'), true, `${name} gfx canvas must stay hidden`);
+    assert.equal(panel.overlayCanvas.classList.contains('panel-hidden'), true, `${name} overlay canvas must stay hidden`);
+  }
+});
+
 test('handleUncapturedError halts rendering, shows a fatal error, and logs an app-state snapshot', () => {
   const app = makeApp();
   const mandelbrot = app.modelNamed('mandelbrot').panel;

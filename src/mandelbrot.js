@@ -657,8 +657,9 @@ export class MandelbrotApp {
     for (const model of this.models) {
       const show = !!model.show;
       anyVisible = anyVisible || show;
-      model.panel.canvas.classList.toggle("panel-hidden", !show);
-      model.panel.overlayCanvas.classList.toggle("panel-hidden", !show);
+      const canvasHidden = !show || this.renderHalted || this.deviceLost;
+      model.panel.canvas.classList.toggle("panel-hidden", canvasHidden);
+      model.panel.overlayCanvas.classList.toggle("panel-hidden", canvasHidden);
       model.uiSection.classList.toggle("panel-hidden", !show);
     }
     // Generic over however many visualization modes eventually exist, not
