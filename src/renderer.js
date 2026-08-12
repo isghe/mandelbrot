@@ -23,6 +23,35 @@ export async function requestGPUDevice({ onDeviceLost, onUncapturedError }) {
   return device;
 }
 
+// Worst-case pixel-iteration budget per submitted render pass. A single
+// full-canvas draw at high maxIter (observed: ~6.9G iterations, >2s) can
+// exceed the GPU driver's TDR watchdog and lose the device. Splitting the
+// frame into horizontal scissored bands, each under this budget, keeps every
+// individual submit short — on the hardware that produced the DEVICE_HUNG,
+// throughput was ≤~3G iterations/s, so 1e8 targets ~30-50ms per submit,
+// well under the watchdog. The worst case (972px height, maxIter 8192)
+// produces ~81 submits per frame.
+export const BAND_WORK_BUDGET = 1e8;
+
+// Splits [0, height) into horizontal bands, each with worst-case pixel-
+// iteration cost (width * band.height * maxIter) at or under `budget`.
+// Returns [{ y, height }, ...] covering the canvas exactly, no gaps/overlap.
+// A single row can never exceed the budget in practice (max canvas width
+// 7680 * maxIter cap 8192 ≈ 63M, see ITER.max in mandelbrot.js), so rows is
+// always clamped to at least 1.
+export function frameBands(width, height, maxIter, budget = BAND_WORK_BUDGET) {
+  const safeHeight = Number.isFinite(height) && height > 0 ? height : 1;
+  if (!Number.isFinite(width) || !Number.isFinite(maxIter) || width <= 0 || maxIter <= 0) {
+    return [{ y: 0, height: safeHeight }];
+  }
+  const rows = Math.min(safeHeight, Math.max(1, Math.floor(budget / (width * maxIter))));
+  const bands = [];
+  for (let y = 0; y < safeHeight; y += rows) {
+    bands.push({ y, height: Math.min(rows, safeHeight - y) });
+  }
+  return bands;
+}
+
 // Sets up the pipeline/uniforms for one canvas's fractal render pass and
 // returns a small `{ render, writePalette }` handle. Throws on setup
 // failure (missing WebGPU canvas context, WGSL fetch/compile errors), for
@@ -97,25 +126,43 @@ export async function attachCanvas(device, canvas, palette256) {
     ]
   });
 
-  const render = (uniformData) => {
+  // Splits the frame into scissored horizontal bands (see frameBands), each
+  // submitted as its own command buffer, so no single submit is long enough
+  // to trip the GPU driver's TDR watchdog at high maxIter. The fragment
+  // shader derives its per-pixel fractal coordinate purely from NDC
+  // position + canvas width/height (mandelbrot.wgsl), which scissoring
+  // doesn't change — so bands are pixel-identical to an unbanded render,
+  // just split across more, shorter submits. Returns the band count.
+  const render = (uniformData, maxIter) => {
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
-    const encoder = device.createCommandEncoder();
-    const pass = encoder.beginRenderPass({
-      colorAttachments: [{
-        view: context.getCurrentTexture().createView(),
-        loadOp: "clear",
-        storeOp: "store",
-        clearValue: { r: 0, g: 0, b: 0, a: 1 }
-      }]
+    const view = context.getCurrentTexture().createView();
+    const bands = frameBands(canvas.width, canvas.height, maxIter);
+
+    bands.forEach((band, i) => {
+      const encoder = device.createCommandEncoder();
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view,
+          // Only the first band clears the attachment; loadOp applies to
+          // the whole attachment (not scissored), so a "clear" on later
+          // bands would wipe out the bands already drawn.
+          loadOp: i === 0 ? "clear" : "load",
+          storeOp: "store",
+          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        }]
+      });
+
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.setScissorRect(0, band.y, canvas.width, band.height);
+      pass.draw(3);
+      pass.end();
+
+      device.queue.submit([encoder.finish()]);
     });
 
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.draw(3);
-    pass.end();
-
-    device.queue.submit([encoder.finish()]);
+    return bands.length;
   };
 
   return { render, writePalette };

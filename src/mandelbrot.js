@@ -876,7 +876,7 @@ export class MandelbrotApp {
       smoothColoring: panel.smoothColoring,
       bandCount: panel.bandCount,
     });
-    panel.renderer.render(data);
+    panel.lastTileBandCount = panel.renderer.render(data, displayIter);
   }
 
   // RENDER. Each visible panel ramps toward its own maxIter independently;
@@ -922,7 +922,6 @@ export class MandelbrotApp {
         }
       }
       this.renderPanel(panel, juliaMode, displayIter);
-      // Exposed for e2e observation of "what's currently rendered".
       panel.lastDisplayIter = displayIter;
     }
 
