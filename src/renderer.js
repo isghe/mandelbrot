@@ -323,7 +323,19 @@ export async function attachCanvas(device, canvas, palette256) {
     // canvas can be resized while a frame is still draining, and every band
     // still queued has to stay inside the attachment it was computed for.
     // ensureOffscreen above has just reconciled the two for a new frame.
-    job = { bands: frameBands(offscreenWidth, offscreenHeight, maxIter), next: 0, clear };
+    // A clear stays owed until it has actually happened. It rides on band 0's
+    // loadOp, so a frame replaced before that band was submitted — which the
+    // per-frame budget can cause, by handing this panel none of it while the
+    // other panel drains — never wiped anything, and the target still holds
+    // the view the panel moved off. Without carrying it over, a later frame
+    // that only recolours the same view would correctly ask for no clear and
+    // the wipe would be lost for good.
+    const owed = job !== null && job.next === 0 && job.clear;
+    job = {
+      bands: frameBands(offscreenWidth, offscreenHeight, maxIter),
+      next: 0,
+      clear: clear || owed,
+    };
     return job.bands.length;
   };
 
