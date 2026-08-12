@@ -55,16 +55,97 @@ export function sameRenderSignature(prev, next) {
   return true;
 }
 
+// Indices (same layout) holding the view's centre — the only thing a pure pan
+// changes — and the two the shift below is measured in terms of.
+const CENTER_X_INDEX = 1; // hi, with lo at 2
+const CENTER_Y_INDEX = 3; // hi, with lo at 4
+const CENTER_INDICES = [CENTER_X_INDEX, CENTER_X_INDEX + 1, CENTER_Y_INDEX, CENTER_Y_INDEX + 1];
+const SCALE_INDEX = 0;
+const CANVAS_WIDTH_INDEX = 10;
+const CANVAS_HEIGHT_INDEX = 11;
+
+// Largest sub-pixel error tolerated on a shift before it stops counting as a
+// whole-pixel translation, in device pixels.
+const SHIFT_TOLERANCE_PX = 0.05;
+
+// A double-single pair read back as the one f64 it stands for. The two halves
+// are f32s whose exponents differ by about 24 bits, so their sum needs ~49
+// significant bits and is exact in f64.
+const doubleSingle = (data, hiIndex) => data[hiIndex] + data[hiIndex + 1];
+
+// The device-pixel shift that turns `prev`'s image into `next`'s — how far
+// every pixel of the frame this panel last started has moved in the frame it
+// is about to start — or null when `next` isn't a pure whole-pixel translation
+// of `prev` and so nothing of it can be reused.
+//
+// The shift follows from the shader's projection (fs_main in mandelbrot.wgsl):
+// a pixel's fractal x is centerX + (u - 0.5) * scale * aspect with
+// aspect = width/height, so displacing the centre by dc slides the image by
+// -dc * height / scale pixels; vertically the framebuffer's y axis runs
+// opposite to the plane's, which flips that sign back. `scale` cancels out of
+// the drag itself, so the pixel shift a given drag produces doesn't depend on
+// zoom depth.
+//
+// It is measured from the double-single halves in the uniform data rather than
+// from the panel's own f64 centre, because those are the values the GPU
+// actually used for the previous frame. That is also what makes the precision
+// floor look after itself instead of needing a magic zoom cutoff: the pixel
+// error of the double-single representation is about
+// |center| * 1e-15 * height / scale, so it grows on its own as the view zooms
+// in and eventually breaks SHIFT_TOLERANCE_PX — at roughly scale 4e-13, about
+// where the same fractal point computed from two different centres starts to
+// differ in its last bits and a seam would become visible.
+export function panShiftBetween(prev, next) {
+  if (!prev || !next) return null;
+  if (prev.paletteType !== next.paletteType) return null;
+  if (prev.data.length !== next.data.length) return null;
+
+  // Everything the centre doesn't cover has to be identical: a change in
+  // scale isn't a translation at all, and a change in iteration count or
+  // colouring would leave the reused pixels rendered to a different recipe
+  // than the ones drawn beside them. juliaSeed is exempt on a Mandelbrot
+  // panel for the same reason as in sameRenderSignature — its shader never
+  // reads it.
+  const juliaMode = next.data[JULIA_MODE_INDEX];
+  for (let i = 0; i < next.data.length; i++) {
+    if (CENTER_INDICES.includes(i)) continue;
+    if (juliaMode === 0 && JULIA_SEED_INDICES.includes(i)) continue;
+    if (prev.data[i] !== next.data[i]) return null;
+  }
+
+  const scale = next.data[SCALE_INDEX];
+  const width = next.data[CANVAS_WIDTH_INDEX];
+  const height = next.data[CANVAS_HEIGHT_INDEX];
+  if (!(scale > 0) || !(width > 0) || !(height > 0)) return null;
+
+  const pixelsPerUnit = height / scale;
+  const rawX = (doubleSingle(prev.data, CENTER_X_INDEX) - doubleSingle(next.data, CENTER_X_INDEX)) * pixelsPerUnit;
+  const rawY = (doubleSingle(next.data, CENTER_Y_INDEX) - doubleSingle(prev.data, CENTER_Y_INDEX)) * pixelsPerUnit;
+  const x = Math.round(rawX);
+  const y = Math.round(rawY);
+  // Negated comparisons so a NaN centre falls out here rather than passing a
+  // test it never actually met.
+  if (!(Math.abs(rawX - x) <= SHIFT_TOLERANCE_PX)) return null;
+  if (!(Math.abs(rawY - y) <= SHIFT_TOLERANCE_PX)) return null;
+
+  // A shift of zero uncovers nothing, so the frame would have no bands at all
+  // and would never land; a shift past the canvas leaves no overlap worth
+  // copying. Both fall back to an ordinary full render.
+  if (x === 0 && y === 0) return null;
+  if (Math.abs(x) >= width || Math.abs(y) >= height) return null;
+  return { x, y };
+}
+
 // Indices (same layout) that decide *which point of the plane* each pixel
 // computes: scale, center, and the canvas dimensions the shader derives its
 // per-pixel coordinate from. Everything else in the array — displayIter,
 // smoothColoring, bandCount — changes how that point is iterated or coloured,
 // not where it is.
 const VIEW_GEOMETRY_INDICES = [
-  0,           // scale
-  1, 2, 3, 4,  // centerX hi/lo, centerY hi/lo
-  10, 11,      // canvasWidth, canvasHeight
-  12,          // juliaMode
+  SCALE_INDEX,
+  ...CENTER_INDICES,
+  CANVAS_WIDTH_INDEX, CANVAS_HEIGHT_INDEX,
+  JULIA_MODE_INDEX,
 ];
 
 // True when `next` looks at the same part of the plane as `prev` did.
@@ -195,6 +276,18 @@ export class FractalPanel {
   // view — the opposite of the rule.
   startsNewView(data) {
     return !sameViewGeometry(this.lastRenderSignature, { data });
+  }
+
+  // The device-pixel shift by which the frame about to start is a pure
+  // translation of the one this panel last started — what the renderer can
+  // copy across instead of recomputing. Null when nothing is reusable, which
+  // is every case but a pan (see panShiftBetween).
+  //
+  // Takes paletteType, unlike startsNewView above: a recoloured frame is still
+  // the same view, but its reused pixels would carry the old palette while the
+  // ones drawn beside them carry the new one.
+  panShiftFor(data) {
+    return panShiftBetween(this.lastRenderSignature, { data, paletteType: this.paletteType });
   }
 
   markRendered(data) {

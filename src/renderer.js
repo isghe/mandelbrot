@@ -167,6 +167,35 @@ export function frameBands(regions, maxIter, budget = BAND_WORK_BUDGET) {
   return bands;
 }
 
+// The region a pan uncovers, as the rectangles frameBands wants: a vertical
+// strip spanning the full height on the side the image came from, plus a
+// horizontal strip covering only the columns that strip doesn't already — so
+// the two never overlap and no pixel is computed twice. Returns 0, 1 or 2
+// rectangles: 1 when the pan was purely horizontal or purely vertical, 0 when
+// the shift is zero or big enough that nothing of the old frame survives (in
+// which case there is nothing to reproject and the caller should be rendering
+// the whole panel anyway).
+export function exposedRegions(width, height, shift) {
+  if (!(width > 0) || !(height > 0)) return [];
+  const dx = Number.isFinite(shift?.x) ? Math.trunc(shift.x) : 0;
+  const dy = Number.isFinite(shift?.y) ? Math.trunc(shift.y) : 0;
+  if (Math.abs(dx) >= width || Math.abs(dy) >= height) return [];
+
+  const regions = [];
+  if (dx !== 0) {
+    regions.push({ x: dx > 0 ? 0 : width + dx, y: 0, width: Math.abs(dx), height });
+  }
+  if (dy !== 0) {
+    regions.push({
+      x: dx > 0 ? dx : 0,
+      y: dy > 0 ? 0 : height + dy,
+      width: width - Math.abs(dx),
+      height: Math.abs(dy),
+    });
+  }
+  return regions;
+}
+
 // Sets up the pipeline/uniforms for one canvas's fractal render pass and
 // returns a small `{ render, writePalette }` handle. Throws on setup
 // failure (missing WebGPU canvas context, WGSL fetch/compile errors), for
@@ -270,7 +299,11 @@ export async function attachCanvas(device, canvas, palette256) {
     const texture = device.createTexture({
       size: [width, height],
       format,
+      // COPY_SRC and COPY_DST both, on both targets: reprojection copies one
+      // into the other and then swaps their roles, so each has to be able to
+      // play either end of the copy.
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+        | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
     });
     const view = texture.createView();
     return {
@@ -287,18 +320,69 @@ export async function attachCanvas(device, canvas, palette256) {
 
   // Where the current frame's bands land, and what present() puts on screen.
   let target = null;
+  // Ping-pong partner for reprojection: a texture can't be sampled and
+  // rendered into at once, so a shifted copy of the target has to land
+  // somewhere else and take its place. Allocated the first time a pan actually
+  // reuses a frame, so a session that never pans never pays for it (per panel:
+  // one extra full-canvas texture, ~33 MB at 4K).
+  let spare = null;
 
   // (Re)creates the render target whenever the canvas backing store has
-  // changed size. A freshly created WebGPU texture is zero-initialized by
-  // spec, so the new target starts as transparent black and needs no explicit
-  // clear pass — and the canvas is configured with the default "opaque" alpha
-  // mode, so any not-yet-drawn region reads as plain black on screen.
+  // changed size, and reports whether it did — a target created just now holds
+  // no previous frame, so there is nothing for a reprojection to reuse. A
+  // freshly created WebGPU texture is zero-initialized by spec, so it starts
+  // as transparent black and needs no explicit clear pass — and the canvas is
+  // configured with the default "opaque" alpha mode, so any not-yet-drawn
+  // region reads as plain black on screen.
   const ensureTarget = () => {
-    if (target && target.width === canvas.width && target.height === canvas.height) return;
-    // Already-submitted work referencing the old texture stays valid; destroy
-    // only bars further use of it, which the reassignment below ends anyway.
+    if (target && target.width === canvas.width && target.height === canvas.height) return false;
+    // Already-submitted work referencing the old textures stays valid; destroy
+    // only bars further use of them, which the reassignment below ends anyway.
     target?.texture.destroy();
+    spare?.texture.destroy();
+    spare = null;
     target = createTarget(canvas.width, canvas.height);
+    return true;
+  };
+
+  // Slides the target's image by `shift` device pixels into the spare target,
+  // then makes that the target — the pixels a pan didn't uncover, moved to
+  // where they now belong instead of being computed again.
+  //
+  // The spare is cleared first and the overlap copied over it, rather than the
+  // copy going in first: the part a pan uncovers must come out black, not
+  // holding whatever the spare kept from two frames ago, so that no pixel ever
+  // shows a picture of somewhere else while the exposed strips fill in.
+  //
+  // copyTextureToTexture rather than a shifted draw: no second WGSL entry
+  // point, no uniform to carry the offset, and the copy is texel-exact by
+  // construction. Both it and the clear cost memory bandwidth rather than
+  // iterations, which is the whole point — they don't scale with maxIter.
+  const reprojectTarget = (shift) => {
+    if (!spare) spare = createTarget(target.width, target.height);
+    const encoder = device.createCommandEncoder();
+    const wipe = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: spare.view,
+        loadOp: "clear",
+        storeOp: "store",
+        clearValue: { r: 0, g: 0, b: 0, a: 1 }
+      }]
+    });
+    wipe.end();
+    // A pixel at x in the old frame is at x + shift.x in the new one, so the
+    // surviving overlap starts at max(0, -shift) in the source and lands at
+    // max(0, shift) in the destination.
+    encoder.copyTextureToTexture(
+      { texture: target.texture, origin: { x: Math.max(0, -shift.x), y: Math.max(0, -shift.y) } },
+      { texture: spare.texture, origin: { x: Math.max(0, shift.x), y: Math.max(0, shift.y) } },
+      { width: target.width - Math.abs(shift.x), height: target.height - Math.abs(shift.y) }
+    );
+    device.queue.submit([encoder.finish()]);
+
+    const displaced = target;
+    target = spare;
+    spare = displaced;
   };
 
   // Puts the render target on screen. getCurrentTexture() is called here
@@ -338,11 +422,17 @@ export async function attachCanvas(device, canvas, palette256) {
   // over progressively older content below — right when the frame is a
   // refinement of the same view, wrong when the view itself moved, since then
   // the untouched rows are a picture of somewhere else. The caller decides
-  // (see fractalPanel.js's sameViewGeometry). Returns how many bands this
-  // frame was split into.
-  const beginFrame = (uniformData, maxIter, { clear = false } = {}) => {
+  // (see fractalPanel.js's sameViewGeometry).
+  //
+  // `shift`, when non-null, says the new frame is the old one translated by
+  // that many device pixels (fractalPanel.js's panShiftBetween) — so the
+  // overlap can be copied across and only the strips the pan uncovered need
+  // computing. That makes a frame cost what the pan uncovered rather than what
+  // the panel holds, which for the short drags of ordinary exploring is an
+  // order of magnitude less. Returns how many bands this frame was split into.
+  const beginFrame = (uniformData, maxIter, { clear = false, shift = null } = {}) => {
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
-    ensureTarget();
+    const freshTarget = ensureTarget();
     // Banded off the render target's own size, not the live canvas's: the
     // canvas can be resized while a frame is still draining, and every band
     // still queued has to stay inside the attachment it was computed for.
@@ -355,10 +445,29 @@ export async function attachCanvas(device, canvas, palette256) {
     // that only recolours the same view would correctly ask for no clear and
     // the wipe would be lost for good.
     const owed = job !== null && job.next === 0 && job.clear;
+    // Reprojecting is only sound if the target really holds the whole frame
+    // the shift was measured against: not one created this very call, and not
+    // one still missing bands of the frame before — a half-drained target is
+    // part old view, part new, and sliding that across would smear the two.
+    // That second condition also subsumes `owed`, which can only be true while
+    // band 0 is still pending, so a wipe deferred by the budget is never lost
+    // to a reprojection that suppresses it.
+    const draining = job !== null && job.next < job.bands.length;
+    const reproject = shift !== null && !freshTarget && !draining;
+    if (reproject) reprojectTarget(shift);
+
     job = {
-      bands: frameBands([{ x: 0, y: 0, width: target.width, height: target.height }], maxIter),
+      bands: frameBands(
+        reproject
+          ? exposedRegions(target.width, target.height, shift)
+          : [{ x: 0, y: 0, width: target.width, height: target.height }],
+        maxIter
+      ),
       next: 0,
-      clear: clear || owed,
+      // A reprojection has already cleared what it didn't copy, so the frame
+      // must not also ask band 0 to wipe the attachment — that would erase the
+      // overlap it just went to the trouble of preserving.
+      clear: !reproject && (clear || owed),
     };
     return job.bands.length;
   };

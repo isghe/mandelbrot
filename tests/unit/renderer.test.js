@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   requestGPUDevice, attachCanvas, frameBands, BAND_WORK_BUDGET, shareBands,
-  nextBandBudget, MAX_FRAME_BAND_BUDGET, TARGET_FRAME_MS,
+  nextBandBudget, MAX_FRAME_BAND_BUDGET, TARGET_FRAME_MS, exposedRegions,
 } from '../../src/renderer.js';
 
 // renderer.js wraps the WebGPU API (adapter/device/pipeline/shader
@@ -260,4 +260,101 @@ test('nextBandBudget: a nonsensical current budget falls back to a single band',
   assert.strictEqual(nextBandBudget(NaN, 1), 2);
   assert.strictEqual(nextBandBudget(0, 1), 2);
   assert.strictEqual(nextBandBudget(-5, 5000), 1);
+});
+
+// exposedRegions is the other half of the pan reprojection (see
+// fractalPanel.js's panShiftBetween for the half that decides the shift): it
+// says which pixels the copied-across image doesn't cover and therefore still
+// have to be computed.
+
+const W = 1280;
+const H = 720;
+
+// The two properties that make the region list correct whatever its shape:
+// together the rectangles cover exactly the pixels the shifted image misses,
+// and they never cover the same pixel twice (which would compute it twice and
+// make the band budget lie about the frame's cost).
+function assertExposesExactly(regions, shift) {
+  const covered = new Set();
+  for (const region of regions) {
+    for (let y = region.y; y < region.y + region.height; y++) {
+      for (let x = region.x; x < region.x + region.width; x++) {
+        assert.ok(x >= 0 && x < W && y >= 0 && y < H, `region pixel ${x},${y} is off-canvas`);
+        const key = y * W + x;
+        assert.ok(!covered.has(key), `regions overlap at ${x},${y}`);
+        covered.add(key);
+      }
+    }
+  }
+  // Every pixel not covered by the old image slid over by `shift`.
+  let expected = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const sourceX = x - shift.x;
+      const sourceY = y - shift.y;
+      const reused = sourceX >= 0 && sourceX < W && sourceY >= 0 && sourceY < H;
+      if (reused) continue;
+      expected++;
+      assert.ok(covered.has(y * W + x), `pixel ${x},${y} is neither reused nor exposed`);
+    }
+  }
+  assert.strictEqual(covered.size, expected);
+  // The same count stated the other way round, as the area arithmetic the
+  // whole optimisation is justified by.
+  assert.strictEqual(
+    expected,
+    W * H - (W - Math.abs(shift.x)) * (H - Math.abs(shift.y))
+  );
+}
+
+for (const shift of [{ x: 120, y: 64 }, { x: -120, y: 64 }, { x: 120, y: -64 }, { x: -120, y: -64 }]) {
+  test(`exposedRegions: an L-shape that tiles exactly what a (${shift.x}, ${shift.y}) pan uncovers`, () => {
+    const regions = exposedRegions(W, H, shift);
+    assert.strictEqual(regions.length, 2);
+    assertExposesExactly(regions, shift);
+  });
+}
+
+test('exposedRegions: a purely horizontal pan uncovers one full-height strip', () => {
+  const regions = exposedRegions(W, H, { x: 120, y: 0 });
+  assert.deepStrictEqual(regions, [{ x: 0, y: 0, width: 120, height: H }]);
+  assertExposesExactly(regions, { x: 120, y: 0 });
+});
+
+test('exposedRegions: a purely vertical pan uncovers one full-width strip', () => {
+  const regions = exposedRegions(W, H, { x: 0, y: -64 });
+  assert.deepStrictEqual(regions, [{ x: 0, y: H - 64, width: W, height: 64 }]);
+  assertExposesExactly(regions, { x: 0, y: -64 });
+});
+
+test('exposedRegions: no overlap left to reuse means no regions at all', () => {
+  // The caller renders the whole panel in this case, so returning the whole
+  // panel here would be a second, competing answer to the same question.
+  assert.deepStrictEqual(exposedRegions(W, H, { x: W, y: 0 }), []);
+  assert.deepStrictEqual(exposedRegions(W, H, { x: 0, y: -H }), []);
+  assert.deepStrictEqual(exposedRegions(W, H, { x: 0, y: 0 }), []);
+});
+
+test('exposedRegions: a degenerate canvas or a nonsensical shift yields no regions', () => {
+  assert.deepStrictEqual(exposedRegions(0, H, { x: 10, y: 0 }), []);
+  assert.deepStrictEqual(exposedRegions(W, 0, { x: 10, y: 0 }), []);
+  assert.deepStrictEqual(exposedRegions(W, H, { x: NaN, y: NaN }), []);
+  assert.deepStrictEqual(exposedRegions(W, H, null), []);
+});
+
+test('exposedRegions: a narrow strip still bands into whole rows, never zero-height ones', () => {
+  // The pan case frameBands didn't used to be able to express: tall and
+  // narrow, rather than the full-width slabs a whole-canvas frame produces.
+  const strip = exposedRegions(W, H, { x: 12, y: 0 })[0];
+  const bands = frameBands([strip], 8192);
+  assert.ok(bands.length > 1, 'an expensive strip should still be split');
+  let y = strip.y;
+  for (const band of bands) {
+    assert.strictEqual(band.x, strip.x);
+    assert.strictEqual(band.width, strip.width);
+    assert.strictEqual(band.y, y);
+    assert.ok(band.height > 0);
+    y += band.height;
+  }
+  assert.strictEqual(y, strip.y + strip.height);
 });
