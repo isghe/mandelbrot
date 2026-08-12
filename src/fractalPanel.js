@@ -188,8 +188,13 @@ export class FractalPanel {
   // True when the frame about to start looks somewhere else than the one this
   // panel last started, so what's on the panel is stale rather than just
   // coarse — see sameViewGeometry.
+  //
+  // Deliberately hands over the uniform data alone, unlike isRenderUpToDate
+  // above: paletteType has no bearing on where the panel is looking, and
+  // passing it here would suggest the palette can make a frame count as a new
+  // view — the opposite of the rule.
   startsNewView(data) {
-    return !sameViewGeometry(this.lastRenderSignature, { data, paletteType: this.paletteType });
+    return !sameViewGeometry(this.lastRenderSignature, { data });
   }
 
   markRendered(data) {
