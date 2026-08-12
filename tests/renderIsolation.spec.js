@@ -5,10 +5,8 @@ import { test, expect } from '@playwright/test';
 // Before this fix, renderOnce() (mandelbrot.js) unconditionally called
 // renderPanel() for every visible panel on every animation frame, so an
 // idle panel got redrawn in lockstep with whichever panel was actually
-// changing (e.g. a progressive ramp) — see the
-// project_gpu_queue_coupling_between_panels memory note for how this was
-// first observed (Julia's progressive reveal crawling while Mandelbrot sat
-// at a high, unchanging maxIter).
+// changing (e.g. Julia's progressive reveal crawling while Mandelbrot sat
+// idle at a high, unchanging maxIter).
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
