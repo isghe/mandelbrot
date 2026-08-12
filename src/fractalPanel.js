@@ -27,6 +27,34 @@ export function buildUniformData({
   ]);
 }
 
+// Indices into buildUniformData's array (see its layout above) that a
+// non-Julia panel's fragment shader never reads — juliaSeed only feeds the
+// Julia iteration formula. Skipping them below means clicking a new Julia
+// seed doesn't force a pointless re-render of the Mandelbrot panel, whose
+// image is unaffected by it.
+const JULIA_MODE_INDEX = 12;
+const JULIA_SEED_INDICES = [5, 6, 7, 8]; // sx_hi, sx_lo, sy_hi, sy_lo
+
+// True when `next` (the uniform data + paletteType about to be rendered)
+// would produce a pixel-identical frame to `prev` (what's already on
+// screen) — the two together fully determine one panel's rendered pixels
+// (paletteType isn't in the uniform array; it drives the palette texture
+// written separately by MandelbrotApp.applyPalette). A null/undefined
+// `prev` (nothing rendered yet) or a NaN anywhere in the compared uniform
+// data never compares equal, so both cases conservatively fall through to a
+// real render.
+export function sameRenderSignature(prev, next) {
+  if (!prev || !next) return false;
+  if (prev.paletteType !== next.paletteType) return false;
+  if (prev.data.length !== next.data.length) return false;
+  const juliaMode = next.data[JULIA_MODE_INDEX];
+  for (let i = 0; i < next.data.length; i++) {
+    if (juliaMode === 0 && JULIA_SEED_INDICES.includes(i)) continue;
+    if (prev.data[i] !== next.data[i]) return false;
+  }
+  return true;
+}
+
 // Per-canvas render/interaction state: one Mandelbrot canvas today, a second
 // independent Julia canvas later. `juliaSeed` (the Julia-family constant, not
 // a canvas's own view) stays app-global on MandelbrotApp; everything else
@@ -100,6 +128,31 @@ export class FractalPanel {
   // that just happen to share the word "band".
   lastDisplayIter = null;
   lastTileBandCount = null;
+
+  // What was actually submitted for the last presented frame (uniform data +
+  // paletteType) — lets renderPanel skip a resubmit when the next frame
+  // would be pixel-identical (see sameRenderSignature above). Null means
+  // "nothing rendered yet" or "known stale" (see invalidateRender), so the
+  // next render always goes through.
+  lastRenderSignature = null;
+
+  // True when `data` (the uniform array about to be submitted) would
+  // produce the same pixels as what's already on screen.
+  isRenderUpToDate(data) {
+    return sameRenderSignature(this.lastRenderSignature, { data, paletteType: this.paletteType });
+  }
+
+  markRendered(data) {
+    this.lastRenderSignature = { data, paletteType: this.paletteType };
+  }
+
+  // Forces the next renderPanel call through, even if the uniform data ends
+  // up identical to last time — for cases where the *presented* image may
+  // have changed independent of the render inputs (e.g. a resize/visibility
+  // toggle that drops the compositor's last frame for this canvas).
+  invalidateRender() {
+    this.lastRenderSignature = null;
+  }
 
   constructor(canvas, overlayCanvas) {
     this.canvas = canvas;

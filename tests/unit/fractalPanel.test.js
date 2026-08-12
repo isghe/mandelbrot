@@ -12,7 +12,7 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
 
 globalThis.window ??= { devicePixelRatio: 1 };
 
-const { FractalPanel, buildUniformData } = await import('../../src/fractalPanel.js');
+const { FractalPanel, buildUniformData, sameRenderSignature } = await import('../../src/fractalPanel.js');
 const { split64 } = await import('../../src/precision.js');
 
 // Minimal HTMLCanvasElement stand-in: a plain object with the handful of
@@ -260,4 +260,73 @@ test('default field values match the app defaults FractalPanel replaced', () => 
   assert.strictEqual(panel.progressiveIter, 1);
   assert.strictEqual(panel.gridOverlay, 0);
   assert.strictEqual(panel.centerMarker, 0);
+});
+
+test('sameRenderSignature: identical data and paletteType is a match', () => {
+  const data = new Float32Array([1, 2, 3]);
+  const a = { data, paletteType: 4 };
+  const b = { data: new Float32Array([1, 2, 3]), paletteType: 4 };
+  assert.strictEqual(sameRenderSignature(a, b), true);
+});
+
+test('sameRenderSignature: a differing float in the uniform data is not a match', () => {
+  const a = { data: new Float32Array([1, 2, 3]), paletteType: 4 };
+  const b = { data: new Float32Array([1, 2, 99]), paletteType: 4 };
+  assert.strictEqual(sameRenderSignature(a, b), false);
+});
+
+test('sameRenderSignature: same uniform data but different paletteType is not a match', () => {
+  const a = { data: new Float32Array([1, 2, 3]), paletteType: 4 };
+  const b = { data: new Float32Array([1, 2, 3]), paletteType: 5 };
+  assert.strictEqual(sameRenderSignature(a, b), false);
+});
+
+function makeUniformArgs(overrides = {}) {
+  return {
+    center: { x: -0.5, y: 0 },
+    scale: 3.0,
+    juliaSeed: { x: -0.7, y: 0.27 },
+    displayIter: 256,
+    canvasWidth: 800,
+    canvasHeight: 600,
+    juliaMode: 0,
+    smoothColoring: 0,
+    bandCount: 0,
+    ...overrides,
+  };
+}
+
+test('sameRenderSignature: a juliaSeed change is ignored for a non-Julia panel (juliaMode 0)', () => {
+  const a = { data: buildUniformData(makeUniformArgs()), paletteType: 4 };
+  const b = { data: buildUniformData(makeUniformArgs({ juliaSeed: { x: 0.1, y: -0.6 } })), paletteType: 4 };
+  assert.strictEqual(sameRenderSignature(a, b), true);
+});
+
+test('sameRenderSignature: a juliaSeed change is not ignored for the Julia panel (juliaMode 1)', () => {
+  const a = { data: buildUniformData(makeUniformArgs({ juliaMode: 1 })), paletteType: 4 };
+  const b = { data: buildUniformData(makeUniformArgs({ juliaMode: 1, juliaSeed: { x: 0.1, y: -0.6 } })), paletteType: 4 };
+  assert.strictEqual(sameRenderSignature(a, b), false);
+});
+
+test('sameRenderSignature: a null/undefined previous signature is never a match', () => {
+  const next = { data: new Float32Array([1, 2, 3]), paletteType: 4 };
+  assert.strictEqual(sameRenderSignature(null, next), false);
+  assert.strictEqual(sameRenderSignature(undefined, next), false);
+});
+
+test('FractalPanel.isRenderUpToDate/markRendered/invalidateRender', () => {
+  const canvas = makeMockCanvas();
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+  panel.paletteType = 4;
+
+  const data = new Float32Array([1, 2, 3]);
+  assert.strictEqual(panel.isRenderUpToDate(data), false); // nothing rendered yet
+
+  panel.markRendered(data);
+  assert.strictEqual(panel.isRenderUpToDate(new Float32Array([1, 2, 3])), true);
+  assert.strictEqual(panel.isRenderUpToDate(new Float32Array([1, 2, 4])), false);
+
+  panel.invalidateRender();
+  assert.strictEqual(panel.isRenderUpToDate(new Float32Array([1, 2, 3])), false);
 });

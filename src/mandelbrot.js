@@ -404,6 +404,13 @@ export class MandelbrotApp {
     for (const { panel } of this.panels) {
       panel.resizeCanvas();
       panel.resizeOverlayCanvas();
+      // Single choke point for both window resize and the panel-visibility
+      // toggle (onPanelVisibilityChange also calls this) — a canvas that was
+      // just hidden/shown or resized may have had its presented image
+      // dropped by the compositor even when the backing-store size (and so
+      // the uniform data) ends up unchanged, so force the next render
+      // through instead of trusting the last signature.
+      panel.invalidateRender();
     }
   }
 
@@ -876,7 +883,15 @@ export class MandelbrotApp {
       smoothColoring: panel.smoothColoring,
       bandCount: panel.bandCount,
     });
+    // Skip a resubmit when this frame would be pixel-identical to the last
+    // one presented — otherwise every visible panel gets redrawn on every
+    // animation frame regardless of whether it changed, so an idle panel
+    // pays the GPU cost of whichever other panel is actually ramping/
+    // animating (e.g. Julia's progressive reveal crawling while Mandelbrot
+    // sits idle at a high, unchanging maxIter).
+    if (panel.isRenderUpToDate(data)) return;
     panel.lastTileBandCount = panel.renderer.render(data, displayIter);
+    panel.markRendered(data);
   }
 
   // RENDER. Each visible panel ramps toward its own maxIter independently;
