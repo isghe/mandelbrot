@@ -23,6 +23,13 @@ struct Params {
 @group(0) @binding(1) var paletteSampler : sampler;
 @group(0) @binding(2) var paletteTex : texture_2d<f32>;
 
+// Read by fs_blit only, so it gets its own binding number rather than
+// reusing 0-2: WGSL requires a unique @group/@binding per resource across
+// the whole module, even though the two pipelines never share a bind group
+// (each is built with layout:"auto", which derives the layout from just the
+// bindings its own entry points actually reference — see renderer.js).
+@group(0) @binding(3) var offscreenTex : texture_2d<f32>;
+
 struct VSOut {
     @builtin(position) pos : vec4<f32>,
     @location(0) fragPos : vec2<f32>,
@@ -235,4 +242,14 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
 
     let col = palette256(t);
     return vec4<f32>(col,1.0);
+}
+
+// Copies the offscreen render target (where fs_main's bands accumulate) onto
+// the canvas, reusing vs_main's full-screen triangle. textureLoad with the
+// framebuffer coordinate, not a sampled uv: the offscreen is always the exact
+// size of the canvas backing store, so this is a 1:1 texel copy with no
+// filtering, no half-texel offset, and no sampler binding to keep in sync.
+@fragment
+fn fs_blit(in:VSOut)->@location(0) vec4<f32>{
+    return textureLoad(offscreenTex, vec2<i32>(in.pos.xy), 0);
 }

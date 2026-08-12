@@ -53,10 +53,12 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
   });
 
   expect(bandCount).toBeGreaterThan(1);
-  expect(submitCount).toBe(bandCount);
+  // One submit per band, plus the single blit that puts the offscreen target
+  // on screen (see present() in renderer.js).
+  expect(submitCount).toBe(bandCount + 1);
 });
 
-test('every band is actually drawn — no band is left blank by a stray clear', async ({ page }) => {
+test('every band is actually drawn — none is left blank in the composited frame', async ({ page }) => {
   const panelInfo = await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
     // Same as above: force the redraw past the per-panel render skip.

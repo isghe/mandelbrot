@@ -126,6 +126,76 @@ export async function attachCanvas(device, canvas, palette256) {
     ]
   });
 
+  // Copies the offscreen target onto the canvas (see fs_blit in the WGSL).
+  // Shares vs_main with the fractal pipeline, so no second vertex stage; its
+  // "auto" layout resolves to just fs_blit's own binding 3, independent of
+  // the fractal pipeline's uniform/palette bindings above.
+  const blitPipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: { module, entryPoint: "vs_main" },
+    fragment: { module, entryPoint: "fs_blit", targets: [{ format }] },
+    primitive: { topology: "triangle-list" }
+  });
+
+  // The frame's bands are rendered into this texture rather than straight
+  // into the swap-chain texture, then blitted onto the canvas in one draw.
+  // A WebGPU canvas texture doesn't carry its contents over from the previous
+  // frame, so it can't accumulate anything across animation frames; a texture
+  // we own can, which is what lets a frame's bands later be spread over
+  // several frames instead of all being submitted in one.
+  let offscreen = null;
+  let offscreenView = null;
+  let blitBindGroup = null;
+  // Tracked here rather than read back off `offscreen` so the size check
+  // doesn't depend on GPUTexture's width/height attributes.
+  let offscreenWidth = 0;
+  let offscreenHeight = 0;
+
+  // (Re)creates the offscreen target whenever the canvas backing store has
+  // changed size. A freshly created WebGPU texture is zero-initialized by
+  // spec, so the new target starts as transparent black and needs no explicit
+  // clear pass — and the canvas is configured with the default "opaque" alpha
+  // mode, so any not-yet-drawn region reads as plain black on screen.
+  const ensureOffscreen = () => {
+    if (offscreen && offscreenWidth === canvas.width && offscreenHeight === canvas.height) return;
+    // Already-submitted work referencing the old texture stays valid; destroy
+    // only bars further use of it, which the reassignment below ends anyway.
+    offscreen?.destroy();
+    offscreenWidth = canvas.width;
+    offscreenHeight = canvas.height;
+    offscreen = device.createTexture({
+      size: [offscreenWidth, offscreenHeight],
+      format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
+    offscreenView = offscreen.createView();
+    blitBindGroup = device.createBindGroup({
+      layout: blitPipeline.getBindGroupLayout(0),
+      entries: [{ binding: 3, resource: offscreenView }]
+    });
+  };
+
+  // Puts the offscreen target on screen. getCurrentTexture() is called here
+  // and nowhere else, so the canvas texture is always acquired and used
+  // within the same task, as WebGPU requires. loadOp "clear" is nominal —
+  // the blit triangle covers every pixel of the attachment.
+  const present = () => {
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: context.getCurrentTexture().createView(),
+        loadOp: "clear",
+        storeOp: "store",
+        clearValue: { r: 0, g: 0, b: 0, a: 1 }
+      }]
+    });
+    pass.setPipeline(blitPipeline);
+    pass.setBindGroup(0, blitBindGroup);
+    pass.draw(3);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+  };
+
   // Splits the frame into scissored horizontal bands (see frameBands), each
   // submitted as its own command buffer, so no single submit is long enough
   // to trip the GPU driver's TDR watchdog at high maxIter. The fragment
@@ -133,23 +203,27 @@ export async function attachCanvas(device, canvas, palette256) {
   // position + canvas width/height (mandelbrot.wgsl), which scissoring
   // doesn't change — so bands are pixel-identical to an unbanded render,
   // just split across more, shorter submits. Returns the band count.
+  //
+  // Every band loads rather than clears: the offscreen target keeps whatever
+  // the previous frame left there, and a band overwrites only its own rows.
+  // The old "clear on band 0" is gone with the swap-chain target it existed
+  // for — loadOp applies to the whole attachment, not to the scissor rect, so
+  // it was the only way to start from a blank frame back when each frame had
+  // to fully repaint a fresh canvas texture. Keeping the previous image
+  // underneath is what lets a partially rendered frame still be shown.
   const render = (uniformData, maxIter) => {
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+    ensureOffscreen();
 
-    const view = context.getCurrentTexture().createView();
     const bands = frameBands(canvas.width, canvas.height, maxIter);
 
-    bands.forEach((band, i) => {
+    for (const band of bands) {
       const encoder = device.createCommandEncoder();
       const pass = encoder.beginRenderPass({
         colorAttachments: [{
-          view,
-          // Only the first band clears the attachment; loadOp applies to
-          // the whole attachment (not scissored), so a "clear" on later
-          // bands would wipe out the bands already drawn.
-          loadOp: i === 0 ? "clear" : "load",
-          storeOp: "store",
-          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+          view: offscreenView,
+          loadOp: "load",
+          storeOp: "store"
         }]
       });
 
@@ -160,8 +234,9 @@ export async function attachCanvas(device, canvas, palette256) {
       pass.end();
 
       device.queue.submit([encoder.finish()]);
-    });
+    }
 
+    present();
     return bands.length;
   };
 
