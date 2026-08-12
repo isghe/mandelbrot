@@ -153,10 +153,13 @@ test('snapDeltaToPixels: a delta already a whole number of pixels is unchanged',
 });
 
 test('snapDeltaToPixels: an arbitrary delta lands on a whole number of device pixels', () => {
-  for (const [dx, dy, w, h] of [[0.1013, 0.2987, 1280, 720], [-0.0041, 0.5, 1920, 1080], [0.999, -0.999, 400, 300]]) {
+  // Closeness to the nearest integer, not exact equality: floating-point
+  // rounding on an "ugly" (non-power-of-2) w/h can leave r.x * w a hair off
+  // an exact integer even though the shift is meant to be whole-pixel.
+  for (const [dx, dy, w, h] of [[0.1013, 0.2987, 1280, 720], [-0.0041, 0.5, 1920, 1080], [0.999, -0.999, 400, 300], [0.4173, -0.2861, 1366, 641]]) {
     const r = view.snapDeltaToPixels(new DOMPointReadOnly(dx, dy), w, h);
-    assert.strictEqual(Number.isInteger(r.x * w), true, `x*w should be an integer (got ${r.x * w})`);
-    assert.strictEqual(Number.isInteger(r.y * h), true, `y*h should be an integer (got ${r.y * h})`);
+    assert.ok(Math.abs(r.x * w - Math.round(r.x * w)) < 1e-9, `x*w should be ~integer (got ${r.x * w})`);
+    assert.ok(Math.abs(r.y * h - Math.round(r.y * h)) < 1e-9, `y*h should be ~integer (got ${r.y * h})`);
   }
 });
 
