@@ -893,11 +893,13 @@ export class MandelbrotApp {
       bandCount: panel.bandCount,
     });
     // Skip a resubmit when this frame would be pixel-identical to the last
-    // one presented — otherwise every visible panel gets redrawn on every
+    // one started — otherwise every visible panel gets redrawn on every
     // animation frame regardless of whether it changed, so an idle panel
     // pays the GPU cost of whichever other panel is actually ramping/
     // animating (e.g. Julia's progressive reveal crawling while Mandelbrot
-    // sits idle at a high, unchanging maxIter).
+    // sits idle at a high, unchanging maxIter). It is also what leaves a
+    // frame already in flight alone to finish: while its bands drain, the
+    // signature keeps matching, so no new frame displaces it.
     if (panel.isRenderUpToDate(data)) return;
     panel.lastTileBandCount = panel.renderer.beginFrame(data, displayIter);
     panel.markRendered(data);

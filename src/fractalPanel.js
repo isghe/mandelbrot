@@ -36,8 +36,8 @@ const JULIA_MODE_INDEX = 12;
 const JULIA_SEED_INDICES = [5, 6, 7, 8]; // sx_hi, sx_lo, sy_hi, sy_lo
 
 // True when `next` (the uniform data + paletteType about to be rendered)
-// would produce a pixel-identical frame to `prev` (what's already on
-// screen) — the two together fully determine one panel's rendered pixels
+// would produce a pixel-identical frame to `prev` (the frame this panel most
+// recently started) — the two together fully determine one panel's pixels
 // (paletteType isn't in the uniform array; it drives the palette texture
 // written separately by MandelbrotApp.applyPalette). A null/undefined
 // `prev` (nothing rendered yet) or a NaN anywhere in the compared uniform
@@ -131,15 +131,21 @@ export class FractalPanel {
   lastDisplayIter = null;
   lastTileBandCount = null;
 
-  // What was actually submitted for the last presented frame (uniform data +
-  // paletteType) — lets startRenderIfNeeded skip a resubmit when the next frame
-  // would be pixel-identical (see sameRenderSignature above). Null means
-  // "nothing rendered yet" or "known stale" (see invalidateRender), so the
-  // next render always goes through.
+  // What characterizes the frame this panel most recently started (uniform
+  // data + paletteType) — lets startRenderIfNeeded skip a resubmit when the
+  // next frame would be pixel-identical (see sameRenderSignature above). Null
+  // means "nothing rendered yet" or "known stale" (see invalidateRender), so
+  // the next render always goes through.
+  //
+  // Recorded when a frame *starts*, not when it finishes: its bands may still
+  // be draining over later animation frames (renderer.js's advanceFrame).
+  // Waiting for completion instead would make every animation frame in
+  // between find this signature stale, call beginFrame again, and restart the
+  // frame from its first band — so it would never finish at all.
   lastRenderSignature = null;
 
-  // True when `data` (the uniform array about to be submitted) would
-  // produce the same pixels as what's already on screen.
+  // True when `data` (the uniform array about to be submitted) would produce
+  // the same pixels as the frame this panel last started.
   isRenderUpToDate(data) {
     return sameRenderSignature(this.lastRenderSignature, { data, paletteType: this.paletteType });
   }
