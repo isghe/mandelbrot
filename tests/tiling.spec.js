@@ -34,7 +34,7 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
   // At the default viewport/maxIter (1280x720, 256), the worst-case work
   // already exceeds BAND_WORK_BUDGET, so this needs no maxIter bump — good,
   // since SwiftShader (software WebGPU) makes a real high-maxIter render slow.
-  const { submitCount, bandCount } = await page.evaluate(async () => {
+  const { submitCount, bandCount, framesWithSubmits } = await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
     let submitCount = 0;
     const origSubmit = window.app.gpuDevice.queue.submit;
@@ -46,17 +46,33 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
     // no-op here.
     panel.invalidateRender();
     window.app.scheduleRender();
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Wait for the whole frame to land, however many animation frames its
+    // bands end up spread over — the per-frame budget adapts to measured
+    // frame time (nextBandBudget), so that count isn't a fixed number.
+    // Counting the frames that carried any band gives the blits: exactly one
+    // per such frame.
+    let framesWithSubmits = 0;
+    let seen = 0;
+    await new Promise((resolve) => {
+      const check = () => {
+        if (submitCount > seen) { framesWithSubmits++; seen = submitCount; }
+        if (submitCount > 0 && panel.renderer.pendingBands === 0) { resolve(); return; }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
 
     window.app.gpuDevice.queue.submit = origSubmit;
-    return { submitCount, bandCount: panel.lastTileBandCount };
+    return { submitCount, bandCount: panel.lastTileBandCount, framesWithSubmits };
   });
 
   expect(bandCount).toBeGreaterThan(1);
-  expect(submitCount).toBe(bandCount);
+  // One submit per band, plus one blit per animation frame that carried any
+  // of them (see present() in renderer.js).
+  expect(submitCount).toBe(bandCount + framesWithSubmits);
 });
 
-test('every band is actually drawn — no band is left blank by a stray clear', async ({ page }) => {
+test('every band is actually drawn — none is left blank in the composited frame', async ({ page }) => {
   const panelInfo = await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
     // Same as above: force the redraw past the per-panel render skip.

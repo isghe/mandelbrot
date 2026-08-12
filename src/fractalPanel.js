@@ -36,8 +36,8 @@ const JULIA_MODE_INDEX = 12;
 const JULIA_SEED_INDICES = [5, 6, 7, 8]; // sx_hi, sx_lo, sy_hi, sy_lo
 
 // True when `next` (the uniform data + paletteType about to be rendered)
-// would produce a pixel-identical frame to `prev` (what's already on
-// screen) — the two together fully determine one panel's rendered pixels
+// would produce a pixel-identical frame to `prev` (the frame this panel most
+// recently started) — the two together fully determine one panel's pixels
 // (paletteType isn't in the uniform array; it drives the palette texture
 // written separately by MandelbrotApp.applyPalette). A null/undefined
 // `prev` (nothing rendered yet) or a NaN anywhere in the compared uniform
@@ -118,10 +118,12 @@ export class FractalPanel {
   // device loss isn't tracked per panel.
   renderer = null;
 
-  // Set by MandelbrotApp.renderOnce()/renderPanel() after each frame —
-  // exposed for e2e observation of "what's currently rendered" (progressive
-  // ramp position) and "how many scissored bands the tiling fix split the
-  // frame into" (see renderer.js's BAND_WORK_BUDGET). Named lastTileBandCount,
+  // Set by MandelbrotApp.renderOnce()/startRenderIfNeeded() as each frame
+  // starts — exposed for e2e observation of "what's currently rendered"
+  // (progressive ramp position) and "how many scissored bands the tiling fix
+  // split the frame into" (see renderer.js's BAND_WORK_BUDGET). How many of
+  // those bands are still to be submitted isn't mirrored here: the renderer
+  // handle's own `pendingBands` already reports it, live. Named lastTileBandCount,
   // not lastBandCount, specifically to avoid reading like a variant of
   // `bandCount` above: that one counts a banded palette's color steps, this
   // one counts GPU scissor tiles for TDR mitigation — unrelated concepts
@@ -129,15 +131,21 @@ export class FractalPanel {
   lastDisplayIter = null;
   lastTileBandCount = null;
 
-  // What was actually submitted for the last presented frame (uniform data +
-  // paletteType) — lets renderPanel skip a resubmit when the next frame
-  // would be pixel-identical (see sameRenderSignature above). Null means
-  // "nothing rendered yet" or "known stale" (see invalidateRender), so the
-  // next render always goes through.
+  // What characterizes the frame this panel most recently started (uniform
+  // data + paletteType) — lets startRenderIfNeeded skip a resubmit when the
+  // next frame would be pixel-identical (see sameRenderSignature above). Null
+  // means "nothing rendered yet" or "known stale" (see invalidateRender), so
+  // the next render always goes through.
+  //
+  // Recorded when a frame *starts*, not when it finishes: its bands may still
+  // be draining over later animation frames (renderer.js's advanceFrame).
+  // Waiting for completion instead would make every animation frame in
+  // between find this signature stale, call beginFrame again, and restart the
+  // frame from its first band — so it would never finish at all.
   lastRenderSignature = null;
 
-  // True when `data` (the uniform array about to be submitted) would
-  // produce the same pixels as what's already on screen.
+  // True when `data` (the uniform array about to be submitted) would produce
+  // the same pixels as the frame this panel last started.
   isRenderUpToDate(data) {
     return sameRenderSignature(this.lastRenderSignature, { data, paletteType: this.paletteType });
   }
@@ -146,7 +154,7 @@ export class FractalPanel {
     this.lastRenderSignature = { data, paletteType: this.paletteType };
   }
 
-  // Forces the next renderPanel call through, even if the uniform data ends
+  // Forces the next startRenderIfNeeded call through, even if the uniform data ends
   // up identical to last time — for cases where the *presented* image may
   // have changed independent of the render inputs (e.g. a resize/visibility
   // toggle that drops the compositor's last frame for this canvas).

@@ -118,6 +118,22 @@ function makeApp() {
   return new MandelbrotApp();
 }
 
+// Stand-in for renderer.js's attachCanvas() handle. The guard's contract is
+// that a deformed frame reaches the GPU through no route at all, so every
+// entry point that would touch the device flips the same flag — starting a
+// frame, submitting its bands, and blitting it on screen alike.
+function makeStubRenderer() {
+  const handle = {
+    touched: false,
+    pendingBands: 0,
+    beginFrame() { handle.touched = true; return 1; },
+    advanceFrame() { handle.touched = true; return 1; },
+    present() { handle.touched = true; },
+    writePalette() {},
+  };
+  return handle;
+}
+
 test('isDeformedFrame is false when backing store aspect matches on-screen aspect', () => {
   const app = makeApp();
   const panel = app.modelNamed('mandelbrot').panel;
@@ -148,7 +164,7 @@ test('isDeformedFrame is false when the panel is hidden/collapsed (zero on-scree
   assert.equal(app.isDeformedFrame(panel), false);
 });
 
-// Guard is exercised via renderOnce (not renderPanel directly) below,
+// Guard is exercised via renderOnce (not startRenderIfNeeded directly) below,
 // because the deformity check runs as a pre-pass over every visible panel
 // before any panel is rendered — see renderOnce's comment.
 for (const name of ['mandelbrot', 'julia']) {
@@ -156,10 +172,8 @@ for (const name of ['mandelbrot', 'julia']) {
     const app = makeApp();
     const mandelbrot = app.modelNamed('mandelbrot').panel;
     const julia = app.modelNamed('julia').panel;
-    let mandelbrotRendered = false;
-    let juliaRendered = false;
-    mandelbrot.renderer = { render: () => { mandelbrotRendered = true; } };
-    julia.renderer = { render: () => { juliaRendered = true; } };
+    mandelbrot.renderer = makeStubRenderer();
+    julia.renderer = makeStubRenderer();
 
     const deformed = app.modelNamed(name).panel;
     deformed.canvas.width = 4;
@@ -168,8 +182,8 @@ for (const name of ['mandelbrot', 'julia']) {
 
     app.renderOnce();
 
-    assert.equal(mandelbrotRendered, false, 'must not submit any panel to the renderer, deformed or not');
-    assert.equal(juliaRendered, false, 'must not submit any panel to the renderer, deformed or not');
+    assert.equal(mandelbrot.renderer.touched, false, 'must not submit any panel to the renderer, deformed or not');
+    assert.equal(julia.renderer.touched, false, 'must not submit any panel to the renderer, deformed or not');
     assert.equal(app.renderHalted, true);
     assert.equal(app.errorBox.style.display, 'block');
     assert.match(app.errorMessage.textContent, /Deformed frame detected/);
@@ -180,7 +194,7 @@ for (const name of ['mandelbrot', 'julia']) {
 test('the fatal error message carries enough context to root-cause a recurrence', () => {
   const app = makeApp();
   const panel = app.modelNamed('mandelbrot').panel;
-  panel.renderer = { render() {} };
+  panel.renderer = makeStubRenderer();
   panel.canvas.width = 4;
   panel.canvas.height = 600;
   panel.canvas.getBoundingClientRect = () => ({ width: 800, height: 600 });
@@ -201,8 +215,7 @@ test('the fatal error message carries enough context to root-cause a recurrence'
 test('renderOnce is a no-op once renderHalted is set', () => {
   const app = makeApp();
   const panel = app.modelNamed('mandelbrot').panel;
-  let rendered = false;
-  panel.renderer = { render: () => { rendered = true; } };
+  panel.renderer = makeStubRenderer();
   panel.canvas.width = 800;
   panel.canvas.height = 600;
   panel.canvas.getBoundingClientRect = () => ({ width: 800, height: 600 });
@@ -210,7 +223,7 @@ test('renderOnce is a no-op once renderHalted is set', () => {
   app.renderHalted = true;
   app.renderOnce();
 
-  assert.equal(rendered, false);
+  assert.equal(panel.renderer.touched, false);
 });
 
 // The last frame presented before a fatal error (e.g. a real DEVICE_HUNG)
@@ -343,16 +356,14 @@ test('handleDeviceLost sets deviceLost, shows a fatal error, and logs the same a
 // layout has settled and getBoundingClientRect() reports the panel's true
 // on-screen shape again — which now disagrees with the backing store. This
 // drives the guard through the app's real object graph (resizeVisiblePanels
-// -> renderOnce -> renderPanel), not by calling isDeformedFrame/renderPanel
-// directly with hand-picked numbers.
+// -> renderOnce -> startRenderIfNeeded), not by calling isDeformedFrame or
+// startRenderIfNeeded directly with hand-picked numbers.
 test('a transient near-zero-width rect during a resize, followed by renderOnce once layout settles, is caught before a frame is drawn', () => {
   const app = makeApp();
   const mandelbrot = app.modelNamed('mandelbrot').panel;
   const julia = app.modelNamed('julia').panel;
-  let mandelbrotRendered = false;
-  let juliaRendered = false;
-  mandelbrot.renderer = { render: () => { mandelbrotRendered = true; } };
-  julia.renderer = { render: () => { juliaRendered = true; } };
+  mandelbrot.renderer = makeStubRenderer();
+  julia.renderer = makeStubRenderer();
 
   // Layout mid-thrash: the Mandelbrot canvas's box is momentarily ~0 wide.
   mandelbrot.canvas.getBoundingClientRect = () => ({ width: 0.4, height: 600 });
@@ -373,8 +384,8 @@ test('a transient near-zero-width rect during a resize, followed by renderOnce o
     console.error = originalConsoleError;
   }
 
-  assert.equal(mandelbrotRendered, false, 'the deformed panel must not reach the GPU');
-  assert.equal(juliaRendered, false, 'renderHalted stops the whole app, not just the offending panel');
+  assert.equal(mandelbrot.renderer.touched, false, 'the deformed panel must not reach the GPU');
+  assert.equal(julia.renderer.touched, false, 'renderHalted stops the whole app, not just the offending panel');
   assert.equal(app.renderHalted, true);
   assert.equal(app.errorBox.style.display, 'block');
   assert.match(app.errorMessage.textContent, /Deformed frame detected on panel "mandelbrotGfx"/);
