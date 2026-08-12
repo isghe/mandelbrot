@@ -93,9 +93,13 @@ export class FractalPanel {
   // Set by MandelbrotApp.renderOnce()/renderPanel() after each frame —
   // exposed for e2e observation of "what's currently rendered" (progressive
   // ramp position) and "how many scissored bands the tiling fix split the
-  // frame into" (see renderer.js's BAND_WORK_BUDGET).
+  // frame into" (see renderer.js's BAND_WORK_BUDGET). Named lastTileBandCount,
+  // not lastBandCount, specifically to avoid reading like a variant of
+  // `bandCount` above: that one counts a banded palette's color steps, this
+  // one counts GPU scissor tiles for TDR mitigation — unrelated concepts
+  // that just happen to share the word "band".
   lastDisplayIter = null;
-  lastBandCount = null;
+  lastTileBandCount = null;
 
   constructor(canvas, overlayCanvas) {
     this.canvas = canvas;

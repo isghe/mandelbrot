@@ -44,7 +44,7 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     window.app.gpuDevice.queue.submit = origSubmit;
-    return { submitCount, bandCount: panel.lastBandCount };
+    return { submitCount, bandCount: panel.lastTileBandCount };
   });
 
   expect(bandCount).toBeGreaterThan(1);
