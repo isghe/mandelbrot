@@ -20,8 +20,26 @@ import { test, expect } from '@playwright/test';
 //   escape within a couple of iterations — so SwiftShader stays fast.
 
 const VIEWPORT = { width: 1280, height: 720 };
-// 19 bands at this viewport, comfortably above the initial budget of 4.
-const MAX_ITER = 2048;
+// Band count these tests aim for: well above the initial per-frame budget of
+// 4, so a frame is guaranteed to span several animation frames, and no higher
+// than it needs to be — each animation frame of a drain costs one blit, and
+// under SwiftShader that blit is software-rasterized and far from free.
+const TARGET_BANDS = 20;
+
+// The maxIter that produces roughly TARGET_BANDS bands, derived from
+// BAND_WORK_BUDGET instead of hardcoded. That constant is tuned against real
+// hardware and has already moved once; these tests are about how a frame is
+// spread over animation frames, not about any particular band size, so they
+// should follow it rather than silently drift into being vacuous (too few
+// bands) or slow (too many).
+async function maxIterForTargetBands(page) {
+  return page.evaluate(async (targetBands) => {
+    const { BAND_WORK_BUDGET } = await import('/src/renderer.js');
+    const canvas = window.app.modelNamed("mandelbrot").panel.canvas;
+    const rows = Math.max(1, Math.floor(canvas.height / targetBands));
+    return Math.max(1, Math.min(8192, Math.floor(BAND_WORK_BUDGET / (canvas.width * rows))));
+  }, TARGET_BANDS);
+}
 
 // Reads a few pixels down the middle of the panel out of a real compositor
 // screenshot. Not a canvas readback: reading a WebGPU canvas's backing store
@@ -77,6 +95,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('a frame with more bands than one animation frame can carry lands over several', async ({ page }) => {
+  const maxIter = await maxIterForTargetBands(page);
   const result = await page.evaluate(async (maxIter) => {
     const { INITIAL_FRAME_BAND_BUDGET } = await import('/src/renderer.js');
     const model = window.app.modelNamed("mandelbrot");
@@ -101,7 +120,7 @@ test('a frame with more bands than one animation frame can carry lands over seve
     });
 
     return { initial: INITIAL_FRAME_BAND_BUDGET, bandCount: panel.lastTileBandCount, pendingPerFrame };
-  }, MAX_ITER);
+  }, maxIter);
 
   // The premise the rest of the test rests on, asserted rather than assumed.
   expect(result.bandCount).toBeGreaterThan(result.initial);
@@ -127,6 +146,7 @@ test('the band budget is re-learned per burst instead of carried into the next o
   // interactions walk it up toward its ceiling, so the next expensive frame
   // would hand the GPU the whole ceiling's worth at once — the freeze the
   // per-frame budget exists to prevent.
+  const maxIter = await maxIterForTargetBands(page);
   const result = await page.evaluate(async (maxIter) => {
     const { INITIAL_FRAME_BAND_BUDGET } = await import('/src/renderer.js');
     const model = window.app.modelNamed("mandelbrot");
@@ -159,7 +179,7 @@ test('the band budget is re-learned per burst instead of carried into the next o
       budgetsSeen: [...seen],
       budgetAfterBurst: window.app.bandBudget,
     };
-  }, MAX_ITER);
+  }, maxIter);
 
   // Non-vacuous: the controller really did move the budget while the burst ran
   // (up or down — either direction proves it was live).
@@ -174,6 +194,7 @@ test("a panel's progressive ramp waits for its current frame instead of restarti
   // two in: the top of the canvas would be redrawn forever at ever-higher
   // iteration counts and the bottom would never be drawn at all. The ramp
   // must therefore never step while bands are still pending.
+  const maxIter = await maxIterForTargetBands(page);
   const result = await page.evaluate(async (maxIter) => {
     const model = window.app.modelNamed("mandelbrot");
     const panel = model.panel;
@@ -181,11 +202,12 @@ test("a panel's progressive ramp waits for its current frame instead of restarti
     panel.center = new DOMPointReadOnly(4, 4);
     window.app.setMaxIter(model, maxIter);
     panel.progressiveMode = 1;
-    // Start the ramp high enough that each of its remaining steps is a frame
-    // of more bands than one animation frame carries. Climbing there from
-    // progressiveIter = 1 would be dozens of cheap steps with nothing to
-    // observe.
-    panel.progressiveIter = 1500;
+    // Start the ramp near its cap, so each of the handful of steps left is a
+    // frame of more bands than one animation frame carries. Climbing there
+    // from progressiveIter = 1 would be dozens of cheap steps with nothing to
+    // observe. Expressed as a fraction of maxIter because maxIter itself is
+    // derived from the band budget (see maxIterForTargetBands).
+    panel.progressiveIter = Math.round(maxIter * 0.7);
     panel.invalidateRender();
     window.app.scheduleRender();
 
@@ -211,13 +233,13 @@ test("a panel's progressive ramp waits for its current frame instead of restarti
       requestAnimationFrame(check);
     });
     return { violations, framesWithWorkLeft, reachedCap: panel.lastDisplayIter };
-  }, MAX_ITER);
+  }, maxIter);
 
   // Non-vacuous: the ramp really did run while bands were outstanding.
   expect(result.framesWithWorkLeft).toBeGreaterThan(0);
   expect(result.violations).toBe(0);
   // And gating the ramp doesn't stall it — it still reaches maxIter.
-  expect(result.reachedCap).toBe(MAX_ITER);
+  expect(result.reachedCap).toBe(maxIter);
 });
 
 test('a partly landed frame is already on screen, new content over old', async ({ page }) => {
@@ -239,6 +261,7 @@ test('a partly landed frame is already on screen, new content over old', async (
   // black and the comparison would be vacuous. Palette 5 is banded, so an
   // escape at iteration 1 indexes colour 1 (white) directly, against its
   // explicit red interior.
+  const maxIter = await maxIterForTargetBands(page);
   const rect = await page.evaluate(async (maxIter) => {
     const model = window.app.modelNamed("mandelbrot");
     const panel = model.panel;
@@ -261,7 +284,7 @@ test('a partly landed frame is already on screen, new content over old', async (
 
     const r = panel.canvas.getBoundingClientRect();
     return { x: r.x, y: r.y, width: r.width, height: r.height };
-  }, MAX_ITER);
+  }, maxIter);
 
   const near = { top: 10, bottom: Math.round(rect.height) - 10 };
   const [outsideTop, outsideBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);

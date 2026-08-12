@@ -1,13 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { fractalShot } from './fractalShot.js';
 
-// Mirrors history.spec.js's FRACTAL_CLIP: excludes the #ui panel so
-// screenshot diffs only reflect the rendered fractal + overlay.
-const FRACTAL_CLIP = { x: 250, y: 0, width: 1030, height: 720 };
 const VIEWPORT = { width: 1280, height: 720 };
-
-async function fractalShot(page) {
-  return page.screenshot({ clip: FRACTAL_CLIP });
-}
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
