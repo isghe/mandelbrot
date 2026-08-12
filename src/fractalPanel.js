@@ -398,7 +398,11 @@ export class FractalPanel {
     this.clearDragPreview();
     const rect = this.canvas.getBoundingClientRect();
     const mouse = new DOMPointReadOnly((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-    const delta = domPoint.sub(mouse, this.dragStart);
+    // Snapped to a whole device pixel so a later frame can reuse this pan's
+    // overlapping pixels verbatim instead of recomputing the whole panel.
+    const delta = view.snapDeltaToPixels(
+      domPoint.sub(mouse, this.dragStart), this.canvas.width, this.canvas.height
+    );
     const aspect = this.canvas.width / this.canvas.height;
 
     this.center = view.pan(this.startCenter, delta, this.scale, aspect);

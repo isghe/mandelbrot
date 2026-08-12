@@ -83,7 +83,23 @@ function pan(anchor, screenDelta, scale, aspect) {
   );
 }
 
-export const view = { normalizedToFractal, anchorFor, fractalToNormalized, fractalToPixel, pan };
+// Rounds a normalized [0,1] drag displacement to a whole number of device
+// pixels of a `w`x`h` backing store. Panning by a whole number of pixels is
+// what lets a later frame reuse the previous one's pixels verbatim instead of
+// recomputing the whole panel: the image shift is exactly screenDelta * canvas
+// size, so a fractional delta would land the reused image between pixels, and
+// the misregistration would accumulate across pans. Costs at most half a
+// device pixel of where the view ends up, once, and never compounds.
+function snapDeltaToPixels(screenDelta, w, h) {
+  const safeW = Number.isFinite(w) && w > 0 ? w : 1;
+  const safeH = Number.isFinite(h) && h > 0 ? h : 1;
+  return new DOMPointReadOnly(
+    Math.round(screenDelta.x * safeW) / safeW,
+    Math.round(screenDelta.y * safeH) / safeH
+  );
+}
+
+export const view = { normalizedToFractal, anchorFor, fractalToNormalized, fractalToPixel, pan, snapDeltaToPixels };
 
 // Rounds a raw grid step (range / targetLines) to a "nice" value of the form
 // {1, 2, 5} * 10^n, so grid line density stays reasonable across zoom levels.
