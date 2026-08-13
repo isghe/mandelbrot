@@ -279,10 +279,11 @@ fn fs_main(in:VSOut)->@location(0) vec2<u32>{
 // — fs_main still reads it as the loop bound, so changing it is a genuine
 // recompute.
 //
-// That the look *could* be repainted without recomputing doesn't yet mean it
-// is: the host still starts a whole frame for a palette change, because the
-// render signature it compares still includes the palette. Splitting that
-// signature is what turns this into an actual repaint.
+// The host takes advantage of that: fractalPanel.js's sameComputeSignature
+// treats a palette/smoothColoring/bandCount-only change as leaving the render
+// target's data untouched, so it rewrites the uniform buffer and repaints
+// instead of starting a new frame (see needsRecolorOnly, renderer.js's
+// recolor()).
 @fragment
 fn fs_colorize(in:VSOut)->@location(0) vec4<f32>{
     let data = textureLoad(dataTex, vec2<i32>(in.pos.xy), 0);

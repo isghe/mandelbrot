@@ -61,7 +61,9 @@ export function sameRenderSignature(prev, next) {
 // split into an iterate pass and a colorize pass (see mandelbrot.wgsl).
 // paletteType is colour too, but has no index here because it was never part
 // of the uniform array to begin with (see sameRenderSignature above).
-const COLOUR_INDICES = [13, 14]; // smoothColoring, bandCount
+const SMOOTH_COLORING_INDEX = 13;
+const BAND_COUNT_INDEX = 14;
+const COLOUR_INDICES = [SMOOTH_COLORING_INDEX, BAND_COUNT_INDEX];
 
 // True when `next` would make the iterate pass reproduce exactly the escape
 // data `prev` already produced — every uniform field but the colour ones
