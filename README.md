@@ -147,6 +147,14 @@ an absent visibility param to the app's current (split-screen) default.
 
 ## Palettes
 
+The fractal shader runs in two passes: an iterate pass computes each pixel's
+escape data (how many iterations it took to leave the set, or that it never
+did) and writes it to an offscreen target; a colorize pass reads that data
+back and maps it through the current palette onto the canvas. Escape data
+doesn't depend on the palette, so switching palettes — or toggling smooth
+coloring — recolors the whole view from what's already there instead of
+recomputing the fractal: instant regardless of zoom depth or iteration count.
+
 Every palette is a 256x2 texture: row 0 holds the 256-entry color lookup
 table for escaped points, row 1 holds a solid interior color for points that
 never escape (black by default). Palettes come in two kinds, picked from the

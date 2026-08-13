@@ -47,6 +47,17 @@ export async function requestGPUDevice({ onDeviceLost, onUncapturedError }) {
 // TDR watchdog, so the original reason for banding is served better, not worse.
 export const BAND_WORK_BUDGET = 2.5e7;
 
+// What the offscreen render target holds: escape data (iteration count and the
+// smooth-colouring term), not colour. See fs_main/fs_colorize in the WGSL for
+// the encoding. Two 32-bit channels — 8 B/px against the 4 B/px a canvas-format
+// colour target cost, so a panel's target and its reprojection spare each
+// double in size. That is the price of not having to iterate again just to
+// recolour.
+//
+// uint rather than float channels so the derived bind group layout's sample
+// type is unambiguously "uint"; the WGSL comment on binding 3 has the details.
+const DATA_FORMAT = "rg32uint";
+
 // How many bands the whole app submits per animation frame, across every
 // visible panel (see shareBands), before any measurement has been taken.
 // Bands are near-equal cost by construction — frameBands sizes each one to
@@ -230,6 +241,10 @@ export async function attachCanvas(device, canvas, palette256) {
   const paletteSampler = device.createSampler({
     magFilter: "nearest", minFilter: "nearest"
   });
+  // One view for the panel's whole life: writePalette replaces the texture's
+  // contents, never the texture, so every bind group built from this stays
+  // valid across palette changes.
+  const paletteView = paletteTex.createView();
 
   // WGSL (f32 + double-single center/julia)
   const shaderResponse = await fetch("src/mandelbrot.wgsl", { cache: "no-cache" });
@@ -250,7 +265,7 @@ export async function attachCanvas(device, canvas, palette256) {
   const pipeline = device.createRenderPipeline({
     layout: "auto",
     vertex: { module, entryPoint: "vs_main" },
-    fragment: { module, entryPoint: "fs_main", targets: [{ format }] },
+    fragment: { module, entryPoint: "fs_main", targets: [{ format: DATA_FORMAT }] },
     primitive: { topology: "triangle-list" }
   });
 
@@ -261,32 +276,39 @@ export async function attachCanvas(device, canvas, palette256) {
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
+  // The uniform alone: since the colouring moved to fs_colorize, the iterate
+  // pass reads neither the sampler nor the palette texture, so its "auto"
+  // layout declares only binding 0 — and a bind group carrying entries the
+  // layout doesn't declare is a validation error, not a harmless extra.
   const bindGroup = device.createBindGroup({
     layout: pipeline.getBindGroupLayout(0),
     entries: [
-      { binding: 0, resource: { buffer: uniformBuffer } },
-      { binding: 1, resource: paletteSampler },
-      { binding: 2, resource: paletteTex.createView() }
+      { binding: 0, resource: { buffer: uniformBuffer } }
     ]
   });
 
-  // Copies the offscreen target onto the canvas (see fs_blit in the WGSL).
-  // Shares vs_main with the fractal pipeline, so no second vertex stage; its
-  // "auto" layout resolves to just fs_blit's own binding 3, independent of
-  // the fractal pipeline's uniform/palette bindings above.
-  const blitPipeline = device.createRenderPipeline({
+  // Turns the offscreen target's escape data into pixels on the canvas (see
+  // fs_colorize in the WGSL). Shares vs_main with the fractal pipeline, so no
+  // second vertex stage; its "auto" layout resolves to binding 3 plus the
+  // uniform/palette bindings 0-2, which it now reads too — the colouring half
+  // of the old fused shader lives here.
+  const colorizePipeline = device.createRenderPipeline({
     layout: "auto",
     vertex: { module, entryPoint: "vs_main" },
-    fragment: { module, entryPoint: "fs_blit", targets: [{ format }] },
+    fragment: { module, entryPoint: "fs_colorize", targets: [{ format }] },
     primitive: { topology: "triangle-list" }
   });
 
   // A frame's bands are rendered into a texture we own rather than straight
-  // into the swap-chain texture, then blitted onto the canvas in one draw.
+  // into the swap-chain texture, then coloured onto the canvas in one draw.
   // A WebGPU canvas texture doesn't carry its contents over from the previous
   // frame, so it can't accumulate anything across animation frames; a texture
   // we own can, which is what lets a frame's bands be spread over several
   // frames instead of all being submitted in one.
+  //
+  // What accumulates here is escape data, not colour (DATA_FORMAT), so it also
+  // outlives any one palette: present() can re-read it through a different
+  // palette without a single iteration being redone.
   //
   // Texture, view, bind group and size are one object rather than four
   // parallel variables: a render target is useless without all four agreeing,
@@ -298,7 +320,7 @@ export async function attachCanvas(device, canvas, palette256) {
   const createTarget = (width, height) => {
     const texture = device.createTexture({
       size: [width, height],
-      format,
+      format: DATA_FORMAT,
       // COPY_SRC and COPY_DST both, on both targets: reprojection copies one
       // into the other and then swaps their roles, so each has to be able to
       // play either end of the copy.
@@ -311,9 +333,17 @@ export async function attachCanvas(device, canvas, palette256) {
       view,
       width,
       height,
-      blitBindGroup: device.createBindGroup({
-        layout: blitPipeline.getBindGroupLayout(0),
-        entries: [{ binding: 3, resource: view }]
+      // Four entries, not just the target's own view: fs_colorize also reads
+      // the uniform and the palette. Only binding 3 varies per target, but a
+      // bind group is all-or-nothing, so the other three are repeated here.
+      colorizeBindGroup: device.createBindGroup({
+        layout: colorizePipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: uniformBuffer } },
+          { binding: 1, resource: paletteSampler },
+          { binding: 2, resource: paletteView },
+          { binding: 3, resource: view }
+        ]
       }),
     };
   };
@@ -324,16 +354,16 @@ export async function attachCanvas(device, canvas, palette256) {
   // rendered into at once, so a shifted copy of the target has to land
   // somewhere else and take its place. Allocated the first time a pan actually
   // reuses a frame, so a session that never pans never pays for it (per panel:
-  // one extra full-canvas texture, ~33 MB at 4K).
+  // one extra full-canvas texture, ~66 MB at 4K now that a texel is 8 B).
   let spare = null;
 
   // (Re)creates the render target whenever the canvas backing store has
   // changed size, and reports whether it did — a target created just now holds
   // no previous frame, so there is nothing for a reprojection to reuse. A
-  // freshly created WebGPU texture is zero-initialized by spec, so it starts
-  // as transparent black and needs no explicit clear pass — and the canvas is
-  // configured with the default "opaque" alpha mode, so any not-yet-drawn
-  // region reads as plain black on screen.
+  // freshly created WebGPU texture is zero-initialized by spec, and zero is
+  // exactly the escape data's NOT_RENDERED sentinel (see the WGSL), which
+  // fs_colorize turns into black — so a new target needs no explicit clear
+  // pass and any not-yet-drawn region reads as plain black on screen.
   const ensureTarget = () => {
     if (target && target.width === canvas.width && target.height === canvas.height) return false;
     // Already-submitted work referencing the old textures stays valid; destroy
@@ -352,7 +382,9 @@ export async function attachCanvas(device, canvas, palette256) {
   // The spare is cleared first and the overlap copied over it, rather than the
   // copy going in first: the part a pan uncovers must come out black, not
   // holding whatever the spare kept from two frames ago, so that no pixel ever
-  // shows a picture of somewhere else while the exposed strips fill in.
+  // shows a picture of somewhere else while the exposed strips fill in. The
+  // clearValue's zero is the NOT_RENDERED sentinel, which is what "black"
+  // means in escape data — the same literal works unchanged for both.
   //
   // copyTextureToTexture rather than a shifted draw: no second WGSL entry
   // point, no uniform to carry the offset, and the copy is texel-exact by
@@ -385,10 +417,14 @@ export async function attachCanvas(device, canvas, palette256) {
     spare = displaced;
   };
 
-  // Puts the render target on screen. getCurrentTexture() is called here
-  // and nowhere else, so the canvas texture is always acquired and used
+  // Colours the render target onto the screen. getCurrentTexture() is called
+  // here and nowhere else, so the canvas texture is always acquired and used
   // within the same task, as WebGPU requires. loadOp "clear" is nominal —
-  // the blit triangle covers every pixel of the attachment.
+  // the full-screen triangle covers every pixel of the attachment.
+  //
+  // This is where the palette is applied, so it is also what makes a recolour
+  // cheap: the same target, read again through a different palette, with no
+  // band of iteration work behind it.
   const present = () => {
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
@@ -399,11 +435,37 @@ export async function attachCanvas(device, canvas, palette256) {
         clearValue: { r: 0, g: 0, b: 0, a: 1 }
       }]
     });
-    pass.setPipeline(blitPipeline);
-    pass.setBindGroup(0, target.blitBindGroup);
+    pass.setPipeline(colorizePipeline);
+    pass.setBindGroup(0, target.colorizeBindGroup);
     pass.draw(3);
     pass.end();
     device.queue.submit([encoder.finish()]);
+    pendingRecolor = false;
+  };
+
+  // Rewrites the uniform buffer without starting a frame — for a palette or
+  // look change alone (fractalPanel.js's needsRecolorOnly), where the target
+  // already holds the escape data the new look needs and no band of iterate
+  // work is owed. The iterate pipeline never reads the fields this changes
+  // (smoothColoring/bandCount/the palette texture — see mandelbrot.wgsl's
+  // fs_main), so this is safe to call even while a previous beginFrame's
+  // bands are still draining: they keep producing the same escape data
+  // regardless, and the next present() colours the target — complete or
+  // partial — through the new uniform.
+  //
+  // Guarded on `target` even though the only caller only takes this path once
+  // a previous frame has landed (needsRecolorOnly requires a non-null
+  // lastRenderSignature, which only follows a beginFrame): making the
+  // precondition an explicit check here means a violation surfaces right
+  // here, not as a null-dereference three calls later inside present(). Note
+  // this path never calls ensureTarget() — only beginFrame does — which is
+  // sound only because every canvas resize goes through invalidateRender()
+  // first (see mandelbrot.js's resizeVisiblePanels), forcing a real beginFrame
+  // before a recolor could ever be reached at the new size.
+  const recolor = (uniformData) => {
+    if (!target) return;
+    device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+    pendingRecolor = true;
   };
 
   // The current frame's bands and how many of them have been submitted. This
@@ -413,6 +475,14 @@ export async function attachCanvas(device, canvas, palette256) {
   // advanceFrame) instead of all at once — which is what left the UI frozen
   // for as long as the whole frame took.
   let job = null;
+
+  // True from a recolor() call until the next present(), regardless of which
+  // branch triggers that present() — a plain band-driven one or one taken
+  // solely to show the recolor. advanceRenderJobs (mandelbrot.js) reads this
+  // to know a panel needs putting on screen even though it has no bands
+  // pending, which is the normal state for a recolor: the target already
+  // holds everything it needs, just under the previous look.
+  let pendingRecolor = false;
 
   // Starts a frame, dropping any bands of the previous one still unsubmitted.
   //
@@ -485,7 +555,10 @@ export async function attachCanvas(device, canvas, palette256) {
   // band of a frame that asked to be cleared (see beginFrame): loadOp applies
   // to the whole attachment rather than to the scissor rect, so putting the
   // clear there wipes the target and draws band 0 in the same pass, at no
-  // extra submit.
+  // extra submit. The clearValue below is a GPUColor whatever the attachment's
+  // format, so its b/a are simply dropped by DATA_FORMAT's two channels and
+  // the zero it leaves in r/g is the NOT_RENDERED sentinel — "clear" and
+  // "black" still coincide, as they did when this held colour.
   const advanceFrame = (maxBands) => {
     if (!job) return 0;
     const wanted = Number.isFinite(maxBands) ? Math.max(0, Math.floor(maxBands)) : 0;
@@ -521,9 +594,15 @@ export async function attachCanvas(device, canvas, palette256) {
     beginFrame,
     advanceFrame,
     present,
+    recolor,
     writePalette,
     // Bands of the current frame not yet submitted; 0 once it has fully
     // landed, which is also how the caller knows the frame is complete.
     get pendingBands() { return job ? job.bands.length - job.next : 0; },
+    // A recolor() happened since the last present() — advanceRenderJobs
+    // (mandelbrot.js) presents a panel that has this set even when it has no
+    // bands to advance, since a recolor's whole point is a new look with no
+    // new work.
+    get needsPresent() { return pendingRecolor; },
   };
 }

@@ -352,12 +352,30 @@ test('a partly landed frame is already on screen, with the view it moved off cle
   expect(finalBottom).toBe(partialTop);
 });
 
-test('a frame that only recolours the same view keeps the old image underneath', async ({ page }) => {
+test('a recolour that lands mid-drain of a same-view refinement is atomic, not torn', async ({ page }) => {
   // The other half of the clear rule, and the reason it isn't simply "clear on
   // every new frame": the progressive ramp starts a fresh frame at every step,
   // so blanking the panel for anything but a view change would make the whole
   // reveal strobe. A change of palette is the same view in different colours,
   // exactly like a ramp step is the same view at a finer iteration count.
+  //
+  // What a half-landed recolour looks like changed when the shader split into
+  // an iterate pass and a colorize pass. It used to tear: the bands that had
+  // landed carried the new palette baked in, the ones still queued carried the
+  // old one, so the panel showed both at once until the frame finished. Now the
+  // palette is applied when the target is put on screen, not when a band is
+  // computed, so it reaches every pixel at once — a recolour is a single
+  // present() over the whole target, whatever mix of old and fresh escape data
+  // is sitting in it.
+  //
+  // A recolour queues no band of its own (see FractalPanel.needsRecolorOnly),
+  // so to actually observe a torn-vs-atomic difference this needs a genuine
+  // compute-changing refinement in flight when the recolour lands: a higher
+  // maxIter, mid-drain, over a first frame that already fully landed. The view
+  // stays flat (every pixel escapes at iteration 1, whatever maxIter is) so
+  // the refinement's freshly drawn rows and the first frame's still-standing
+  // rows hold bit-identical escape data — the only thing that could still make
+  // them read as different colours is landing under two different palettes.
   const maxIter = await maxIterForTargetBands(page);
   const rect = await page.evaluate(async (maxIter) => {
     const model = window.app.modelNamed("mandelbrot");
@@ -388,34 +406,64 @@ test('a frame that only recolours the same view keeps the old image underneath',
   expect(beforeTop).toBe(beforeBottom);
   expect(beforeTop).not.toBe(BLACK);
 
-  // Recolour without touching the view, then freeze after one animation frame.
-  const landed = await page.evaluate(async () => {
+  const partial = await page.evaluate(async (maxIter) => {
     const model = window.app.modelNamed("mandelbrot");
     const panel = model.panel;
+    const advanceFrame = panel.renderer.advanceFrame;
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
+    // A same-view compute refinement, frozen before any of its bands land:
+    // a higher maxIter is a genuine change to what the iterate pass produces
+    // (index 9 of the uniform array, not a colour index), so this starts a
+    // real beginFrame — same view, so clear=false and the first frame's
+    // pixels stay exactly where they are underneath it.
+    panel.renderer.advanceFrame = () => 0;
+    window.app.setMaxIter(model, maxIter * 2);
+    window.app.scheduleRender();
+    await nextFrame();
+
+    // Let exactly one animation frame's worth of the refinement land, then
+    // freeze again — some rows now hold the refinement's escape data, the
+    // rest still hold the first frame's.
+    panel.renderer.advanceFrame = advanceFrame;
+    window.app.scheduleRender();
+    await nextFrame();
+    panel.renderer.advanceFrame = () => 0;
+
+    // Recolour while the refinement is still mid-drain. Compute-wise nothing
+    // has changed since the refinement's own beginFrame, so this takes the
+    // recolor-only path (FractalPanel.needsRecolorOnly): no new job, the
+    // refinement's job keeps draining untouched, and the very next present()
+    // (below, still within this frozen state) shows the whole target — both
+    // the refinement's rows and the first frame's — through the new palette.
+    //
     // Palette 0 is a gradient, so an escape at iteration 1 lands at t≈0 on its
     // first colour — a dark purple, distinct from palette 5's white. Palette 6
     // would not do: it is banded on the same colour list whose entry 1 is also
     // white, and the comparison below would be vacuous.
-    window.app.applyPalette(model, 0); // same geometry, different colours
+    window.app.applyPalette(model, 0);
     window.app.scheduleRender();
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await nextFrame();
 
-    window.__origAdvanceFrame = panel.renderer.advanceFrame;
-    panel.renderer.advanceFrame = () => 0;
-
+    window.__origAdvanceFrame = advanceFrame;
     return { total: panel.lastTileBandCount, pending: panel.renderer.pendingBands };
-  });
+  }, maxIter);
 
-  expect(landed.pending).toBeGreaterThan(0);
-  expect(landed.total - landed.pending).toBeGreaterThan(0);
+  // The premise: the refinement really was started and really is still
+  // draining when the recolour above lands.
+  expect(partial.pending).toBeGreaterThan(0);
+  expect(partial.total - partial.pending).toBeGreaterThan(0);
 
   const [partialTop, partialBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
-  // The recoloured rows really did change…
+  // The colours really did change…
   expect(partialTop).not.toBe(beforeTop);
-  // …and the rows still to come kept the previous colours rather than going
-  // black, which is what a ramp step relies on.
-  expect(partialBottom).toBe(beforeBottom);
+  // …the rows the refinement hasn't reached yet did not go black, which is
+  // what a ramp step relies on…
+  expect(partialBottom).not.toBe(BLACK);
+  // …and they carry the new palette too, rather than the frame tearing
+  // between two palettes down the boundary of what the refinement has
+  // reached so far.
+  expect(partialBottom).toBe(partialTop);
 
   await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
@@ -538,4 +586,71 @@ test('a clear the budget deferred is still owed when the next frame only recolou
   const [finalTop, finalBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
   expect(finalTop).toBe(partialTop);
   expect(finalBottom).toBe(partialTop);
+});
+
+test('a palette change after the frame has landed queues no band at all', async ({ page }) => {
+  // The point of the iterate/colorize split: once a frame has fully landed,
+  // a palette change needs no iteration redone — FractalPanel.needsRecolorOnly
+  // routes it through renderer.js's recolor() instead of beginFrame, so no
+  // band is ever queued for it. lastTileBandCount, set only by beginFrame, is
+  // the tell — it must stay exactly what the original frame set it to.
+  //
+  // The screenshot inequality is asserted *before* trusting pendingBands and
+  // lastTileBandCount at all: a mock or a mistaken read of stale state could
+  // otherwise report "no bands queued" for a palette change that silently
+  // did nothing, and the rest of this test would pass for the wrong reason.
+  const maxIter = await maxIterForTargetBands(page);
+  const setup = await page.evaluate(async (maxIter) => {
+    const model = window.app.modelNamed("mandelbrot");
+    const panel = model.panel;
+    window.app.setMaxIter(model, maxIter);
+    window.app.applyPalette(model, 5); // white, banded — see the recolour test above
+
+    panel.center = new DOMPointReadOnly(4, 4); // flat: every pixel escapes at once
+    panel.scale = 3;
+    panel.invalidateRender();
+    window.app.scheduleRender();
+    await new Promise((resolve) => {
+      let frames = 0;
+      const check = () => {
+        if (panel.renderer.pendingBands === 0 && !window.app.rafPending) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; }
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
+
+    const r = panel.canvas.getBoundingClientRect();
+    return {
+      rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+      bandCountBefore: panel.lastTileBandCount,
+    };
+  }, maxIter);
+
+  const { rect, bandCountBefore } = setup;
+  expect(bandCountBefore).toBeGreaterThan(0);
+
+  const mid = Math.round(rect.height / 2);
+  const before = (await sampleColumn(page, rect, [mid]))[0];
+  expect(before).not.toBe(BLACK);
+
+  const after = await page.evaluate(async () => {
+    const model = window.app.modelNamed("mandelbrot");
+    const panel = model.panel;
+    window.app.applyPalette(model, 0); // same geometry, a different gradient
+    window.app.scheduleRender();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return {
+      pendingBands: panel.renderer.pendingBands,
+      lastTileBandCount: panel.lastTileBandCount,
+    };
+  });
+
+  // The colours really did change…
+  const [afterMid] = await sampleColumn(page, rect, [mid]);
+  expect(afterMid).not.toBe(before);
+  // …with no band ever queued for it: pendingBands never left 0, and
+  // lastTileBandCount is still exactly what the original beginFrame set.
+  expect(after.pendingBands).toBe(0);
+  expect(after.lastTileBandCount).toBe(bandCountBefore);
 });

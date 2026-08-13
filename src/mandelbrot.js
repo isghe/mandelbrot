@@ -940,6 +940,15 @@ export class MandelbrotApp {
     // frame already in flight alone to finish: while its bands drain, the
     // signature keeps matching, so no new frame displaces it.
     if (panel.isRenderUpToDate(data)) return;
+    // A palette/smoothColoring/bandCount-only change needs no iteration
+    // redone — the target already holds the escape data the new look needs,
+    // so the uniform buffer is rewritten and the panel is left to be
+    // re-presented (see advanceRenderJobs below), with no band queued at all.
+    if (panel.needsRecolorOnly(data)) {
+      panel.renderer.recolor(data);
+      panel.markRendered(data);
+      return;
+    }
     // A frame that looks somewhere else starts from black rather than wiping
     // down over an image of the wrong place; a frame that only refines or
     // recolours the same view keeps the old one underneath, which is what
@@ -960,9 +969,9 @@ export class MandelbrotApp {
   // panels rather than granted to each, so two expensive panels split a frame
   // between them instead of whichever comes first monopolising it — the
   // residual case left open when the per-panel render skip shipped. A panel
-  // with nothing pending is left completely alone (no band, no blit), so an
-  // idle panel still costs nothing per frame. Returns true while any panel
-  // has bands left for a later frame.
+  // with nothing pending and no recolor owed is left completely alone (no
+  // band, no present), so an idle panel still costs nothing per frame.
+  // Returns true while any panel has bands left for a later frame.
   advanceRenderJobs() {
     const attached = this.panels.filter(({ panel }) => panel.renderer);
     const share = shareBands(
@@ -972,9 +981,16 @@ export class MandelbrotApp {
     );
     this.bandDealStart++;
     attached.forEach(({ panel }, i) => {
-      if (share[i] <= 0) return;
-      panel.renderer.advanceFrame(share[i]);
-      panel.renderer.present();
+      if (share[i] > 0) {
+        panel.renderer.advanceFrame(share[i]);
+        panel.renderer.present();
+        return;
+      }
+      // No band to advance, but a recolor (startRenderIfNeeded's
+      // needsRecolorOnly branch) rewrote the uniform and still needs its new
+      // look on screen — present() alone does that, over whatever the target
+      // already holds.
+      if (panel.renderer.needsPresent) panel.renderer.present();
     });
     return attached.some(({ panel }) => panel.renderer.pendingBands > 0);
   }
