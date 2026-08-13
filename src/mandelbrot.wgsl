@@ -27,9 +27,10 @@ struct Params {
 // reusing 0-2: WGSL requires a unique @group/@binding per resource across
 // the whole module, even though the two pipelines' layouts differ (each is
 // built with layout:"auto", which derives the layout from just the bindings
-// its own entry points actually reference — see renderer.js). Bindings 0-2
-// are read by both entry points, since fs_colorize is where the palette is
-// now sampled.
+// its own entry points actually reference — see renderer.js). Of the rest,
+// only binding 0 is read by both: the sampler and the palette texture are
+// fs_colorize's alone now that the colouring lives there, which is why the
+// iterate pipeline's bind group carries the uniform and nothing else.
 //
 // texture_2d<u32>, not <f32>: the escape data is stored in an rg32uint
 // target (see fs_main's return). A uint texel type also makes the derived
@@ -272,9 +273,16 @@ fn fs_main(in:VSOut)->@location(0) vec2<u32>{
 // half-texel offset, and no sampler needed for it.
 //
 // Everything below used to be the tail of fs_main. Moving it here is the whole
-// point of the split: it reads params.maxIter/smoothColoring/bandCount and the
-// palette texture, none of which fs_main touches any more, so changing any of
-// them is a repaint rather than a recompute.
+// point of the split: the palette texture, smoothColoring and bandCount are
+// read only here now, so none of them can change what the iterate pass would
+// produce, and a new look needs no iteration redone. maxIter is the exception
+// — fs_main still reads it as the loop bound, so changing it is a genuine
+// recompute.
+//
+// That the look *could* be repainted without recomputing doesn't yet mean it
+// is: the host still starts a whole frame for a palette change, because the
+// render signature it compares still includes the palette. Splitting that
+// signature is what turns this into an actual repaint.
 @fragment
 fn fs_colorize(in:VSOut)->@location(0) vec4<f32>{
     let data = textureLoad(dataTex, vec2<i32>(in.pos.xy), 0);

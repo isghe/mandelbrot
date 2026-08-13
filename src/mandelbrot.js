@@ -960,7 +960,7 @@ export class MandelbrotApp {
   // panels rather than granted to each, so two expensive panels split a frame
   // between them instead of whichever comes first monopolising it — the
   // residual case left open when the per-panel render skip shipped. A panel
-  // with nothing pending is left completely alone (no band, no blit), so an
+  // with nothing pending is left completely alone (no band, no present), so an
   // idle panel still costs nothing per frame. Returns true while any panel
   // has bands left for a later frame.
   advanceRenderJobs() {
