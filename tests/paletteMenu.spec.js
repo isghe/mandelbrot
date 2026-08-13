@@ -1,20 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { PALETTE_GROUPS } from '../src/palette.js';
 
 const VIEWPORT = { width: 1280, height: 720 };
 
-const EXPECTED_GROUPS = [
-  { label: 'Gradient', options: [
-    { value: '0', label: 'Viridis' },
-    { value: '1', label: 'Fire' },
-    { value: '2', label: 'Ocean' },
-    { value: '3', label: 'Rainbow' },
-    { value: '4', label: 'Apple II' },
-  ]},
-  { label: 'Banded', options: [
-    { value: '5', label: 'Black and White - Red' },
-    { value: '6', label: 'Apple II - Banded' },
-  ]},
-];
+const EXPECTED_GROUPS = PALETTE_GROUPS.map((group) => ({
+  label: group.label,
+  options: group.palettes.map((p) => ({ value: String(p.id), label: p.label })),
+}));
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];

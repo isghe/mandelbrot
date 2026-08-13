@@ -9,19 +9,25 @@
 // compare only the rendered fractal.
 export const FRACTAL_CLIP = { x: 250, y: 0, width: 1030, height: 720 };
 
-// Captures the fractal region once every visible panel has finished handing
-// its current frame to the GPU.
+// Resolves once every visible panel has finished handing its current frame
+// to the GPU.
 //
 // A frame's bands are spread over as many animation frames as the adaptive
-// per-frame budget needs (see renderer.js), so a capture taken too early gets
-// a half-drawn frame and any pixel comparison against it is meaningless. The
-// specs used to lean on fixed waitForTimeout() sleeps, which encode a guess
-// about how long a render takes — a guess that silently broke the moment
-// BAND_WORK_BUDGET was retuned and every frame gained four times the bands.
-// Waiting on the app's own state instead is both correct and faster, since it
-// returns as soon as the work is actually done.
-export async function fractalShot(page) {
+// per-frame budget needs (see renderer.js), so reading rendered state too
+// early sees a half-drawn frame. The specs used to lean on fixed
+// waitForTimeout() sleeps, which encode a guess about how long a render
+// takes — a guess that silently broke the moment BAND_WORK_BUDGET was
+// retuned and every frame gained four times the bands. Waiting on the app's
+// own state instead is both correct and faster, since it returns as soon as
+// the work is actually done.
+export async function waitForRenderSettled(page) {
   await page.waitForFunction(() => !window.app.rafPending
     && window.app.panels.every(({ panel }) => !panel.renderer || panel.renderer.pendingBands === 0));
+}
+
+// Captures the fractal region once every visible panel has settled (see
+// waitForRenderSettled above).
+export async function fractalShot(page) {
+  await waitForRenderSettled(page);
   return page.screenshot({ clip: FRACTAL_CLIP });
 }

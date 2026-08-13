@@ -52,7 +52,6 @@ test('enabling the grid draws non-transparent pixels on the overlay canvas', asy
   expect(before).toBe(0);
 
   await page.check('#mandelbrotGridOverlay');
-  await page.waitForTimeout(200);
 
   const after = await page.evaluate(() => {
     const c = document.getElementById('mandelbrotOverlay');
@@ -69,11 +68,9 @@ test('grid checkbox toggles visible pixels and round-trips to baseline', async (
   const baseline = await fractalShot(page);
 
   await page.check('#mandelbrotGridOverlay');
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(false);
 
   await page.uncheck('#mandelbrotGridOverlay');
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
@@ -81,11 +78,9 @@ test('center marker checkbox toggles visible pixels and round-trips to baseline'
   const baseline = await fractalShot(page);
 
   await page.check('#mandelbrotCenterMarker');
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(false);
 
   await page.uncheck('#mandelbrotCenterMarker');
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
@@ -94,11 +89,9 @@ test('Julia marker checkbox toggles visible pixels with the Julia panel hidden t
   const baseline = await fractalShot(page);
 
   await page.check('#juliaMarker');
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(false);
 
   await page.uncheck('#juliaMarker');
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
@@ -114,7 +107,6 @@ test('enabling landmarks draws non-transparent pixels on the overlay canvas', as
   expect(before).toBe(0);
 
   await page.check('#landmarksOverlay');
-  await page.waitForTimeout(200);
 
   const after = await page.evaluate(() => {
     const c = document.getElementById('mandelbrotOverlay');
@@ -131,11 +123,9 @@ test('landmarks checkbox toggles visible pixels and round-trips to baseline', as
   const baseline = await fractalShot(page);
 
   await page.check('#landmarksOverlay');
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(false);
 
   await page.uncheck('#landmarksOverlay');
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
@@ -148,14 +138,12 @@ test('toggling overlay checkboxes does not enable Back/Forward', async ({ page }
   await page.check('#landmarksOverlay');
   await page.uncheck('#mandelbrotGridOverlay');
   await page.uncheck('#landmarksOverlay');
-  await page.waitForTimeout(200);
 
   await expect(backBtn).toBeDisabled();
 });
 
 test('the grid overlay redraws to match a new view after pan/zoom', async ({ page }) => {
   await page.check('#mandelbrotGridOverlay');
-  await page.waitForTimeout(200);
   const box = await page.locator('#mandelbrotGfx').boundingBox();
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -166,7 +154,6 @@ test('the grid overlay redraws to match a new view after pan/zoom', async ({ pag
   await page.mouse.down();
   await page.mouse.move(cx + 150, cy + 80, { steps: 10 });
   await page.mouse.up();
-  await page.waitForTimeout(300);
 
   expect((await fractalShot(page)).equals(beforePan)).toBe(false);
 });
@@ -176,10 +163,8 @@ test('Reset unchecks the grid/marker overlay checkboxes', async ({ page }) => {
   await page.check('#mandelbrotCenterMarker');
   await page.check('#juliaMarker');
   await page.check('#landmarksOverlay');
-  await page.waitForTimeout(200);
 
   await page.click('#resetBtn');
-  await page.waitForTimeout(200);
 
   await expect(page.locator('#mandelbrotGridOverlay')).not.toBeChecked();
   await expect(page.locator('#mandelbrotCenterMarker')).not.toBeChecked();

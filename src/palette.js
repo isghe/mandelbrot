@@ -52,6 +52,7 @@ export const PALETTE_GROUPS = [
   // no texel-resolution ceiling.
   { label: "Banded", banded: true, palettes: [
     { id: 5, label: "Black and White - Red", colors: [[0,0,0],[255,255,255]], interior: [255,0,0] },
+    { id: 7, label: "RGB", colors: [[255,0,0],[0,255,0],[0,0,255]] },
     { id: 6, label: "Apple II - Banded",     colors: APPLE2 },
   ]},
 ];
