@@ -23,12 +23,32 @@ struct Params {
 @group(0) @binding(1) var paletteSampler : sampler;
 @group(0) @binding(2) var paletteTex : texture_2d<f32>;
 
-// Read by fs_blit only, so it gets its own binding number rather than
+// Read by fs_colorize only, so it gets its own binding number rather than
 // reusing 0-2: WGSL requires a unique @group/@binding per resource across
-// the whole module, even though the two pipelines never share a bind group
-// (each is built with layout:"auto", which derives the layout from just the
-// bindings its own entry points actually reference — see renderer.js).
-@group(0) @binding(3) var offscreenTex : texture_2d<f32>;
+// the whole module, even though the two pipelines' layouts differ (each is
+// built with layout:"auto", which derives the layout from just the bindings
+// its own entry points actually reference — see renderer.js). Bindings 0-2
+// are read by both entry points, since fs_colorize is where the palette is
+// now sampled.
+//
+// texture_2d<u32>, not <f32>: the escape data is stored in an rg32uint
+// target (see fs_main's return). A uint texel type also makes the derived
+// layout's sample type unambiguously "uint" — the f32 equivalent would be
+// rg32float, whose sample type is "unfilterable-float", and it is not
+// settled that layout:"auto" derives that rather than plain (filterable)
+// "float", which would fail validation without the float32-filterable
+// feature. This side-steps the question entirely.
+@group(0) @binding(3) var dataTex : texture_2d<u32>;
+
+// Sentinel values for the R channel of the escape-data target, chosen so
+// that "nothing has been rendered here yet" is *zero*: a freshly created
+// WebGPU texture is zero-initialized, and a cleared band's loadOp writes
+// clearValue {r:0,...} (renderer.js), so both keep meaning "black" without
+// either one needing a special case. An escaped pixel stores iter+1, so it
+// can never collide with 0; maxIter is capped well below the interior
+// sentinel (MandelbrotApp.ITER), so that can't collide either.
+const NOT_RENDERED : u32 = 0u;
+const INTERIOR     : u32 = 0xFFFFFFFFu;
 
 struct VSOut {
     @builtin(position) pos : vec4<f32>,
@@ -156,8 +176,12 @@ fn is_main_interior(cx: f32, cy: f32) -> bool {
     return q * (q + cardioidX) <= 0.25 * cy2;
 }
 
+// The iterate pass. Produces the palette-independent escape data for one
+// pixel, not its colour — fs_colorize below turns that into a colour. Keeping
+// the two apart is what lets a palette change repaint the panel without
+// iterating anything again: the expensive half's output survives the frame.
 @fragment
-fn fs_main(in:VSOut)->@location(0) vec4<f32>{
+fn fs_main(in:VSOut)->@location(0) vec2<u32>{
     let uv = in.fragPos*0.5 + vec2<f32>(0.5,0.5);
     let aspect = params.width / params.height;
 
@@ -219,9 +243,54 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     }
 
     if (!escaped) {
-        // Interior: point did not escape within maxIter, dedicated color.
+        // Interior: point did not escape within maxIter. Which colour that
+        // gets is fs_colorize's business; here it is just a class of pixel.
+        return vec2<u32>(INTERIOR, 0u);
+    }
+
+    // Only iter and radius2 survive the pass, and neither depends on maxIter:
+    // the escape test above precedes the maxIter test, so a pixel that escapes
+    // does so at the same iteration whatever the cap was. That is why no
+    // per-pixel maxIter has to be stored alongside them.
+    //
+    // radius2 is reduced to the smooth-colouring log term right here rather
+    // than stored raw, and stored *negated*, so that fs_colorize can rebuild
+    //     f32(iter) + 1.0 - log2(0.5 * log2(radius2.x))
+    // in its original left-to-right association as (f32(iter) + 1.0) + nuPrime.
+    // Storing 1.0 - log2(...) instead would reassociate the sum and shift the
+    // result by up to an ULP, which at high iteration counts is enough to move
+    // a pixel onto the neighbouring palette texel.
+    let nuPrime = -log2(0.5 * log2(radius2.x));
+    return vec2<u32>(u32(iter) + 1u, bitcast<u32>(nuPrime));
+}
+
+// The colorize pass. Reads the escape data fs_main's bands accumulated in the
+// offscreen target and maps it through the palette onto the canvas, reusing
+// vs_main's full-screen triangle. textureLoad with the framebuffer coordinate,
+// not a sampled uv: the offscreen is always the exact size of the canvas
+// backing store, so this is a 1:1 texel lookup with no filtering, no
+// half-texel offset, and no sampler needed for it.
+//
+// Everything below used to be the tail of fs_main. Moving it here is the whole
+// point of the split: it reads params.maxIter/smoothColoring/bandCount and the
+// palette texture, none of which fs_main touches any more, so changing any of
+// them is a repaint rather than a recompute.
+@fragment
+fn fs_colorize(in:VSOut)->@location(0) vec4<f32>{
+    let data = textureLoad(dataTex, vec2<i32>(in.pos.xy), 0);
+
+    // Not yet drawn: a target region that a frame hasn't reached, or that a
+    // clear/reprojection wiped. Black, matching what a zeroed colour target
+    // showed before the split.
+    if (data.x == NOT_RENDERED) {
+        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    }
+
+    if (data.x == INTERIOR) {
         return vec4<f32>(interiorColor(), 1.0);
     }
+
+    let iter = i32(data.x - 1u);
 
     if (params.bandCount > 0.0) {
         // Banded palette: exact per-iteration color, bands take precedence
@@ -233,8 +302,9 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
     var t : f32;
     if (params.smoothColoring != 0.0) {
         // Continuous (smooth) escape-time coloring, avoids banding and
-        // reduces dependence of color on maxIter.
-        let smoothIter = f32(iter) + 1.0 - log2(0.5 * log2(radius2.x));
+        // reduces dependence of color on maxIter. See fs_main on why the
+        // parenthesisation here is the one that reproduces the pre-split sum.
+        let smoothIter = (f32(iter) + 1.0) + bitcast<f32>(data.y);
         t = fract(smoothIter * 0.02);
     } else {
         t = f32(iter) / params.maxIter;
@@ -242,14 +312,4 @@ fn fs_main(in:VSOut)->@location(0) vec4<f32>{
 
     let col = palette256(t);
     return vec4<f32>(col,1.0);
-}
-
-// Copies the offscreen render target (where fs_main's bands accumulate) onto
-// the canvas, reusing vs_main's full-screen triangle. textureLoad with the
-// framebuffer coordinate, not a sampled uv: the offscreen is always the exact
-// size of the canvas backing store, so this is a 1:1 texel copy with no
-// filtering, no half-texel offset, and no sampler binding to keep in sync.
-@fragment
-fn fs_blit(in:VSOut)->@location(0) vec4<f32>{
-    return textureLoad(offscreenTex, vec2<i32>(in.pos.xy), 0);
 }

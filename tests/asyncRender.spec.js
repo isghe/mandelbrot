@@ -352,12 +352,23 @@ test('a partly landed frame is already on screen, with the view it moved off cle
   expect(finalBottom).toBe(partialTop);
 });
 
-test('a frame that only recolours the same view keeps the old image underneath', async ({ page }) => {
+test('a frame that only recolours the same view repaints it whole, without blanking', async ({ page }) => {
   // The other half of the clear rule, and the reason it isn't simply "clear on
   // every new frame": the progressive ramp starts a fresh frame at every step,
   // so blanking the panel for anything but a view change would make the whole
   // reveal strobe. A change of palette is the same view in different colours,
   // exactly like a ramp step is the same view at a finer iteration count.
+  //
+  // What a half-landed recolour looks like changed when the shader split into
+  // an iterate pass and a colorize pass. It used to tear: the bands that had
+  // landed carried the new palette baked in, the ones still queued carried the
+  // old one, so the panel showed both at once until the frame finished. Now the
+  // palette is applied when the target is put on screen, not when a band is
+  // computed, so it reaches every pixel at once and a half-landed recolour is
+  // indistinguishable from a finished one. The clear rule is still what this
+  // pins, though, and it still has teeth: were startsNewView to call a recolour
+  // a new view, band 0 would wipe the target and the rows still queued would
+  // come back black — which is exactly what the bottom sample below rejects.
   const maxIter = await maxIterForTargetBands(page);
   const rect = await page.evaluate(async (maxIter) => {
     const model = window.app.modelNamed("mandelbrot");
@@ -411,11 +422,14 @@ test('a frame that only recolours the same view keeps the old image underneath',
   expect(landed.total - landed.pending).toBeGreaterThan(0);
 
   const [partialTop, partialBottom] = await sampleColumn(page, rect, [near.top, near.bottom]);
-  // The recoloured rows really did change…
+  // The colours really did change…
   expect(partialTop).not.toBe(beforeTop);
-  // …and the rows still to come kept the previous colours rather than going
-  // black, which is what a ramp step relies on.
-  expect(partialBottom).toBe(beforeBottom);
+  // …the rows whose bands have not landed yet did not go black, which is what
+  // a ramp step relies on…
+  expect(partialBottom).not.toBe(BLACK);
+  // …and they carry the new palette too, rather than the frame tearing between
+  // two palettes down the boundary of what has landed so far.
+  expect(partialBottom).toBe(partialTop);
 
   await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
