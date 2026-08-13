@@ -47,7 +47,7 @@ export const PALETTE_GROUPS = [
     { id: 2, label: "Ocean",    colors: OCEAN_COLORS },
     { id: 3, label: "Rainbow",  colors: RAINBOW_COLORS },
     { id: 8, label: "Black and White - Red", colors: BW_COLORS, interior: [255,0,0] },
-    { id: 9, label: "RGB", colors: RGB_COLORS},
+    { id: 9, label: "RGB", colors: RGB_COLORS },
     { id: 4, label: "Apple II", colors: APPLE2_COLORS },
     { id: 10, label: "RWG", colors: RWG_COLORS, interior: [0,255,0] },
   ]},
@@ -61,7 +61,7 @@ export const PALETTE_GROUPS = [
     { id: 5, label: "Black and White - Red - Banded", colors: BW_COLORS, interior: [255,0,0] },
     { id: 7, label: "RGB - Banded", colors: RGB_COLORS },
     { id: 6, label: "Apple II - Banded", colors: APPLE2_COLORS },
-    { id: 11, label: "RWG - Banded", colors: RWG_COLORS, interior: [0,255,0]  },
+    { id: 11, label: "RWG - Banded", colors: RWG_COLORS, interior: [0,255,0] },
   ]},
 ];
 
