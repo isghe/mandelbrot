@@ -13,7 +13,7 @@ globalThis.DOMPointReadOnly ??= class DOMPointReadOnly {
 globalThis.window ??= { devicePixelRatio: 1 };
 
 const {
-  FractalPanel, buildUniformData, sameRenderSignature, sameViewGeometry, panShiftBetween,
+  FractalPanel, buildUniformData, sameRenderSignature, sameComputeSignature, sameViewGeometry, panShiftBetween,
 } = await import('../../src/fractalPanel.js');
 const { view: viewMath } = await import('../../src/geometry.js');
 const { split64 } = await import('../../src/precision.js');
@@ -284,6 +284,51 @@ test('sameRenderSignature: same uniform data but different paletteType is not a 
   assert.strictEqual(sameRenderSignature(a, b), false);
 });
 
+// sameComputeSignature decides whether the iterate pass would reproduce
+// exactly the escape data already in the target — the precondition for a
+// palette/look change to skip beginFrame and take the cheap recolor() path
+// instead (see FractalPanel.needsRecolorOnly below).
+
+test('sameComputeSignature: identical data is a match regardless of paletteType', () => {
+  const a = { data: new Float32Array([1, 2, 3]), paletteType: 4 };
+  const b = { data: new Float32Array([1, 2, 3]), paletteType: 9 };
+  assert.strictEqual(sameComputeSignature(a, b), true);
+});
+
+test('sameComputeSignature: a smoothColoring or bandCount change alone is still a match', () => {
+  const a = { data: buildUniformData(makeUniformArgs()) };
+  for (const same of [{ smoothColoring: 1 }, { bandCount: 8 }, { smoothColoring: 1, bandCount: 8 }]) {
+    const b = { data: buildUniformData(makeUniformArgs(same)) };
+    assert.strictEqual(sameComputeSignature(a, b), true, JSON.stringify(same));
+  }
+});
+
+test('sameComputeSignature: a geometry or iteration-count change is not a match', () => {
+  const a = { data: buildUniformData(makeUniformArgs()) };
+  for (const moved of [{ center: { x: -0.4, y: 0 } }, { scale: 1.5 }, { displayIter: 512 }, { canvasWidth: 900 }]) {
+    const b = { data: buildUniformData(makeUniformArgs(moved)) };
+    assert.strictEqual(sameComputeSignature(a, b), false, JSON.stringify(moved));
+  }
+});
+
+test('sameComputeSignature: a juliaSeed change is ignored for a non-Julia panel (juliaMode 0)', () => {
+  const a = { data: buildUniformData(makeUniformArgs()) };
+  const b = { data: buildUniformData(makeUniformArgs({ juliaSeed: { x: 0.1, y: -0.6 } })) };
+  assert.strictEqual(sameComputeSignature(a, b), true);
+});
+
+test('sameComputeSignature: a juliaSeed change is not ignored for the Julia panel (juliaMode 1)', () => {
+  const a = { data: buildUniformData(makeUniformArgs({ juliaMode: 1 })) };
+  const b = { data: buildUniformData(makeUniformArgs({ juliaMode: 1, juliaSeed: { x: 0.1, y: -0.6 } })) };
+  assert.strictEqual(sameComputeSignature(a, b), false);
+});
+
+test('sameComputeSignature: a null/undefined previous signature is never a match', () => {
+  const next = { data: buildUniformData(makeUniformArgs()) };
+  assert.strictEqual(sameComputeSignature(null, next), false);
+  assert.strictEqual(sameComputeSignature(undefined, next), false);
+});
+
 function makeUniformArgs(overrides = {}) {
   return {
     center: { x: -0.5, y: 0 },
@@ -332,6 +377,51 @@ test('FractalPanel.isRenderUpToDate/markRendered/invalidateRender', () => {
 
   panel.invalidateRender();
   assert.strictEqual(panel.isRenderUpToDate(new Float32Array([1, 2, 3])), false);
+});
+
+test('FractalPanel.needsRecolorOnly: a palette or look change alone is a recolor', () => {
+  const canvas = makeMockCanvas();
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+  panel.paletteType = 4;
+  panel.markRendered(buildUniformData(makeUniformArgs()));
+
+  // Same compute signature, different colour: a recolor.
+  panel.paletteType = 7;
+  assert.strictEqual(panel.needsRecolorOnly(buildUniformData(makeUniformArgs())), true);
+  panel.paletteType = 4;
+  assert.strictEqual(panel.needsRecolorOnly(buildUniformData(makeUniformArgs({ smoothColoring: 1 }))), true);
+  assert.strictEqual(panel.needsRecolorOnly(buildUniformData(makeUniformArgs({ bandCount: 8 }))), true);
+});
+
+test('FractalPanel.needsRecolorOnly: identical data is not a recolor — nothing to do at all', () => {
+  const canvas = makeMockCanvas();
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+  panel.paletteType = 4;
+  panel.markRendered(buildUniformData(makeUniformArgs()));
+
+  assert.strictEqual(panel.needsRecolorOnly(buildUniformData(makeUniformArgs())), false);
+  assert.strictEqual(panel.isRenderUpToDate(buildUniformData(makeUniformArgs())), true);
+});
+
+test('FractalPanel.needsRecolorOnly: a geometry change is not a recolor, even alongside a palette change', () => {
+  const canvas = makeMockCanvas();
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+  panel.paletteType = 4;
+  panel.markRendered(buildUniformData(makeUniformArgs()));
+
+  panel.paletteType = 7;
+  const movedAndRecoloured = buildUniformData(makeUniformArgs({ center: { x: -0.4, y: 0 } }));
+  assert.strictEqual(panel.needsRecolorOnly(movedAndRecoloured), false);
+});
+
+test('FractalPanel.needsRecolorOnly: nothing rendered yet is never a recolor', () => {
+  const canvas = makeMockCanvas();
+  const overlayCanvas = makeMockOverlayCanvas();
+  const panel = new FractalPanel(canvas, overlayCanvas);
+  assert.strictEqual(panel.needsRecolorOnly(buildUniformData(makeUniformArgs())), false);
 });
 
 // sameViewGeometry decides whether a new frame starts from black or wipes down

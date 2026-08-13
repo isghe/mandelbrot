@@ -440,6 +440,32 @@ export async function attachCanvas(device, canvas, palette256) {
     pass.draw(3);
     pass.end();
     device.queue.submit([encoder.finish()]);
+    pendingRecolor = false;
+  };
+
+  // Rewrites the uniform buffer without starting a frame — for a palette or
+  // look change alone (fractalPanel.js's needsRecolorOnly), where the target
+  // already holds the escape data the new look needs and no band of iterate
+  // work is owed. The iterate pipeline never reads the fields this changes
+  // (smoothColoring/bandCount/the palette texture — see mandelbrot.wgsl's
+  // fs_main), so this is safe to call even while a previous beginFrame's
+  // bands are still draining: they keep producing the same escape data
+  // regardless, and the next present() colours the target — complete or
+  // partial — through the new uniform.
+  //
+  // Guarded on `target` even though the only caller only takes this path once
+  // a previous frame has landed (needsRecolorOnly requires a non-null
+  // lastRenderSignature, which only follows a beginFrame): making the
+  // precondition an explicit check here means a violation surfaces right
+  // here, not as a null-dereference three calls later inside present(). Note
+  // this path never calls ensureTarget() — only beginFrame does — which is
+  // sound only because every canvas resize goes through invalidateRender()
+  // first (see mandelbrot.js's resizeVisiblePanels), forcing a real beginFrame
+  // before a recolor could ever be reached at the new size.
+  const recolor = (uniformData) => {
+    if (!target) return;
+    device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+    pendingRecolor = true;
   };
 
   // The current frame's bands and how many of them have been submitted. This
@@ -449,6 +475,14 @@ export async function attachCanvas(device, canvas, palette256) {
   // advanceFrame) instead of all at once — which is what left the UI frozen
   // for as long as the whole frame took.
   let job = null;
+
+  // True from a recolor() call until the next present(), regardless of which
+  // branch triggers that present() — a plain band-driven one or one taken
+  // solely to show the recolor. advanceRenderJobs (mandelbrot.js) reads this
+  // to know a panel needs putting on screen even though it has no bands
+  // pending, which is the normal state for a recolor: the target already
+  // holds everything it needs, just under the previous look.
+  let pendingRecolor = false;
 
   // Starts a frame, dropping any bands of the previous one still unsubmitted.
   //
@@ -560,9 +594,15 @@ export async function attachCanvas(device, canvas, palette256) {
     beginFrame,
     advanceFrame,
     present,
+    recolor,
     writePalette,
     // Bands of the current frame not yet submitted; 0 once it has fully
     // landed, which is also how the caller knows the frame is complete.
     get pendingBands() { return job ? job.bands.length - job.next : 0; },
+    // A recolor() happened since the last present() — advanceRenderJobs
+    // (mandelbrot.js) presents a panel that has this set even when it has no
+    // bands to advance, since a recolor's whole point is a new look with no
+    // new work.
+    get needsPresent() { return pendingRecolor; },
   };
 }
