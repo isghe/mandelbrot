@@ -2,13 +2,13 @@
 
 Live share-URLs into the [demo](https://isghe.github.io/mandelbrot/) worth revisiting.
 
-## Banded palette, dual-panel deep zoom (Black and White - Red)
+## Banded palette, dual-panel deep zoom (Black and White - Red - Banded)
 
 Pubblicato: 2026-08-09 23:00:57
 
 [Open the banded dual-panel deep zoom](https://isghe.github.io/mandelbrot/?mx=0.13854302181315678&my=0.5884293175069384&sx=0.13580242204077442&sy=0.5887346225910601&jpx=-0.17354844687299786&jpy=-0.2379314501367211&miter=1091&jscale=0.0000032939360421774072&jiter=871&mpalette=5&jpalette=5&mscale=0.013553105565932033&jgrid=1&juliaMark=1&v=7)
 
-![Dual-panel deep zoom with the Black and White - Red banded palette on both panels](banded-bw-red.png)
+![Dual-panel deep zoom with the Black and White - Red - Banded palette on both panels](banded-bw-red.png)
 
 ## Deep zoom, Mandelbrot only
 

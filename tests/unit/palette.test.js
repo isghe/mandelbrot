@@ -105,10 +105,54 @@ test('makePalette(6) interior row is solid black (default, no INTERIOR_COLORS en
 });
 
 test('paletteBandCount returns the color count for banded palettes, 0 for gradient palettes', () => {
-  assert.strictEqual(paletteBandCount(5), 2, 'Black and White - Red');
-  assert.strictEqual(paletteBandCount(6), 16, 'Apple II - Banded');
-  for (const type of [0, 1, 2, 3, 4]) {
-    assert.strictEqual(paletteBandCount(type), 0, `gradient type ${type}`);
+  for (const group of PALETTE_GROUPS) {
+    for (const p of group.palettes) {
+      const expected = group.banded ? p.colors.length : 0;
+      assert.strictEqual(paletteBandCount(p.id), expected, `type ${p.id} (${p.label})`);
+    }
+  }
+});
+
+test('makePalette(8) "Black and White - Red" gradient interior row is solid red', () => {
+  const palette = makePalette(8);
+  for (let i = 0; i < 256; i++) {
+    const o = 256 * 4 + i * 4;
+    assert.deepStrictEqual([...palette.slice(o, o + 3)], [255, 0, 0], `interior entry ${i}`);
+  }
+});
+
+test('makePalette(9) "RGB" gradient starts at red and ends at blue, default black interior', () => {
+  const palette = makePalette(9);
+  assert.deepStrictEqual([...palette.slice(0, 3)], [255, 0, 0]);
+  assert.deepStrictEqual([...palette.slice(255 * 4, 255 * 4 + 3)], [0, 0, 255]);
+  assert.deepStrictEqual([...palette.slice(256 * 4, 256 * 4 + 3)], [0, 0, 0], 'interior entry 0');
+});
+
+test('makePalette(10) "RWG" gradient starts at red and ends at green, green interior', () => {
+  const palette = makePalette(10);
+  assert.deepStrictEqual([...palette.slice(0, 3)], [255, 0, 0]);
+  assert.deepStrictEqual([...palette.slice(255 * 4, 255 * 4 + 3)], [0, 255, 0]);
+  for (let i = 0; i < 256; i++) {
+    const o = 256 * 4 + i * 4;
+    assert.deepStrictEqual([...palette.slice(o, o + 3)], [0, 255, 0], `interior entry ${i}`);
+  }
+});
+
+test('makePalette(7) "RGB - Banded" first 3 texels are exactly red, green, blue', () => {
+  const palette = makePalette(7);
+  assert.deepStrictEqual([...palette.slice(0, 3)], [255, 0, 0], 'texel 0');
+  assert.deepStrictEqual([...palette.slice(4, 7)], [0, 255, 0], 'texel 1');
+  assert.deepStrictEqual([...palette.slice(8, 11)], [0, 0, 255], 'texel 2');
+});
+
+test('makePalette(11) "RWG - Banded" first 3 texels are exactly red, white, green; green interior', () => {
+  const palette = makePalette(11);
+  assert.deepStrictEqual([...palette.slice(0, 3)], [255, 0, 0], 'texel 0');
+  assert.deepStrictEqual([...palette.slice(4, 7)], [255, 255, 255], 'texel 1');
+  assert.deepStrictEqual([...palette.slice(8, 11)], [0, 255, 0], 'texel 2');
+  for (let i = 0; i < 256; i++) {
+    const o = 256 * 4 + i * 4;
+    assert.deepStrictEqual([...palette.slice(o, o + 3)], [0, 255, 0], `interior entry ${i}`);
   }
 });
 

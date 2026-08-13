@@ -9,26 +9,30 @@ function ramp16(fn) {
   return P;
 }
 
-const APPLE2 = [
+const APPLE2_COLORS = [
   [0,0,0],[255,255,255],[255,0,0],[0,255,0],
   [0,0,255],[255,255,0],[255,0,255],[0,255,255],
   [128,128,128],[255,128,0],[128,0,255],[0,128,255],
   [128,255,0],[255,0,128],[0,255,128],[128,0,0]
 ];
 
-const VIRIDIS = [
+const VIRIDIS_COLORS = [
   [68,1,84],[71,44,122],[59,81,139],[44,113,142],
   [33,144,141],[39,173,129],[92,200,99],[170,220,50],
   [253,231,37]
 ];
 
-const FIRE = ramp16((t) => [255 * t, 80 * t, 0]);
-const OCEAN = ramp16((t) => [0, 100 * t, 255 * t]);
-const RAINBOW = ramp16((t) => [
+const FIRE_COLORS = ramp16((t) => [255 * t, 80 * t, 0]);
+const OCEAN_COLORS = ramp16((t) => [0, 100 * t, 255 * t]);
+const RAINBOW_COLORS = ramp16((t) => [
   (Math.sin(6.28318 * t) + 1) / 2 * 255,
   (Math.sin(6.28318 * (t + 0.33)) + 1) / 2 * 255,
   (Math.sin(6.28318 * (t + 0.66)) + 1) / 2 * 255
 ]);
+
+const RGB_COLORS = [[255,0,0],[0,255,0],[0,0,255]];
+const BW_COLORS = [[0,0,0],[255,255,255]];
+const RWG_COLORS = [[255,0,0],[255,255,255],[0,255,0]];
 
 // Single source of truth for every palette: id, display label (consumed by
 // the runtime-built <select> menus in mandelbrot.js), its control colors,
@@ -38,11 +42,14 @@ const RAINBOW = ramp16((t) => [
 // here, nowhere else.
 export const PALETTE_GROUPS = [
   { label: "Gradient", banded: false, palettes: [
-    { id: 0, label: "Viridis",  colors: VIRIDIS },
-    { id: 1, label: "Fire",     colors: FIRE },
-    { id: 2, label: "Ocean",    colors: OCEAN },
-    { id: 3, label: "Rainbow",  colors: RAINBOW },
-    { id: 4, label: "Apple II", colors: APPLE2 },
+    { id: 0, label: "Viridis",  colors: VIRIDIS_COLORS },
+    { id: 1, label: "Fire",     colors: FIRE_COLORS },
+    { id: 2, label: "Ocean",    colors: OCEAN_COLORS },
+    { id: 3, label: "Rainbow",  colors: RAINBOW_COLORS },
+    { id: 8, label: "Black and White - Red", colors: BW_COLORS, interior: [255,0,0] },
+    { id: 9, label: "RGB", colors: RGB_COLORS },
+    { id: 4, label: "Apple II", colors: APPLE2_COLORS },
+    { id: 10, label: "RWG", colors: RWG_COLORS, interior: [0,255,0] },
   ]},
   // Banded palettes hard-alternate through their color list by iteration
   // count (as opposed to a smooth/procedural gradient). The shader indexes
@@ -51,9 +58,10 @@ export const PALETTE_GROUPS = [
   // used by gradient palettes, so band color is exact at any maxIter with
   // no texel-resolution ceiling.
   { label: "Banded", banded: true, palettes: [
-    { id: 5, label: "Black and White - Red", colors: [[0,0,0],[255,255,255]], interior: [255,0,0] },
-    { id: 7, label: "RGB", colors: [[255,0,0],[0,255,0],[0,0,255]] },
-    { id: 6, label: "Apple II - Banded",     colors: APPLE2 },
+    { id: 5, label: "Black and White - Red - Banded", colors: BW_COLORS, interior: [255,0,0] },
+    { id: 7, label: "RGB - Banded", colors: RGB_COLORS },
+    { id: 6, label: "Apple II - Banded", colors: APPLE2_COLORS },
+    { id: 11, label: "RWG - Banded", colors: RWG_COLORS, interior: [0,255,0] },
   ]},
 ];
 
