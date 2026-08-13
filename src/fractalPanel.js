@@ -137,18 +137,23 @@ const doubleSingle = (data, hiIndex) => data[hiIndex] + data[hiIndex + 1];
 // full render this panel did before reprojection existed.
 export function panShiftBetween(prev, next) {
   if (!prev || !next) return null;
-  if (prev.paletteType !== next.paletteType) return null;
   if (prev.data.length !== next.data.length) return null;
 
-  // Everything the centre doesn't cover has to be identical: a change in
-  // scale isn't a translation at all, and a change in iteration count or
-  // colouring would leave the reused pixels rendered to a different recipe
-  // than the ones drawn beside them. juliaSeed is exempt on a Mandelbrot
-  // panel for the same reason as in sameRenderSignature — its shader never
-  // reads it.
+  // Everything the centre doesn't cover has to be identical, with two
+  // exceptions. A change in scale isn't a translation at all, and a change in
+  // iteration count would leave the reused pixels computed to a different
+  // recipe than the ones drawn beside them — both still disqualify a shift.
+  // Colour does not: paletteType and COLOUR_INDICES are what they are because
+  // what gets copied here is the iterate pass's escape data (see
+  // mandelbrot.wgsl's fs_main/fs_colorize split), and that data means the same
+  // thing under any palette — present() colorizes it fresh from whatever the
+  // current uniform and palette texture are, never from what was active when
+  // a given pixel was computed. juliaSeed is exempt on a Mandelbrot panel for
+  // the same reason as in sameRenderSignature — its shader never reads it.
   const juliaMode = next.data[JULIA_MODE_INDEX];
   for (let i = 0; i < next.data.length; i++) {
     if (CENTER_INDICES.includes(i)) continue;
+    if (COLOUR_INDICES.includes(i)) continue;
     if (juliaMode === 0 && JULIA_SEED_INDICES.includes(i)) continue;
     if (prev.data[i] !== next.data[i]) return null;
   }
@@ -323,9 +328,10 @@ export class FractalPanel {
   // copy across instead of recomputing. Null when nothing is reusable, which
   // is every case but a pan (see panShiftBetween).
   //
-  // Takes paletteType, unlike startsNewView above: a recoloured frame is still
-  // the same view, but its reused pixels would carry the old palette while the
-  // ones drawn beside them carry the new one.
+  // Passes paletteType through for the same reason every other predicate here
+  // does, though panShiftBetween no longer looks at it: the shift it computes
+  // reuses escape data, not colour, so a pan and a palette change together are
+  // still a pure pan (see panShiftBetween's comment).
   panShiftFor(data) {
     return panShiftBetween(this.lastRenderSignature, { data, paletteType: this.paletteType });
   }

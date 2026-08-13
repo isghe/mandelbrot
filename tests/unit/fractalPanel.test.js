@@ -535,14 +535,14 @@ test('panShiftBetween: nothing rendered yet leaves nothing to reuse', () => {
   assert.strictEqual(panShiftBetween(undefined, next), null);
 });
 
-test('panShiftBetween: a pan that also changes how pixels are computed is not reusable', () => {
-  // Each of these would leave the copied-across pixels rendered to a different
-  // recipe than the ones drawn beside them — a visible seam, not a saving.
+test('panShiftBetween: a pan that also changes what the iterate pass computes is not reusable', () => {
+  // Each of these would leave the copied-across escape data computed to a
+  // different recipe than what belongs beside it — a visible seam, not a
+  // saving. Colour is deliberately not among them (see the next two tests):
+  // it changes how escape data is painted, never what it is.
   for (const overrides of [
     { scale: 1.5 },
     { displayIter: 512 },
-    { smoothColoring: 1 },
-    { bandCount: 8 },
     { canvasWidth: 640 },
     { canvasHeight: 480 },
     { juliaMode: 1 },
@@ -556,9 +556,26 @@ test('panShiftBetween: a pan that also changes how pixels are computed is not re
   }
 });
 
-test('panShiftBetween: a recolour alongside a pan is not reusable', () => {
+test('panShiftBetween: a recolour alongside a pan is still a pure pan', () => {
+  // What gets copied is escape data, not colour (see mandelbrot.wgsl's
+  // fs_main/fs_colorize split) — present() colorizes it fresh from whatever
+  // palette is current, so a pan and a palette change together cost exactly
+  // what the pan alone would have.
   const { prev, next } = panned(0.15, 0.08);
-  assert.strictEqual(panShiftBetween(prev, { ...next, paletteType: prev.paletteType + 1 }), null);
+  assert.deepStrictEqual(
+    panShiftBetween(prev, { ...next, paletteType: prev.paletteType + 1 }), { x: 120, y: 48 }
+  );
+});
+
+test('panShiftBetween: a look change alongside a pan is still a pure pan', () => {
+  for (const overrides of [{ smoothColoring: 1 }, { bandCount: 8 }]) {
+    const base = panned(0.15, 0.08);
+    const changed = panned(0.15, 0.08, overrides);
+    assert.deepStrictEqual(
+      panShiftBetween(base.prev, changed.next), { x: 120, y: 48 },
+      `${JSON.stringify(overrides)} should still count as a pure pan`
+    );
+  }
 });
 
 test('panShiftBetween: a juliaSeed change follows the same rule as the render signature', () => {
