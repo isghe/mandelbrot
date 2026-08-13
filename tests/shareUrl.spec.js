@@ -235,7 +235,7 @@ test('a real pan, zoom, and click-to-set-seed stamp v=7, using the unchanged-sin
 
   await page.mouse.move(cx, cy);
   await page.mouse.wheel(0, -200);
-  await page.waitForTimeout(400); // let the wheel debounce flush
+  await page.waitForFunction(() => !window.app.history.wheelTimer && !window.app.history.pendingWheelSnapshot);
 
   await page.mouse.click(cx + 40, cy - 30); // plain click (no drag): sets the Julia seed
 

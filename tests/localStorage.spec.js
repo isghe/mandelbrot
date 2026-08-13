@@ -84,7 +84,6 @@ test('reloading the page restores the Julia panel\'s own dragged/zoomed position
   await page.mouse.down();
   await page.mouse.move(850, 300);
   await page.mouse.up();
-  await page.waitForTimeout(200);
 
   const before = await page.evaluate(() => ({
     center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
@@ -107,7 +106,6 @@ test('reloading the page restores the Julia panel\'s own dragged/zoomed position
   await page.reload();
   const gpuError = page.locator('#gpuError');
   await expect(gpuError).toBeHidden();
-  await page.waitForTimeout(200);
 
   const after = await page.evaluate(() => ({
     center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },

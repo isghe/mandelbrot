@@ -71,7 +71,6 @@ test('pan can be undone and redone', async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(cx + 150, cy + 80, { steps: 10 });
   await page.mouse.up();
-  await page.waitForTimeout(300);
 
   await expect(backBtn).toBeEnabled();
   await expect(forwardBtn).toBeDisabled();
@@ -79,12 +78,10 @@ test('pan can be undone and redone', async ({ page }) => {
   expect(afterPan.equals(baseline)).toBe(false);
 
   await backBtn.click();
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
   await expect(backBtn).toBeDisabled();
 
   await forwardBtn.click();
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(afterPan)).toBe(true);
 });
 
@@ -101,32 +98,27 @@ test('wheel-zoom, palette, and smooth coloring changes undo in order', async ({ 
 
   await page.mouse.move(cx, cy);
   await page.mouse.wheel(0, -200);
-  await page.waitForTimeout(400); // let the wheel debounce flush
+  await page.waitForFunction(() => !window.app.history.wheelTimer && !window.app.history.pendingWheelSnapshot);
   const afterZoom = await fractalShot(page);
   expect(afterZoom.equals(baseline)).toBe(false);
 
   await page.selectOption('#mandelbrotPaletteType', '1'); // Fire
-  await page.waitForTimeout(200);
   const afterPalette = await fractalShot(page);
   expect(afterPalette.equals(afterZoom)).toBe(false);
 
   await page.check('#mandelbrotSmoothColoring');
-  await page.waitForTimeout(200);
   const afterSmooth = await fractalShot(page);
   expect(afterSmooth.equals(afterPalette)).toBe(false);
 
   await backBtn.click(); // undo smooth coloring
-  await page.waitForTimeout(200);
   await expect(page.locator('#mandelbrotSmoothColoring')).not.toBeChecked();
   expect((await fractalShot(page)).equals(afterPalette)).toBe(true);
 
   await backBtn.click(); // undo palette
-  await page.waitForTimeout(200);
   await expect(page.locator('#mandelbrotPaletteType')).toHaveValue('4'); // Apple II
   expect((await fractalShot(page)).equals(afterZoom)).toBe(true);
 
   await backBtn.click(); // undo zoom
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
   await expect(backBtn).toBeDisabled();
 });
@@ -142,11 +134,10 @@ test('a burst of wheel events coalesces into a single history entry', async ({ p
 
   const baseline = await fractalShot(page);
   await wheelBurst(page, { count: 20, gapMs: 20, x: cx, y: cy }); // 20 ticks, well inside the debounce window
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => !window.app.history.wheelTimer && !window.app.history.pendingWheelSnapshot);
 
   await expect(backBtn).toBeEnabled();
   await backBtn.click();
-  await page.waitForTimeout(200);
   // If the whole burst had produced one entry, a single Back restores the
   // exact baseline; if it had flooded the stack, Back would only undo one tick.
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
@@ -164,21 +155,18 @@ test('wheel followed by pan preserves undo order', async ({ page }) => {
 
   const preWheel = await fractalShot(page);
   await wheelBurst(page, { count: 5, gapMs: 20, x: cx, y: cy });
-  await page.waitForTimeout(400); // flush before starting the pan
+  await page.waitForFunction(() => !window.app.history.wheelTimer && !window.app.history.pendingWheelSnapshot); // flush before starting the pan
   const prePan = await fractalShot(page);
 
   await page.mouse.move(cx, cy);
   await page.mouse.down();
   await page.mouse.move(cx + 100, cy + 60, { steps: 8 });
   await page.mouse.up();
-  await page.waitForTimeout(200);
 
   await backBtn.click(); // undo pan
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(prePan)).toBe(true);
 
   await backBtn.click(); // undo wheel
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(preWheel)).toBe(true);
 });
 
@@ -194,11 +182,15 @@ test('Back mid-debounce flushes the pending wheel entry immediately', async ({ p
   const baseline = await fractalShot(page);
   await page.mouse.move(cx, cy);
   await page.mouse.wheel(0, -50);
-  await page.waitForTimeout(30); // well within the debounce window, not yet flushed
+  // armWheel() arms wheelTimer/pendingWheelSnapshot synchronously inside the
+  // wheel handler (src/fractalPanel.js onWheel -> src/history.js armWheel),
+  // so there's no async gap to wait out here — this asserts the "armed but
+  // not yet flushed" state directly instead of racing a guessed sub-debounce
+  // delay against it.
+  await page.waitForFunction(() => window.app.history.wheelTimer !== null);
 
   await expect(backBtn).toBeEnabled(); // enabled immediately, before the debounce commits
   await backBtn.click();
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
 });
 
@@ -211,13 +203,11 @@ test('keyboard steps on a slider are undoable', async ({ page }) => {
 
   await page.locator('#mandelbrotZoomSlider').focus();
   await page.keyboard.press('ArrowRight');
-  await page.waitForTimeout(200);
 
   await expect(backBtn).toBeEnabled();
   expect((await fractalShot(page)).equals(baseline)).toBe(false);
 
   await backBtn.click();
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
   await expect(backBtn).toBeDisabled();
 });
@@ -289,18 +279,16 @@ test('Reset mid-slider-drag discards the pending snapshot without a spurious pus
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down(); // starts a pointer-drag session (sets pendingZoomSnapshot on the first `input`)
   await page.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2, { steps: 5 });
-  await page.waitForTimeout(100);
-  // Confirm the drag actually registered (i.e. `pendingZoomSnapshot` really
+  // Confirm the drag actually registered (i.e. `pendingSnapshot.zoom` really
   // got set) before Reset — otherwise this test would pass trivially even if
   // the drag produced no `input` event at all.
+  await page.waitForFunction(() => window.app.modelNamed("mandelbrot").pendingSnapshot.zoom !== null);
   expect((await fractalShot(page)).equals(baseline)).toBe(false);
   // Use the DOM .click() directly, not Playwright's synthetic mouse click,
   // so it doesn't interfere with the real mouse button still held down above.
   await page.evaluate(() => document.getElementById('resetBtn').click());
-  await page.waitForTimeout(200);
   await page.mouse.up(); // fires `change` now, after Reset already discarded the pending snapshot
 
-  await page.waitForTimeout(300);
   // Reset restores the default split-screen view — hide Julia again before
   // the final comparison, same reason as the initial uncheck above.
   await page.uncheck('#showJulia');
@@ -317,19 +305,16 @@ test('clicking sets the Julia seed and is undoable, even with the Julia panel hi
   // effect while the Julia panel stays hidden.
   await page.uncheck('#showJulia');
   await page.check('#juliaMarker');
-  await page.waitForTimeout(200);
   const baseline = await fractalShot(page);
 
   await expect(page.locator('#showJulia')).not.toBeChecked();
   await page.mouse.click(600, 300); // plain click, no drag
-  await page.waitForTimeout(200);
 
   await expect(backBtn).toBeEnabled();
   const afterClick = await fractalShot(page);
   expect(afterClick.equals(baseline)).toBe(false);
 
   await backBtn.click();
-  await page.waitForTimeout(200);
   expect((await fractalShot(page)).equals(baseline)).toBe(true);
   await expect(backBtn).toBeDisabled();
 });
@@ -345,14 +330,13 @@ test('zooming the Julia panel enables Back/Forward and is undoable', async ({ pa
 
   await page.mouse.move(900, 350); // over the Julia (right) panel
   await page.mouse.wheel(0, -200);
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => !window.app.history.wheelTimer && !window.app.history.pendingWheelSnapshot);
 
   await expect(backBtn).toBeEnabled();
   const scaleAfter = await page.evaluate(() => window.app.modelNamed("julia").panel.scale);
   expect(scaleAfter).not.toBe(scaleBefore);
 
   await backBtn.click();
-  await page.waitForTimeout(200);
   const scaleAfterBack = await page.evaluate(() => window.app.modelNamed("julia").panel.scale);
   expect(scaleAfterBack).toBe(scaleBefore);
   await expect(backBtn).toBeDisabled();
@@ -367,7 +351,6 @@ test('wheel-zoom after panning centers on the new position, not the stale pivot'
   await page.mouse.down();
   await page.mouse.move(cx + 200, cy + 120, { steps: 10 });
   await page.mouse.up();
-  await page.waitForTimeout(200);
 
   const centerAfterPan = await page.evaluate(() => ({ x: window.app.modelNamed("mandelbrot").panel.center.x, y: window.app.modelNamed("mandelbrot").panel.center.y }));
 
@@ -377,7 +360,7 @@ test('wheel-zoom after panning centers on the new position, not the stale pivot'
   // jump back toward it instead of staying at centerAfterPan.
   await page.mouse.move(cx, cy);
   await page.mouse.wheel(0, -200);
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => !window.app.history.wheelTimer && !window.app.history.pendingWheelSnapshot);
 
   const centerAfterZoom = await page.evaluate(() => ({ x: window.app.modelNamed("mandelbrot").panel.center.x, y: window.app.modelNamed("mandelbrot").panel.center.y }));
 
@@ -399,9 +382,12 @@ test('Reset clears history and discards pending sessions without spurious entrie
   // A pending (un-flushed) wheel session should be discarded by Reset, not pushed.
   await page.mouse.move(cx, cy);
   await page.mouse.wheel(0, -50);
-  await page.waitForTimeout(30);
+  // armWheel() arms wheelTimer synchronously inside the wheel handler, so
+  // there's no async gap to wait out before Reset — see the identical
+  // comment in "Back mid-debounce flushes the pending wheel entry
+  // immediately" above.
+  await page.waitForFunction(() => window.app.history.wheelTimer !== null);
   await page.locator('#resetBtn').click();
-  await page.waitForTimeout(200);
   // Reset restores the default split-screen view — hide Julia again before
   // the final comparison, same reason as the initial uncheck above.
   await page.uncheck('#showJulia');

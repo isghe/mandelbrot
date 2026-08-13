@@ -95,13 +95,11 @@ test('clicking on the Mandelbrot panel updates the Julia panel, but clicking on 
 
   // Click away from the #ui panel, on the Mandelbrot half.
   await page.mouse.click(550, 600);
-  await page.waitForTimeout(200);
   const afterMandelbrotClick = await page.evaluate(() => ({ x: window.app.juliaSeed.x, y: window.app.juliaSeed.y }));
   expect(afterMandelbrotClick).not.toEqual(before);
 
   // Click on the Julia half: juliaSeed must stay unchanged.
   await page.mouse.click(900, 350);
-  await page.waitForTimeout(200);
   const afterJuliaClick = await page.evaluate(() => ({ x: window.app.juliaSeed.x, y: window.app.juliaSeed.y }));
   expect(afterJuliaClick).toEqual(afterMandelbrotClick);
 });
@@ -117,7 +115,6 @@ test('right-clicking on the Mandelbrot panel does not change juliaSeed or pan th
   }));
 
   await page.mouse.click(600, 300, { button: 'right' });
-  await page.waitForTimeout(200);
 
   const after = await page.evaluate(() => ({
     juliaSeed: { x: window.app.juliaSeed.x, y: window.app.juliaSeed.y },
@@ -133,7 +130,6 @@ test('the Julia panel pans/zooms independently of the Mandelbrot panel', async (
 
   await page.mouse.move(900, 350); // over the Julia (right) panel
   await page.mouse.wheel(0, -200);
-  await page.waitForTimeout(200);
 
   const mandelbrotScaleAfter = await page.evaluate(() => window.app.modelNamed("mandelbrot").panel.scale);
   const juliaScaleAfter = await page.evaluate(() => window.app.modelNamed("julia").panel.scale);
@@ -144,20 +140,16 @@ test('the Julia panel pans/zooms independently of the Mandelbrot panel', async (
 
 test('toggling panel visibility does not enable Back/Forward (a display preference, not view state)', async ({ page }) => {
   await page.uncheck('#showJulia');
-  await page.waitForTimeout(200);
   await expect(page.locator('#backBtn')).toBeDisabled();
 
   await page.uncheck('#showMandelbrot');
-  await page.waitForTimeout(200);
   await expect(page.locator('#backBtn')).toBeDisabled();
 });
 
 test('Reset restores the default split-screen view', async ({ page }) => {
   await page.uncheck('#showJulia');
-  await page.waitForTimeout(200);
 
   await page.click('#resetBtn');
-  await page.waitForTimeout(200);
 
   await expect(page.locator('#showMandelbrot')).toBeChecked();
   await expect(page.locator('#showJulia')).toBeChecked();
@@ -180,7 +172,6 @@ test('Reset also restores the Julia panel\'s own pan/zoom to its initial state',
   await page.mouse.down();
   await page.mouse.move(850, 300);
   await page.mouse.up();
-  await page.waitForTimeout(200);
 
   const moved = await page.evaluate(() => ({
     center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
@@ -189,7 +180,6 @@ test('Reset also restores the Julia panel\'s own pan/zoom to its initial state',
   expect(moved).not.toEqual(initial);
 
   await page.click('#resetBtn');
-  await page.waitForTimeout(200);
 
   const afterReset = await page.evaluate(() => ({
     center: { x: window.app.modelNamed("julia").panel.center.x, y: window.app.modelNamed("julia").panel.center.y },
