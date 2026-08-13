@@ -162,16 +162,16 @@ same dropdown menu (grouped by `<optgroup>`):
 
 - **Gradient** — row 0 is a continuous color lookup table, sampled at
   `t = iterations / maxIterations`. Colors blend smoothly as the iteration
-  count rises. Includes Viridis, Fire, Ocean, Rainbow, and Apple II.
+  count rises.
 - **Banded** — row 0's colors are assigned by exact iteration class
   (`iterations % bandCount`) rather than interpolated, so a point's color
   depends only on which "band" its escape iteration falls into, not on
-  `maxIterations`. Includes Black and White - Red (alternates black/white by
-  iteration parity, with its own red interior color instead of the default
-  black) and Apple II - Banded (the Apple II colors used as exact bands
-  instead of a gradient, black interior). Smooth coloring is disabled
-  automatically when a banded palette is selected, since the two are
-  incompatible.
+  `maxIterations`. Smooth coloring is disabled automatically when a banded
+  palette is selected, since the two are incompatible.
+
+See `src/palette.js` (`PALETTE_GROUPS`) for the current list of palettes and
+their colors — the single source of truth for both the dropdown menus and
+this section.
 
 ## Testing
 
