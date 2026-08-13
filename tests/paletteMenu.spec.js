@@ -12,6 +12,7 @@ const EXPECTED_GROUPS = [
   ]},
   { label: 'Banded', options: [
     { value: '5', label: 'Black and White - Red' },
+    { value: '7', label: 'RGB' },
     { value: '6', label: 'Apple II - Banded' },
   ]},
 ];
