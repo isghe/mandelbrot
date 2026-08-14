@@ -37,7 +37,10 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: 'python3 -m http.server 8000',
+    // Node-based (http-server), not python3 -m http.server: Python's
+    // single-threaded server repeatedly stalled/dropped requests
+    // (ERR_EMPTY_RESPONSE) once several Playwright workers hit it at once.
+    command: 'npx http-server -p 8000 -c-1 .',
     port: 8000,
     // In CI, always start a fresh server rather than reusing whatever might
     // already be listening on the port; locally, reuse one you already have
