@@ -207,6 +207,16 @@ export function exposedRegions(width, height, shift) {
   return regions;
 }
 
+// Whether beginFrame should defer a pan rather than reproject or fall back to
+// a full render: true only when a valid shift exists, the target isn't
+// freshly (re)created, and the previous frame is still draining. Pulled out
+// as its own pure function (mirroring frameBands/shareBands/nextBandBudget/
+// exposedRegions above) so the decision itself gets direct coverage without
+// mocking the WebGPU device beginFrame otherwise depends on.
+export function shouldQueuePan(shift, freshTarget, draining) {
+  return shift !== null && !freshTarget && draining;
+}
+
 // Sets up the pipeline/uniforms for one canvas's fractal render pass and
 // returns a small `{ render, writePalette }` handle. Throws on setup
 // failure (missing WebGPU canvas context, WGSL fetch/compile errors), for
@@ -476,6 +486,14 @@ export async function attachCanvas(device, canvas, palette256) {
   // for as long as the whole frame took.
   let job = null;
 
+  // Diagnostic only, not read by any render logic besides beginFrame's own
+  // deferral check: what happened to the most recently requested shift, for
+  // the caller to log (see mandelbrot.js's startRenderIfNeeded). Stays null
+  // on a frame that never requested a shift in the first place — that path
+  // is fine, it's not a rejected pan. "queued" means beginFrame returned
+  // null without starting a new frame at all (see there).
+  let lastPanOutcome = null;
+
   // True from a recolor() call until the next present(), regardless of which
   // branch triggers that present() — a plain band-driven one or one taken
   // solely to show the recolor. advanceRenderJobs (mandelbrot.js) reads this
@@ -501,8 +519,26 @@ export async function attachCanvas(device, canvas, palette256) {
   // the panel holds, which for the short drags of ordinary exploring is an
   // order of magnitude less. Returns how many bands this frame was split into.
   const beginFrame = (uniformData, maxIter, { clear = false, shift = null } = {}) => {
-    device.queue.writeBuffer(uniformBuffer, 0, uniformData);
     const freshTarget = ensureTarget();
+    // Reprojecting is only sound if the target really holds the whole frame
+    // the shift was measured against: not one created this very call, and not
+    // one still missing bands of the frame before — a half-drained target is
+    // part old view, part new, and sliding that across would smear the two.
+    const draining = job !== null && job.next < job.bands.length;
+    // A shift within tolerance but the previous frame still draining: wait
+    // for it rather than discarding its still-good pixels for a full
+    // re-render. Neither the uniform buffer nor `job` is touched, so the old
+    // frame keeps landing exactly as it would have; the caller (see
+    // mandelbrot.js's startRenderIfNeeded) skips markRendered on a null
+    // return, which leaves lastRenderSignature at the pre-pan view, so this
+    // same call recurs every animation frame — recomputing the shift fresh
+    // each time, so it also absorbs any further panning in the meantime —
+    // until draining is false and the reprojection actually happens below.
+    if (shouldQueuePan(shift, freshTarget, draining)) {
+      lastPanOutcome = "queued";
+      return null;
+    }
+    device.queue.writeBuffer(uniformBuffer, 0, uniformData);
     // Banded off the render target's own size, not the live canvas's: the
     // canvas can be resized while a frame is still draining, and every band
     // still queued has to stay inside the attachment it was computed for.
@@ -515,15 +551,8 @@ export async function attachCanvas(device, canvas, palette256) {
     // that only recolours the same view would correctly ask for no clear and
     // the wipe would be lost for good.
     const owed = job !== null && job.next === 0 && job.clear;
-    // Reprojecting is only sound if the target really holds the whole frame
-    // the shift was measured against: not one created this very call, and not
-    // one still missing bands of the frame before — a half-drained target is
-    // part old view, part new, and sliding that across would smear the two.
-    // That second condition also subsumes `owed`, which can only be true while
-    // band 0 is still pending, so a wipe deferred by the budget is never lost
-    // to a reprojection that suppresses it.
-    const draining = job !== null && job.next < job.bands.length;
-    const reproject = shift !== null && !freshTarget && !draining;
+    const reproject = shift !== null && !freshTarget;
+    lastPanOutcome = shift === null ? null : reproject ? "reprojected" : "fresh-target";
     if (reproject) reprojectTarget(shift);
 
     job = {
@@ -599,6 +628,8 @@ export async function attachCanvas(device, canvas, palette256) {
     // Bands of the current frame not yet submitted; 0 once it has fully
     // landed, which is also how the caller knows the frame is complete.
     get pendingBands() { return job ? job.bands.length - job.next : 0; },
+    // Diagnostic getter, see lastPanOutcome above.
+    get lastPanOutcome() { return lastPanOutcome; },
     // A recolor() happened since the last present() — advanceRenderJobs
     // (mandelbrot.js) presents a panel that has this set even when it has no
     // bands to advance, since a recolor's whole point is a new look with no

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   requestGPUDevice, attachCanvas, frameBands, BAND_WORK_BUDGET, shareBands,
   nextBandBudget, MAX_FRAME_BAND_BUDGET, TARGET_FRAME_MS, exposedRegions,
+  shouldQueuePan,
 } from '../../src/renderer.js';
 
 // renderer.js wraps the WebGPU API (adapter/device/pipeline/shader
@@ -357,4 +358,27 @@ test('exposedRegions: a narrow strip still bands into whole rows, never zero-hei
     y += band.height;
   }
   assert.strictEqual(y, strip.y + strip.height);
+});
+
+// shouldQueuePan is beginFrame's guard for the "previous frame still
+// draining" case (see renderer.js): reprojecting against a half-drained
+// target would smear old and new content, so beginFrame defers instead of
+// falling back to a full re-render. Pulled out as a pure function so this
+// decision gets covered directly, without mocking the WebGPU device
+// beginFrame otherwise needs (see the module-contract comment above).
+
+test('shouldQueuePan: defers only when a shift is valid, the target is not fresh, and the previous frame is draining', () => {
+  assert.strictEqual(shouldQueuePan({ x: 10, y: 0 }, false, true), true);
+});
+
+test('shouldQueuePan: no shift means no pan to defer', () => {
+  assert.strictEqual(shouldQueuePan(null, false, true), false);
+});
+
+test('shouldQueuePan: a freshly (re)created target is never reprojected, so nothing to defer', () => {
+  assert.strictEqual(shouldQueuePan({ x: 10, y: 0 }, true, true), false);
+});
+
+test('shouldQueuePan: a fully-drained previous frame reprojects immediately, no defer', () => {
+  assert.strictEqual(shouldQueuePan({ x: 10, y: 0 }, false, false), false);
 });
