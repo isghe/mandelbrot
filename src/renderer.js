@@ -207,6 +207,16 @@ export function exposedRegions(width, height, shift) {
   return regions;
 }
 
+// Whether beginFrame should defer a pan rather than reproject or fall back to
+// a full render: true only when a valid shift exists, the target isn't
+// freshly (re)created, and the previous frame is still draining. Pulled out
+// as its own pure function (mirroring frameBands/shareBands/nextBandBudget/
+// exposedRegions above) so the decision itself gets direct coverage without
+// mocking the WebGPU device beginFrame otherwise depends on.
+export function shouldQueuePan(shift, freshTarget, draining) {
+  return shift !== null && !freshTarget && draining;
+}
+
 // Sets up the pipeline/uniforms for one canvas's fractal render pass and
 // returns a small `{ render, writePalette }` handle. Throws on setup
 // failure (missing WebGPU canvas context, WGSL fetch/compile errors), for
@@ -524,7 +534,7 @@ export async function attachCanvas(device, canvas, palette256) {
     // same call recurs every animation frame — recomputing the shift fresh
     // each time, so it also absorbs any further panning in the meantime —
     // until draining is false and the reprojection actually happens below.
-    if (shift !== null && !freshTarget && draining) {
+    if (shouldQueuePan(shift, freshTarget, draining)) {
       lastPanOutcome = "queued";
       return null;
     }
