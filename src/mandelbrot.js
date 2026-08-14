@@ -957,10 +957,26 @@ export class MandelbrotApp {
     // worth keeping: they are the same picture, only moved (see
     // panShiftBetween), so the renderer slides them across and computes only
     // the strips the pan uncovered.
-    panel.lastTileBandCount = panel.renderer.beginFrame(data, displayIter, {
+    const shift = panel.panShiftFor(data);
+    const bandCount = panel.renderer.beginFrame(data, displayIter, {
       clear: panel.startsNewView(data),
-      shift: panel.panShiftFor(data),
+      shift,
     });
+    // A shift within tolerance but the previous frame still draining: no new
+    // frame was started at all (see renderer.js's beginFrame). Not calling
+    // markRendered leaves lastRenderSignature at the pre-pan view, so this
+    // same call recurs next animation frame — recomputing the shift fresh —
+    // until the old frame lands and the reprojection actually happens.
+    if (bandCount === null) return;
+    panel.lastTileBandCount = bandCount;
+    // Diagnostic: a shift within tolerance was available but beginFrame
+    // still fell back to a full render (see renderer.js's lastPanOutcome) —
+    // the sub-pixel-tolerance cause (shift === null) is well-measured and
+    // not logged here; "queued" never reaches this line (see above).
+    if (shift && panel.renderer.lastPanOutcome !== "reprojected") {
+      console.debug(`[pan] ${panel.canvas.id} shift rejected: ${panel.renderer.lastPanOutcome}`);
+      alert(`[pan] ${panel.canvas.id} shift rejected: ${panel.renderer.lastPanOutcome}`);
+    }
     panel.markRendered(data);
   }
 
