@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Isidoro Ghezzi -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WGSL double-single portability probe</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#111; color:#ddd; font:15px/1.6 system-ui, sans-serif; margin:0 auto; padding:24px; max-width:60rem; }
+  h1 { font-size:1.3rem; margin:0 0 .3rem; }
+  h2 { font-size:1rem; margin:1.6rem 0 .4rem; color:#9cf; }
+  p { margin:.5rem 0; }
+  pre { background:#000; border:1px solid #333; padding:12px; overflow-x:auto; font:13px/1.45 monospace; }
+  #result { font:16px/1.7 monospace; white-space:pre; background:#000; border:1px solid #333; padding:14px; overflow-x:auto; }
+  .pass { color:#5f5; } .fail { color:#f66; } .muted { color:#888; }
+</style>
+</head>
+<body>
+
+<h1>WGSL double-single portability probe</h1>
+<p class="muted">Open this file directly in a WebGPU-capable browser. No server, no build step.</p>
+
+<h2>What this measures</h2>
+<p>
+  Deep-zoom fractal rendering needs more precision than f32 gives, and WebGPU has no
+  f64. The usual answer is double-single (Dekker) arithmetic: a number is carried as a
+  <code>vec2&lt;f32&gt;</code> of a high and a low part, and the low part is recovered with
+  expressions such as <code>e = b - (s - a)</code>. Those expressions are
+  <strong>algebraically zero</strong>. They only carry information because IEEE-754
+  rounding makes them non-zero, so they survive only if the compiler does not reassociate
+  or simplify them.
+</p>
+<p>
+  WGSL explicitly permits that simplification: §15.7.5 <em>Reassociation and Fusion</em> says an
+  implementation <em>"may reassociate and/or fuse operations if the optimization is at least as
+  accurate as the original formulation"</em>, and WebGPU currently offers no way to opt out
+  (see <a href="https://github.com/gpuweb/gpuweb/issues/2076">gpuweb#2076</a>, still open, and
+  <a href="https://github.com/gpuweb/gpuweb/issues/2402">gpuweb#2402</a>).
+</p>
+<p>
+  The probe below reproduces exactly what a deep-zoom fragment shader does: take a
+  double-single centre, add a per-pixel offset held in plain f32, and see how many
+  <strong>distinct</strong> coordinates 32 adjacent pixels end up with. 32 means the zoom
+  resolves per pixel. A smaller number is the width, in pixels, of the flat blocks that
+  appear on screen.
+</p>
+
+<h2>Result</h2>
+<div id="result">running…</div>
+
+<h2>The arithmetic under test</h2>
+<pre id="shaderSource"></pre>
+
+<script>
+(async () => {
+  // A real deep-zoom view: centre, span and canvas width taken from an actual
+  // session, so the per-pixel step is the one that matters in practice.
+  const CX = 0.3187296181345255;
+  const SCALE = 0.000002893407656412439;
+  const WIDTH = 1842, HEIGHT = 995;
+  const ASPECT = WIDTH / HEIGHT;
+  const FIRST_PIXEL = 900;   // near the middle of a scanline
+  const N = 32;
+
+  const hi = Math.fround(CX), lo = CX - hi;
+
+  const SHADER = `
+struct Out { v: array<vec4<f32>, ${N}> };
+@group(0) @binding(0) var<storage, read_write> o: Out;
+
+// Every error term below is exactly zero under real-number algebra, and
+// non-zero only under IEEE-754 rounding. Simplify them and all extended
+// precision is gone.
+fn two_sum(a: f32, b: f32) -> vec2<f32> {
+  let s = a + b;
+  let v = s - a;
+  return vec2<f32>(s, (a - (s - v)) + (b - v));
+}
+fn quick_two_sum(a: f32, b: f32) -> vec2<f32> {
+  let s = a + b;
+  return vec2<f32>(s, b - (s - a));
+}
+fn ds_add(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
+  var s = two_sum(a.x, b.x);
+  let t = two_sum(a.y, b.y);
+  s.y = s.y + t.x;
+  s = quick_two_sum(s.x, s.y);
+  s.y = s.y + t.y;
+  s = quick_two_sum(s.x, s.y);
+  return s;
+}
+
+@compute @workgroup_size(1)
+fn main() {
+  let centre = vec2<f32>(${hi}, ${lo});   // the centre, split hi + lo
+  for (var i = 0u; i < ${N}u; i = i + 1u) {
+    let px = f32(${FIRST_PIXEL}u + i);
+    let uvx = (px + 0.5) / ${WIDTH}.0;
+    let offsetX = (uvx - 0.5) * ${SCALE} * ${ASPECT};   // plain f32, low part 0
+    let z0 = ds_add(centre, vec2<f32>(offsetX, 0.0));
+    o.v[i] = vec4<f32>(offsetX, z0.x, z0.y, 0.0);
+  }
+}`;
+
+  document.getElementById('shaderSource').textContent = SHADER.trim();
+  const result = document.getElementById('result');
+
+  try {
+    if (!navigator.gpu) throw new Error('navigator.gpu is undefined — no WebGPU in this browser');
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error('requestAdapter() returned null');
+    const device = await adapter.requestDevice();
+
+    const SIZE = N * 16;
+    const storage = device.createBuffer({ size: SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const staging = device.createBuffer({ size: SIZE, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const pipeline = device.createComputePipeline({
+      layout: 'auto',
+      compute: { module: device.createShaderModule({ code: SHADER }), entryPoint: 'main' },
+    });
+
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: { buffer: storage } }],
+    }));
+    pass.dispatchWorkgroups(1);
+    pass.end();
+    encoder.copyBufferToBuffer(storage, 0, staging, 0, SIZE);
+    device.queue.submit([encoder.finish()]);
+
+    await staging.mapAsync(GPUMapMode.READ);
+    const data = new Float32Array(staging.getMappedRange().slice(0));
+    staging.unmap();
+
+    const offsets = [], coords = [];
+    for (let i = 0; i < N; i++) {
+      offsets.push(data[i * 4]);
+      coords.push(`${data[i * 4 + 1]}|${data[i * 4 + 2]}`);
+    }
+    const distinctOffsets = new Set(offsets).size;
+    const distinctCoords = new Set(coords).size;
+
+    // The same arithmetic in JavaScript's f64, as the reference answer.
+    const reference = new Set();
+    for (let i = 0; i < N; i++) {
+      reference.add(CX + ((FIRST_PIXEL + i + 0.5) / WIDTH - 0.5) * SCALE * ASPECT);
+    }
+
+    const verdict = (n) => n === N
+      ? `<span class="pass">${n} of ${N} — all distinct, precision preserved</span>`
+      : `<span class="fail">${n} of ${N} — collapsed into blocks of ~${(N / n).toFixed(1)} pixels</span>`;
+
+    const info = adapter.info ?? (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : {});
+    result.innerHTML = [
+      `user agent      : ${navigator.userAgent}`,
+      `adapter         : ${[info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(' / ') || '(not reported)'}`,
+      `centre split    : hi=${hi}  lo=${lo}`,
+      '',
+      `offsetX, plain f32 before ds_add : ${verdict(distinctOffsets)}`,
+      `coordinate after ds_add          : ${verdict(distinctCoords)}`,
+      `same arithmetic in JS f64        : ${reference.size} of ${N} distinct`,
+      '',
+      'first four coordinates (hi | lo):',
+      ...coords.slice(0, 4).map((c, i) => `  pixel ${FIRST_PIXEL + i} : ${c}`),
+    ].join('\n');
+  } catch (e) {
+    result.innerHTML = `<span class="fail">FAILED: ${e.message}</span>`;
+  }
+})();
+</script>
+
+</body>
+</html>

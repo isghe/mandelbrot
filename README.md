@@ -46,12 +46,26 @@ Requires a WebGPU-capable browser. Support varies by browser and platform:
   enabled by default on desktop (Windows, macOS, ChromeOS, Linux) since 2023; also
   available on Android.
 - **Firefox** — supported on Windows since late 2025; other platforms (macOS, Linux) are
-  still catching up and may require enabling it manually in `about:config`.
+  still catching up and may require enabling it manually in `about:config`. Renders
+  correctly at shallow zoom, but see the deep-zoom note below.
 - **Safari** — supported since Safari 18 (2024) on macOS and iOS; coverage is newer and
   some edge cases may behave differently than on Chromium-based browsers.
 
 If the page shows a "WebGPU is not supported" error, try updating your browser or
 switching to a recent Chromium-based release (Chrome, Edge, Brave).
+
+**Deep zoom currently needs a Chromium-based browser.** Past roughly `mscale` 1e-5,
+Firefox stops resolving individual pixels and renders the fractal in flat blocks —
+about 8-11 pixels wide by 1e-6 — while Chromium resolves every pixel at the same view.
+The shader reaches past `f32` with double-single (Dekker) arithmetic, whose error terms
+are algebraically zero and therefore carry information only where the compiler declines
+to simplify them. WGSL §15.7.5 *Reassociation and Fusion* explicitly permits that
+simplification, and WebGPU offers no way to opt out
+([gpuweb#2076](https://github.com/gpuweb/gpuweb/issues/2076)), so this is the shader
+leaning on a guarantee the language does not make rather than a defect in one browser.
+Shallower zooms are unaffected and look the same everywhere. To check a given browser,
+open `scripts/precision-portability-probe.html` directly (no server needed): it reports
+how many distinct coordinates 32 adjacent pixels resolve to, where 32 is correct.
 
 At very deep zooms combined with a high iteration count, a single frame can take long
 enough to compute that the OS/driver's GPU watchdog (e.g. Windows TDR) kills the device,
