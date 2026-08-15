@@ -60,12 +60,15 @@ about 8-11 pixels wide by 1e-6 — while Chromium resolves every pixel at the sa
 The shader reaches past `f32` with double-single (Dekker) arithmetic, whose error terms
 are algebraically zero and therefore carry information only where the compiler declines
 to simplify them. WGSL §15.7.5 *Reassociation and Fusion* explicitly permits that
-simplification, and WebGPU offers no way to opt out
-([gpuweb#2076](https://github.com/gpuweb/gpuweb/issues/2076)), so this is the shader
-leaning on a guarantee the language does not make rather than a defect in one browser.
-Shallower zooms are unaffected and look the same everywhere. To check a given browser,
-open `scripts/precision-portability-probe.html` directly (no server needed): it reports
-how many distinct coordinates 32 adjacent pixels resolve to, where 32 is correct.
+simplification, and WebGPU offers no way to opt out ([reported on
+gpuweb#2076](https://github.com/gpuweb/gpuweb/issues/2076#issuecomment-5303318572)), so
+this is the shader leaning on a guarantee the language does not make rather than a defect
+in one browser. Shallower zooms are unaffected and look the same everywhere. To check a
+given browser, open `scripts/precision-portability-probe.html` directly (no server
+needed, or run it live at
+[isghe.github.io/mandelbrot/scripts/precision-portability-probe.html](https://isghe.github.io/mandelbrot/scripts/precision-portability-probe.html)):
+it reports how many distinct coordinates 32 adjacent pixels resolve to, where 32 is
+correct.
 
 At very deep zooms combined with a high iteration count, a single frame can take long
 enough to compute that the OS/driver's GPU watchdog (e.g. Windows TDR) kills the device,
