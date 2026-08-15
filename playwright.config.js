@@ -34,12 +34,26 @@ export default defineConfig({
   // and must not be picked up here.
   testMatch: '**/*.spec.js',
   fullyParallel: false,
-  // Where the tests share one real GPU, running them in parallel is not just
-  // pointless but actively worse: the default worker count made page loads
-  // miss their 30s timeout, and the run took 4m12 with five such failures
-  // against 2m36 and a clean pass serially (measured 2026-08-14 18:57:00). The
-  // SwiftShader platforms render on the CPU instead, so there parallelism
-  // still pays and the default worker count stands.
+  // Serial on native Windows: with parallel workers, page loads miss their 30s
+  // timeout — the run took 4m12 with five such failures against 2m36 and a
+  // clean pass serially (measured 2026-08-14 18:57:00).
+  //
+  // The obvious suspect, tests sharing one real GPU, is not the cause. WebGPU
+  // device creation scales fine (187ms with one browser against 467ms with
+  // eight at once), and four browsers finish the app's entire init in ~1.2s so
+  // long as the files reach them without a socket. What stalls is Chromium's
+  // loopback HTTP: four concurrent instances loading over a real server stalled
+  // 20/20 pages, while the same four with every file fulfilled in-process
+  // stalled 0/20 (median 1163ms), and Chromium's own netlog shows the request
+  // bytes going out and ~10s passing before any response byte, sometimes ending
+  // in SOCKET_READ_ERROR (measured 2026-08-15 11:00:00). Ruled out along the
+  // way: serve.mjs itself (80 concurrent plain-HTTP requests in 339ms),
+  // localhost/IPv6 against 127.0.0.1, proxy auto-discovery, the port number,
+  // ephemeral-port exhaustion, and NetworkServiceSandbox. Why it stalls is
+  // still unknown, which is exactly why this stays serial.
+  //
+  // The stall has not appeared on the SwiftShader platforms, which keep the
+  // default worker count.
   workers: IS_NATIVE_WINDOWS ? 1 : undefined,
   retries: 1,
   reporter: 'list',
