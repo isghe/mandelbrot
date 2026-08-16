@@ -50,8 +50,27 @@ async function maxIterForTargetBands(page) {
 // pixels under headless SwiftShader, whereas Playwright's screenshot captures
 // the actually-composited frame. Decoding happens back in the page, using the
 // browser's own PNG decoder rather than a dependency for this one check.
+// The screenshot captures the whole composited page, so fixed decorative
+// chrome (repo link, motto) overlapping a sampled row would leak into the
+// pixels; hide it for the duration of the capture. Keyed on the markup's
+// data-chrome attribute, not on specific elements, so the chrome can change
+// freely without touching this suite.
+async function screenshotSansChrome(page, options) {
+  const setChromeVisibility = (visibility) => page.evaluate((v) => {
+    for (const el of document.querySelectorAll('[data-chrome="decorative"]')) {
+      el.style.visibility = v;
+    }
+  }, visibility);
+  await setChromeVisibility('hidden');
+  try {
+    return await page.screenshot(options);
+  } finally {
+    await setChromeVisibility('');
+  }
+}
+
 async function sampleColumn(page, rect, ys) {
-  const png = await page.screenshot({ clip: rect });
+  const png = await screenshotSansChrome(page, { clip: rect });
   return page.evaluate(async ({ dataUrl, ys, width, height }) => {
     const img = new Image();
     await new Promise((resolve, reject) => {
