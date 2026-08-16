@@ -1,9 +1,10 @@
 # Diagnostics for the native-Windows loopback stall
 
 On native Windows, several Chromium instances loading the app over a real HTTP
-server on `127.0.0.1` used to miss their 30s page-load timeout, which is why
-`playwright.config.js` pins `workers: 1` there. These are the probes that took
-that apart, kept because the conclusion is only as trustworthy as the
+server on `127.0.0.1` used to miss their 30s page-load timeout, which forced the
+suite to run one worker at a time there. It now serves over TLS on that platform
+and runs in parallel like everywhere else. These are the probes that took the
+problem apart, kept because the conclusion is only as trustworthy as the
 measurements behind it, and because the same tools answer the next question of
 this shape.
 
@@ -40,7 +41,9 @@ Measured, with repetitions rather than single samples:
   | HTTPS  | 8123 | 0/3, 0/3, 0/3 |
 
   The whole suite then runs **103/103 in 1.4 min with 4 workers**, against
-  2m45s serially over HTTP.
+  2m45s serially over HTTP. That is why `playwright.config.js` serves over
+  `https` on win32 only, with the certificate made on demand by
+  `scripts/make-test-cert.mjs`; no other platform pays anything for it.
 
 Ruled out earlier, so don't re-test: the GPU, DNS and the 41k-line hosts file,
 `localhost` vs `127.0.0.1`, proxy auto-discovery, the port number, ephemeral
@@ -55,10 +58,12 @@ port exhaustion, `NetworkServiceSandbox`, background networking, and
 | `connection-owners.ps1` | Runs the probe and samples the TCP table while it runs, joining "who owns the client end of each connection, and which states it passes through" with "how long the server waited for its request bytes". |
 | `trace-start.ps1` / `trace-stop.ps1` | ETW session on TCPIP, Winsock-AFD and WFP (elevated), decoded down to the events naming the server's port. |
 | `wfp-inventory.ps1` | Enumerates the Windows Filtering Platform callouts and the vendors that registered them (elevated, read-only). |
-| `serve-https.mjs` | `scripts/serve.mjs` over TLS, for the encrypted-payload comparison. |
-| `playwright.https.config.js` | The real suite, over TLS, with the default parallel worker count. |
 
-`scripts/serve.mjs` also grew a `SERVE_TRACE=<file>` environment variable, off
+`--https` runs `scripts/serve.mjs --tls`, the same server the suite itself uses,
+rather than a TLS copy of it: two servers would drift apart and the comparison
+between transports would stop meaning anything.
+
+`scripts/serve.mjs` also grew `--tls` and a `SERVE_TRACE=<file>` environment variable, off
 unless set, which records when each connection is accepted, each request
 arrives and each response finishes. That is the measurement that split the
 problem in half, by showing the request bytes arriving at the server ten

@@ -27,10 +27,10 @@
 //                           socket events with the server's timestamps.
 //   --port=N                serve on this port instead of the default for the
 //                           scheme (8123 plain, 8443 TLS).
-//   --https                 serve over TLS instead (scripts/diag/serve-https.mjs).
-//                           Avast's WFP filters inspect TCP payload at the
-//                           stream layer; encrypted payload gives them nothing
-//                           to inspect, so this says whether that is the cause.
+//   --https                 serve over TLS instead (serve.mjs --tls). Avast's
+//                           WFP filters inspect TCP payload at the stream
+//                           layer; encrypted payload gives them nothing to
+//                           inspect, which is what the suite now relies on.
 //
 // Usage: node scripts/diag/loopback-stall-probe.mjs [--label=x] [--browsers=4]
 //        [--loads=1] [--mode=processes] [--poll] [--trace] [--netlog] [--https]
@@ -117,7 +117,7 @@ class LoopbackStallProbe {
     const port = options.port || (options.https ? HTTPS_PORT : PORT);
     this.target = `${options.https ? 'https' : 'http'}://127.0.0.1:${port}/index.html`;
     this.serverArgs = options.https
-      ? ['scripts/diag/serve-https.mjs', String(port)]
+      ? ['scripts/serve.mjs', String(port), '--tls']
       : ['scripts/serve.mjs', String(port)];
     this.stamp = new Date().toISOString().replace(/[:.]/g, '-');
     this.outDir = join(REPO, 'scripts', 'diag', 'out', `${options.label}-${this.stamp}`);
