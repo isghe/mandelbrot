@@ -38,19 +38,30 @@ export default defineConfig({
   // timeout — the run took 4m12 with five such failures against 2m36 and a
   // clean pass serially (measured 2026-08-14 18:57:00).
   //
-  // The obvious suspect, tests sharing one real GPU, is not the cause. WebGPU
-  // device creation scales fine (187ms with one browser against 467ms with
-  // eight at once), and four browsers finish the app's entire init in ~1.2s so
-  // long as the files reach them without a socket. What stalls is Chromium's
-  // loopback HTTP: four concurrent instances loading over a real server stalled
-  // 20/20 pages, while the same four with every file fulfilled in-process
-  // stalled 0/20 (median 1163ms), and Chromium's own netlog shows the request
-  // bytes going out and ~10s passing before any response byte, sometimes ending
-  // in SOCKET_READ_ERROR (measured 2026-08-15 11:00:00). Ruled out along the
-  // way: serve.mjs itself (80 concurrent plain-HTTP requests in 339ms),
-  // localhost/IPv6 against 127.0.0.1, proxy auto-discovery, the port number,
-  // ephemeral-port exhaustion, and NetworkServiceSandbox. Why it stalls is
-  // still unknown, which is exactly why this stays serial.
+  // The cause is an HTTP content inspector holding plain-text loopback payload
+  // (measured 2026-08-16, scripts/diag/README.md has the full workings). The
+  // TCP connection is accepted in 3ms and sits Established with both ends idle
+  // while the server waits 10, 20, 30 or 40 seconds — multiples of a ~10s
+  // quantum — for the request bytes the client already wrote. It is not
+  // Chromium's doing: a plain Node client polling the same server during a
+  // stall waits the same ~10s, while 120 Node requests with no browser running
+  // never stall at all. Avast is registered in the Windows Filtering Platform
+  // with a terminating callout on all TCP, including the STREAM layer where
+  // payload can be held.
+  //
+  // Neither the GPU nor anything of ours: WebGPU device creation scales fine
+  // (187ms with one browser against 467ms with eight), four browsers finish the
+  // app's whole init in ~1.2s when the files reach them without a socket, and
+  // ruled out along the way were serve.mjs itself, DNS and the hosts file,
+  // localhost against 127.0.0.1, proxy auto-discovery, the port number,
+  // ephemeral-port exhaustion, and NetworkServiceSandbox.
+  //
+  // Serving the same suite over TLS removes the stall completely — 0/9 stalled
+  // against 9/9 on plain HTTP, cross-controlled against the port — and the
+  // whole suite then passes 103/103 in 1.4 min on four workers. That is not
+  // adopted here: it would put a certificate in the way of every platform to
+  // work around one machine's antivirus. scripts/diag/playwright.https.config.js
+  // keeps the experiment runnable.
   //
   // The stall has not appeared on the SwiftShader platforms, which keep the
   // default worker count.
