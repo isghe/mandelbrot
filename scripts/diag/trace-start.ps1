@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 $diag = Split-Path -Parent $MyInvocation.MyCommand.Path
 $log = Join-Path $diag 'out\trace-start.log'
 $etl = Join-Path $diag 'out\net-trace.etl'
-$session = 'ClaudeNetTrace'
+$session = 'MandelbrotNetTrace'
 $providers = @(
   'Microsoft-Windows-TCPIP',
   'Microsoft-Windows-Winsock-AFD',

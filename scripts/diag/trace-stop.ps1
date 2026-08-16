@@ -8,7 +8,7 @@ $diag = Split-Path -Parent $MyInvocation.MyCommand.Path
 $log = Join-Path $diag 'out\trace-stop.log'
 $etl = Join-Path $diag 'out\net-trace.etl'
 $out = Join-Path $diag 'out\net-trace-port8123.txt'
-$session = 'ClaudeNetTrace'
+$session = 'MandelbrotNetTrace'
 $port = 8123
 
 try {
