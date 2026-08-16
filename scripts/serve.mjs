@@ -1,6 +1,6 @@
 // @ts-check
 // Minimal static file server for the repo root, used by playwright.config.js
-// (and usable by hand: `node scripts/serve.mjs [port]`).
+// (and usable by hand: `node scripts/serve.mjs [port] [--tls]`).
 //
 // It replaces `python3 -m http.server`, which handles one request at a time:
 // with several Playwright workers loading the app at once the requests queue up
@@ -10,11 +10,13 @@
 // Node server for related stalls. Node is already needed to run Playwright, so
 // this costs no new dependency.
 
-import { appendFileSync, createReadStream } from 'node:fs';
+import { appendFileSync, createReadStream, readFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { createServer } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureTestCert } from './make-test-cert.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DEFAULT_PORT = 8123;
@@ -64,7 +66,7 @@ const resolveTarget = async (requestUrl) => {
   }
 };
 
-const server = createServer(async (req, res) => {
+const handle = async (req, res) => {
   const method = req.method ?? 'GET';
   const url = req.url ?? '/';
   const port = req.socket.remotePort;
@@ -103,18 +105,39 @@ const server = createServer(async (req, res) => {
     return;
   }
   createReadStream(target.path).pipe(res);
-});
+};
 
+// `--tls` serves the same files over TLS with the throwaway certificate from
+// scripts/make-test-cert.mjs. Native Windows needs it: an HTTP content
+// inspector there holds plain-text loopback payload for ~10s at a time, which
+// is what stalled parallel test workers (playwright.config.js explains it).
+// One server rather than a TLS copy of it, so the two transports cannot drift
+// apart and a comparison between them stays honest.
+const args = process.argv.slice(2);
+const tls = args.includes('--tls');
+const port = Number(args.find((arg) => !arg.startsWith('--')) ?? DEFAULT_PORT);
+
+const server = tls
+  ? createHttpsServer(
+    (() => {
+      const dir = ensureTestCert();
+      return { key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(join(dir, 'cert.pem')) };
+    })(),
+    handle,
+  )
+  : createHttpServer(handle);
+
+// The raw socket, before any TLS handshake, so the traced timings mean the same
+// thing under both transports.
 server.on('connection', (socket) => {
   // Captured now: by the time 'close' fires the socket no longer knows it, and
   // the port is what ties these lines to the client's own view of the run.
-  const port = socket.remotePort;
-  trace('connection', `port=${port}`);
-  socket.on('close', () => trace('connection-close', `port=${port}`));
+  const remotePort = socket.remotePort;
+  trace('connection', `port=${remotePort}`);
+  socket.on('close', () => trace('connection-close', `port=${remotePort}`));
 });
 
-const port = Number(process.argv[2] ?? DEFAULT_PORT);
 server.listen(port, () => {
   trace('listening', `port=${port}`);
-  console.log(`Serving ${ROOT} on http://localhost:${port}/`);
+  console.log(`Serving ${ROOT} on ${tls ? 'https' : 'http'}://localhost:${port}/`);
 });
