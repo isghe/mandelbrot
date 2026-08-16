@@ -7,6 +7,7 @@ import {
 } from './renderer.js';
 import { FractalPanel, buildUniformData } from './fractalPanel.js';
 import { settings } from './settings.js';
+import { MOTTO } from './motto.js';
 
 // Exported so tests/unit/mandelbrotApp.stateShapes.test.js can `new
 // MandelbrotApp()` directly against a mocked DOM, instead of only through
@@ -132,6 +133,8 @@ export class MandelbrotApp {
     this.errorMessage = document.getElementById("gpuErrorMessage");
     this.reloadBtn = document.getElementById("gpuReloadBtn");
     this.reloadBtn.onclick = () => location.reload();
+
+    document.getElementById("motto").textContent = MOTTO;
 
     // UI
     this.uiToggleBtn = document.getElementById("uiToggleBtn");

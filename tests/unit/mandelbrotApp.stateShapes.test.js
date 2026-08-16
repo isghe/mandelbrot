@@ -98,7 +98,7 @@ function buildDomMocks() {
     mocks[`ui${cap}`] = makeMockControl();
   }
   for (const id of [
-    'selectionBox', 'noVizMessage', 'gpuError', 'gpuErrorMessage', 'gpuReloadBtn',
+    'selectionBox', 'noVizMessage', 'gpuError', 'gpuErrorMessage', 'gpuReloadBtn', 'motto',
     'uiToggleBtn', 'ui', 'juliaMarker', 'backBtn', 'forwardBtn', 'resetBtn', 'shareBtn',
     'mandelbrotLandmarks', 'landmarksOverlay',
   ]) {
