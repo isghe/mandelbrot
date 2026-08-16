@@ -1,5 +1,6 @@
 // @ts-check
 import { defineConfig } from '@playwright/test';
+import { ensureTestCert } from './scripts/make-test-cert.mjs';
 
 // SwiftShader software rendering gives a working WebGPU adapter in
 // environments without a real/accessible GPU (e.g. headless CI or sandboxes).
@@ -27,6 +28,16 @@ const GPU_ARGS = IS_NATIVE_WINDOWS
   ? ['--enable-unsafe-webgpu', '--use-angle=d3d11', '--disable-dawn-features=use_dxc']
   : SWIFTSHADER_ARGS;
 
+// Native Windows serves the suite over TLS; every other platform stays on plain
+// HTTP and needs no certificate. The reason is the loopback stall documented at
+// `workers` below: an HTTP content inspector on that machine holds plain-text
+// payload for ~10s at a time, and encrypted payload gives it nothing to read.
+// The certificate is made here, before the web server starts, and is skipped
+// when the existing one is still valid.
+const TEST_PORT = IS_NATIVE_WINDOWS ? 8443 : 8123;
+const BASE_URL = `${IS_NATIVE_WINDOWS ? 'https' : 'http'}://localhost:${TEST_PORT}`;
+if (IS_NATIVE_WINDOWS) ensureTestCert();
+
 export default defineConfig({
   testDir: './tests',
   // Explicit, rather than the default (which also matches *.test.js): the
@@ -34,33 +45,44 @@ export default defineConfig({
   // and must not be picked up here.
   testMatch: '**/*.spec.js',
   fullyParallel: false,
-  // Serial on native Windows: with parallel workers, page loads miss their 30s
-  // timeout — the run took 4m12 with five such failures against 2m36 and a
-  // clean pass serially (measured 2026-08-14 18:57:00).
+  // Parallel everywhere. Native Windows had to run serially until 2026-08-16,
+  // because with parallel workers page loads missed their 30s timeout there —
+  // 4m12 with five such failures against 2m36 and a clean pass serially.
   //
-  // The obvious suspect, tests sharing one real GPU, is not the cause. WebGPU
-  // device creation scales fine (187ms with one browser against 467ms with
-  // eight at once), and four browsers finish the app's entire init in ~1.2s so
-  // long as the files reach them without a socket. What stalls is Chromium's
-  // loopback HTTP: four concurrent instances loading over a real server stalled
-  // 20/20 pages, while the same four with every file fulfilled in-process
-  // stalled 0/20 (median 1163ms), and Chromium's own netlog shows the request
-  // bytes going out and ~10s passing before any response byte, sometimes ending
-  // in SOCKET_READ_ERROR (measured 2026-08-15 11:00:00). Ruled out along the
-  // way: serve.mjs itself (80 concurrent plain-HTTP requests in 339ms),
-  // localhost/IPv6 against 127.0.0.1, proxy auto-discovery, the port number,
-  // ephemeral-port exhaustion, and NetworkServiceSandbox. Why it stalls is
-  // still unknown, which is exactly why this stays serial.
+  // The cause is an HTTP content inspector holding plain-text loopback payload;
+  // TLS is what fixes it, which is why this platform serves over https above.
+  // The TCP connection is accepted in 3ms and sits Established with both ends
+  // idle while the server waits 10, 20, 30 or 40 seconds — multiples of a ~10s
+  // quantum — for request bytes the client already wrote. It is not Chromium's
+  // doing: a plain Node client polling the same server during a stall waits the
+  // same ~10s, while 120 Node requests with no browser running never stall at
+  // all. Avast is registered in the Windows Filtering Platform with a
+  // terminating callout on all TCP, including the STREAM layer where payload
+  // can be held. Over TLS: 0/9 stalled against 9/9 on plain HTTP,
+  // cross-controlled against the port, and the whole suite passes 103/103 in
+  // 1.4 min on four workers against 2m45s serially.
   //
-  // The stall has not appeared on the SwiftShader platforms, which keep the
-  // default worker count.
-  workers: IS_NATIVE_WINDOWS ? 1 : undefined,
+  // Neither the GPU nor anything of ours, in case it resurfaces: WebGPU device
+  // creation scales fine (187ms with one browser against 467ms with eight),
+  // four browsers finish the app's whole init in ~1.2s when the files reach
+  // them without a socket, and ruled out along the way were serve.mjs itself,
+  // DNS and the hosts file, localhost against 127.0.0.1, proxy auto-discovery,
+  // the port number, ephemeral-port exhaustion, and NetworkServiceSandbox.
+  // scripts/diag/ holds the probes and README.md the full workings.
+  workers: undefined,
   retries: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:8123',
+    baseURL: BASE_URL,
+    // The Windows certificate is self-signed and thrown away; both the test
+    // context and the browser itself have to be told not to care.
+    ignoreHTTPSErrors: IS_NATIVE_WINDOWS,
     launchOptions: {
-      args: ['--no-sandbox', ...GPU_ARGS],
+      args: [
+        '--no-sandbox',
+        ...GPU_ARGS,
+        ...(IS_NATIVE_WINDOWS ? ['--ignore-certificate-errors'] : []),
+      ],
       // A shell-level DISPLAY env var (e.g. set by a personal .bashrc for an
       // unrelated tool) makes Chromium try to attach to that X server even in
       // headless mode, which was observed to make WebGPU/SwiftShader init
@@ -77,10 +99,14 @@ export default defineConfig({
     // not. scripts/serve.mjs rather than `npx http-server` because it depends
     // on nothing, so a run never waits on a package fetch, and it sends
     // no-store, which also stops a reload from serving stale modules.
-    command: 'node scripts/serve.mjs 8123',
+    command: `node scripts/serve.mjs ${TEST_PORT}${IS_NATIVE_WINDOWS ? ' --tls' : ''}`,
     // Not 8000: on the Windows host VirtualBoxVM.exe holds that port, and
     // reuseExistingServer below would then mistake it for our own server.
-    port: 8123,
+    // The https port is checked by URL instead, since a port check cannot tell
+    // a TLS server from a plain one already sitting there.
+    ...(IS_NATIVE_WINDOWS
+      ? { url: `${BASE_URL}/index.html`, ignoreHTTPSErrors: true }
+      : { port: TEST_PORT }),
     // In CI, always start a fresh server rather than reusing whatever might
     // already be listening on the port; locally, reuse one you already have
     // running (e.g. for manual testing) instead of racing to bind it twice.
