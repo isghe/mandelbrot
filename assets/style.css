@@ -75,3 +75,8 @@ body.dual-view #uiPanels { flex-direction:row; }
   background:#0008; color:white; padding:6px 10px; border-radius:8px;
   font-family:sans-serif; font-size:0.85em; text-decoration:none;
 }
+
+#motto {
+  position:fixed; bottom:2px; left:50%; transform:translateX(-50%); z-index:1;
+  color:#fff8; font-family:sans-serif; font-size:0.7em; font-style:italic;
+}
