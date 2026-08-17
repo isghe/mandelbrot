@@ -69,9 +69,14 @@ async function screenshotSansChrome(page, options) {
   }
 }
 
+// Only ever reads a single column (the panel's horizontal midpoint) at a
+// handful of y offsets, so the capture itself is clipped to that 1px-wide
+// column instead of the whole panel — same pixels read, a fraction of the
+// area for the compositor/PNG encoder to do under software-rendered WebGPU.
 async function sampleColumn(page, rect, ys) {
-  const png = await screenshotSansChrome(page, { clip: rect });
-  return page.evaluate(async ({ dataUrl, ys, width, height }) => {
+  const clip = { x: rect.x + Math.floor(rect.width / 2), y: rect.y, width: 1, height: rect.height };
+  const png = await screenshotSansChrome(page, { clip });
+  return page.evaluate(async ({ dataUrl, ys, height }) => {
     const img = new Image();
     await new Promise((resolve, reject) => {
       img.onload = resolve;
@@ -79,23 +84,27 @@ async function sampleColumn(page, rect, ys) {
       img.src = dataUrl;
     });
     const canvas = document.createElement('canvas');
-    canvas.width = width;
+    canvas.width = 1;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, width, height);
-    const { data } = ctx.getImageData(0, 0, width, height);
-    const x = Math.floor(width / 2);
+    ctx.drawImage(img, 0, 0, 1, height);
+    const { data } = ctx.getImageData(0, 0, 1, height);
     return ys.map((y) => {
-      const i = (Math.floor(y) * width + x) * 4;
+      const i = Math.floor(y) * 4;
       return `${data[i]},${data[i + 1]},${data[i + 2]}`;
     });
   }, {
     dataUrl: `data:image/png;base64,${png.toString('base64')}`,
     ys,
-    width: Math.round(rect.width),
     height: Math.round(rect.height),
   });
 }
+
+// Several tests here already run 15-30s on an idle machine (multi-band
+// drains, each animation frame paying a software-rasterized blit under
+// SwiftShader) — too close to the default 30s budget to survive any real
+// host contention.
+test.describe.configure({ timeout: 90_000 });
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
