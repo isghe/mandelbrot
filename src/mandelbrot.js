@@ -8,6 +8,7 @@ import {
 import { FractalPanel, buildUniformData } from './fractalPanel.js';
 import { settings } from './settings.js';
 import { MOTTO } from './motto.js';
+import { computeEscapeEntropy } from './entropy.js';
 
 // Exported so tests/unit/mandelbrotApp.stateShapes.test.js can `new
 // MandelbrotApp()` directly against a mocked DOM, instead of only through
@@ -323,6 +324,7 @@ export class MandelbrotApp {
         plus: document.getElementById(`${name}IterPlus`),
       },
       zoom: { slider: document.getElementById(`${name}ZoomSlider`), label: document.getElementById(`${name}ZoomLabel`) },
+      entropy: { label: document.getElementById(`${name}EntropyLabel`), signature: null },
       palette: { sel: this.populatePaletteMenu(document.getElementById(`${name}PaletteType`)) },
       progressive: { chk: document.getElementById(`${name}ProgressiveMode`) },
       smoothColoring: { chk: document.getElementById(`${name}SmoothColoring`) },
@@ -1014,6 +1016,40 @@ export class MandelbrotApp {
     return attached.some(({ panel }) => panel.renderer.pendingBands > 0);
   }
 
+  // Kicks off (at most) one escape-data readback per panel per settled
+  // frame, for the visual-entropy readout. "Settled" mirrors renderOnce's
+  // own anyBelowCap check: no bands left and, if progressive, the ramp has
+  // reached maxIter — reading mid-ramp would score a still-coarsening frame
+  // and immediately go stale.
+  //
+  // model.entropy.signature is compared against panel.lastRenderSignature
+  // (a fresh object every markRendered call, see fractalPanel.js) purely by
+  // identity, so it doubles as "have we already read this exact frame" —
+  // recolor-only changes never call markRendered, so a palette swap alone
+  // never triggers a redundant read of unchanged escape data. Only
+  // this.panels (visible panels), not this.models: a hidden panel shares the
+  // same GPU queue and has nothing worth reading anyway.
+  updateEntropyReadouts() {
+    for (const { panel, entropy } of this.panels) {
+      if (!panel.renderer || !entropy.label) continue;
+      const settled = panel.renderer.pendingBands === 0
+        && (!panel.progressiveMode || panel.progressiveIter >= panel.maxIter);
+      if (!settled) continue;
+      const signature = panel.lastRenderSignature;
+      if (!signature || signature === entropy.signature) continue;
+      entropy.signature = signature;
+      panel.renderer.readEscapeSamples().then((samples) => {
+        // Stale by the time the readback landed (a new frame started): drop
+        // it rather than show a number for a view no longer on screen.
+        if (!samples || entropy.signature !== signature) return;
+        const { entropyNormalized, coverage } = computeEscapeEntropy(samples);
+        entropy.label.textContent = coverage < 1
+          ? `${entropyNormalized.toFixed(2)} (${Math.round(coverage * 100)}% coperto)`
+          : entropyNormalized.toFixed(2);
+      }).catch(() => {});
+    }
+  }
+
   // RENDER. Each visible panel ramps toward its own maxIter independently;
   // scheduleRender's re-arm check (this.needsAnotherFrame) re-arms while at
   // least one panel's ramp hasn't yet reached its own cap, or still has bands
@@ -1071,6 +1107,7 @@ export class MandelbrotApp {
     }
 
     const bandsPending = this.advanceRenderJobs();
+    this.updateEntropyReadouts();
     this.needsAnotherFrame = bandsPending || anyBelowCap;
   };
 }
