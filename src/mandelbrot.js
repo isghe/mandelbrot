@@ -1040,7 +1040,11 @@ export class MandelbrotApp {
   updateEntropyReadouts() {
     for (const { panel, entropy } of this.panels) {
       if (!panel.renderer || !entropy.label || entropy.pending) continue;
-      const settled = panel.renderer.pendingBands === 0
+      // Dragging shares this panel's GPU queue with every band a pan submits;
+      // pendingBands can still read 0 momentarily between drag-triggered
+      // frames, which would otherwise fire a readback for a view already
+      // obsolete a mouse-move later.
+      const settled = panel.renderer.pendingBands === 0 && !panel.isDragging
         && (!panel.progressiveMode || panel.progressiveIter >= panel.maxIter);
       if (!settled) continue;
       const signature = panel.lastRenderSignature;
@@ -1052,10 +1056,10 @@ export class MandelbrotApp {
           // drop it rather than show a number for a view no longer on screen.
           if (!samples || signature !== panel.lastRenderSignature) return;
           entropy.signature = signature;
-          const { entropyNormalized, coverage } = computeEscapeEntropy(samples);
-          entropy.label.textContent = coverage < 1
-            ? `${entropyNormalized.toFixed(2)} (${Math.round(coverage * 100)}% covered)`
-            : entropyNormalized.toFixed(2);
+          const { entropyNormalized, coverage, interiorFraction } = computeEscapeEntropy(samples);
+          const parts = [`${Math.round(interiorFraction * 100)}% interior`];
+          if (coverage < 1) parts.push(`${Math.round(coverage * 100)}% covered`);
+          entropy.label.textContent = `${entropyNormalized.toFixed(2)} (${parts.join(", ")})`;
         })
         .catch(() => {})
         .finally(() => { entropy.pending = false; });
