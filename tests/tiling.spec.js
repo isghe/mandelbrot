@@ -34,11 +34,36 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
   // At the default viewport/maxIter (1280x720, 256), the worst-case work
   // already exceeds BAND_WORK_BUDGET, so this needs no maxIter bump — good,
   // since SwiftShader (software WebGPU) makes a real high-maxIter render slow.
-  const { submitCount, bandCount, framesWithSubmits } = await page.evaluate(async () => {
+  const { submitCount, bandCount, framesWithSubmits, entropySubmits } = await page.evaluate(async () => {
     const panel = window.app.modelNamed("mandelbrot").panel;
     let submitCount = 0;
     const origSubmit = window.app.gpuDevice.queue.submit;
     window.app.gpuDevice.queue.submit = (...args) => { submitCount++; return origSubmit.apply(window.app.gpuDevice.queue, args); };
+
+    // The settled frame this test waits for is also exactly what triggers
+    // the visual-entropy readout's own readback (updateEntropyReadouts,
+    // mandelbrot.js) — a copyTextureToBuffer submit against the same device
+    // queue, outside this test's own accounting. Counted by watching
+    // submitCount change synchronously around the call, not by awaiting the
+    // returned promise: readEscapeSamples' own submit (if any) happens
+    // before its first await, so this observes it at the same instant the
+    // queue.submit wrapper above does. Awaiting the promise first would
+    // still be correct eventually, but not in time — the wait loop below
+    // resolves as soon as pendingBands hits 0, which can be well before
+    // readEscapeSamples' mapAsync has resolved, undercounting entropySubmits
+    // relative to the submitCount already on record at that point.
+    //
+    // A null result (no submit at all) happens when a target isn't up yet or
+    // a previous read is still in flight (renderer.js) — counting every call
+    // regardless would overstate the expected total on that path.
+    let entropySubmits = 0;
+    const origReadEntropy = panel.renderer.readEscapeSamples;
+    panel.renderer.readEscapeSamples = (...args) => {
+      const before = submitCount;
+      const promise = origReadEntropy.apply(panel.renderer, args);
+      if (submitCount > before) entropySubmits++;
+      return promise;
+    };
 
     // Force the redraw through: this state is otherwise identical to the
     // panel's last presented frame, and the per-panel render skip
@@ -63,13 +88,16 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
     });
 
     window.app.gpuDevice.queue.submit = origSubmit;
-    return { submitCount, bandCount: panel.lastTileBandCount, framesWithSubmits };
+    panel.renderer.readEscapeSamples = origReadEntropy;
+    return { submitCount, bandCount: panel.lastTileBandCount, framesWithSubmits, entropySubmits };
   });
 
   expect(bandCount).toBeGreaterThan(1);
   // One submit per band, plus one blit per animation frame that carried any
-  // of them (see present() in renderer.js).
-  expect(submitCount).toBe(bandCount + framesWithSubmits);
+  // of them (see present() in renderer.js), plus one copyTextureToBuffer per
+  // visual-entropy readback the settled frame triggered (entropy.js/
+  // updateEntropyReadouts in mandelbrot.js).
+  expect(submitCount).toBe(bandCount + framesWithSubmits + entropySubmits);
 });
 
 test('every band is actually drawn — none is left blank in the composited frame', async ({ page }) => {

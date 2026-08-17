@@ -478,6 +478,91 @@ export async function attachCanvas(device, canvas, palette256) {
     pendingRecolor = true;
   };
 
+  // Escape-data readback for the visual-entropy readout (see entropy.js).
+  // Independent of `target`/`spare`: it copies out of whichever texture
+  // `target` currently is, on demand, rather than owning a texture of its
+  // own — a fixed-size staging buffer, resized only when the canvas is.
+  let entropyStaging = null;
+  let entropyReadInFlight = false;
+
+  // Copies the whole render target out to a mappable buffer, subsamples it
+  // to a fixed logical grid, and returns the result as a flat Uint32Array of
+  // interleaved (x, y) texel pairs — entropy.js's computeEscapeEntropy takes
+  // that format directly. Returns null if a target isn't up yet or a
+  // previous readback is still in flight (the caller is expected to only
+  // trigger this once a frame has settled, so a collision here would mean
+  // two settle detections raced, not routine contention).
+  //
+  // Copies the full texture rather than something already downsized on the
+  // GPU: copyTextureToBuffer can't stride, so the alternative is a decimate
+  // pass of its own (a real cost) purely to shrink a readback this codebase
+  // doesn't do more than once per completed frame. Simplest correct thing
+  // first; see the plan doc for the compute-shader alternative if this ever
+  // shows up in a profile.
+  const ENTROPY_GRID = 256;
+  const readEscapeSamples = async () => {
+    if (!target || entropyReadInFlight) return null;
+    const { width, height } = target;
+    // rg32uint is 8 B/texel; WebGPU requires bytesPerRow to be a multiple of
+    // 256 for a texture-to-buffer copy.
+    const bytesPerRow = Math.ceil((width * 8) / 256) * 256;
+    const bufferSize = bytesPerRow * height;
+
+    if (!entropyStaging || entropyStaging.width !== width || entropyStaging.height !== height) {
+      entropyStaging?.buffer.destroy();
+      entropyStaging = {
+        buffer: device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+        }),
+        width,
+        height
+      };
+    }
+
+    entropyReadInFlight = true;
+    try {
+      const encoder = device.createCommandEncoder();
+      encoder.copyTextureToBuffer(
+        { texture: target.texture },
+        { buffer: entropyStaging.buffer, bytesPerRow },
+        { width, height }
+      );
+      device.queue.submit([encoder.finish()]);
+
+      await entropyStaging.buffer.mapAsync(GPUMapMode.READ);
+      // unmap() in its own finally, nested inside the outer one: a throw
+      // while reading the mapped range (e.g. a stale width/height) must
+      // still unmap the buffer, or every later call sees it permanently
+      // stuck mapped and mapAsync rejects forever — worse than the error
+      // that caused it.
+      try {
+        const mapped = new Uint32Array(entropyStaging.buffer.getMappedRange());
+        const texelsPerRow = bytesPerRow / 4; // 2 u32 (8 B) per texel
+
+        const cols = Math.min(ENTROPY_GRID, width);
+        const rows = Math.min(ENTROPY_GRID, height);
+        const samples = new Uint32Array(cols * rows * 2);
+        let k = 0;
+        for (let gy = 0; gy < rows; gy++) {
+          const y = Math.floor(((gy + 0.5) * height) / rows);
+          const rowOffset = y * texelsPerRow;
+          for (let gx = 0; gx < cols; gx++) {
+            const x = Math.floor(((gx + 0.5) * width) / cols);
+            const idx = rowOffset + x * 2;
+            samples[k++] = mapped[idx];
+            samples[k++] = mapped[idx + 1];
+          }
+        }
+        return samples;
+      } finally {
+        entropyStaging.buffer.unmap();
+      }
+    } finally {
+      entropyReadInFlight = false;
+    }
+  };
+
   // The current frame's bands and how many of them have been submitted. This
   // outlives the animation frame that started it: submitting a band is cheap
   // on the CPU but can be tens of milliseconds of GPU work, so an expensive
@@ -625,6 +710,7 @@ export async function attachCanvas(device, canvas, palette256) {
     present,
     recolor,
     writePalette,
+    readEscapeSamples,
     // Bands of the current frame not yet submitted; 0 once it has fully
     // landed, which is also how the caller knows the frame is complete.
     get pendingBands() { return job ? job.bands.length - job.next : 0; },

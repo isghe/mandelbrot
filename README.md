@@ -110,6 +110,13 @@ clear that state before dialing the iteration count back up more gradually.
   glance where they sit relative to the current view. Purely visual: the menu remains the
   only way to actually jump to one; markers outside the current pan/zoom simply don't
   appear.
+- **Visual entropy** readout (next to Zoom, per panel) — Shannon entropy of the current
+  render's escape-data (iteration/smooth-coloring data, not rendered color), sampled on a
+  fixed logical grid and binned so the value stays comparable across iteration counts. It's
+  a statistic of the current rendering, not a mathematical invariant of the Mandelbrot/Julia
+  set — it depends on viewport, zoom, and maxIter, and is recomputed for the current view
+  rather than stored in Copy URL/localStorage. Also shows the fraction of sampled pixels
+  that are interior, and a coverage percentage while a reprojected pan is still catching up.
 - **Back / Forward** buttons — step through the view history (center, zoom, iterations,
   palette, Julia seed, progressive mode, smooth coloring). Continuous wheel-zoom
   and slider drags each count as a single history step. The grid/marker/landmarks
