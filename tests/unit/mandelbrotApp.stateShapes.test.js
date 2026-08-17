@@ -98,7 +98,7 @@ function buildDomMocks() {
     mocks[`ui${cap}`] = makeMockControl();
   }
   for (const id of [
-    'selectionBox', 'noVizMessage', 'gpuError', 'gpuErrorMessage', 'gpuReloadBtn',
+    'selectionBox', 'noVizMessage', 'gpuError', 'gpuErrorMessage', 'gpuReloadBtn', 'motto',
     'uiToggleBtn', 'ui', 'juliaMarker', 'backBtn', 'forwardBtn', 'resetBtn', 'shareBtn',
     'mandelbrotLandmarks', 'landmarksOverlay',
   ]) {
@@ -175,6 +175,13 @@ function makeApp(opts) {
   installGlobals(opts);
   return new MandelbrotApp();
 }
+
+test('constructor writes src/motto.js\'s MOTTO into the #motto element', async () => {
+  const mocks = installGlobals();
+  new MandelbrotApp();
+  const { MOTTO } = await import('../../src/motto.js');
+  assert.equal(mocks.motto.textContent, MOTTO);
+});
 
 // Every field the two flat schema producers/consumers touch, mutated away
 // from its constructor default — used by the round-trip test below to prove
