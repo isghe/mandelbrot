@@ -1039,7 +1039,17 @@ export class MandelbrotApp {
   // way the read ends, so a null result gets retried the very next tick.
   updateEntropyReadouts() {
     for (const { panel, entropy } of this.panels) {
-      if (!panel.renderer || !entropy.label || entropy.pending) continue;
+      if (!panel.renderer || !entropy.label) continue;
+
+      const signature = panel.lastRenderSignature;
+      // The label still shows a number computed for a different render than
+      // the one now targeted — a fresh frame, a still-ramping progressive
+      // one, a drag in progress, or entropy's own readback still catching up
+      // to an already-settled frame. Show that it's stale rather than a
+      // number that no longer matches what's on screen.
+      if (signature !== entropy.signature) entropy.label.textContent = "…";
+
+      if (entropy.pending || !signature || signature === entropy.signature) continue;
       // Dragging shares this panel's GPU queue with every band a pan submits;
       // pendingBands can still read 0 momentarily between drag-triggered
       // frames, which would otherwise fire a readback for a view already
@@ -1047,8 +1057,6 @@ export class MandelbrotApp {
       const settled = panel.renderer.pendingBands === 0 && !panel.isDragging
         && (!panel.progressiveMode || panel.progressiveIter >= panel.maxIter);
       if (!settled) continue;
-      const signature = panel.lastRenderSignature;
-      if (!signature || signature === entropy.signature) continue;
       entropy.pending = true;
       panel.renderer.readEscapeSamples()
         .then((samples) => {
