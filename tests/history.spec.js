@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { fractalShot } from './fractalShot.js';
 
+// Several tests here already run 15-25s on an idle machine (multiple
+// fractalShot() calls, each a stability loop of full-panel screenshots under
+// software-rendered WebGPU) — too close to the default 30s budget to survive
+// any real host contention.
+test.describe.configure({ timeout: 90_000 });
+
 const VIEWPORT = { width: 1280, height: 720 };
 
 // Dispatches a burst of native `wheel` events directly in-page, spaced close
