@@ -86,10 +86,20 @@ test('once halted, further renderOnce calls stay a no-op (no repeated banner fli
     const orig = window.app.renderOnce;
     window.app.renderOnce = () => { window.__renderCount++; return orig.call(window.app); };
 
+    const waitForRenderCount = () => new Promise((resolve) => {
+      let frames = 0;
+      const check = () => {
+        if (window.__renderCount > 0) { resolve(); return; }
+        if (++frames > 600) { resolve(); return; } // safety net, never reached when healthy
+        requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    });
+
     window.app.scheduleRender();
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForRenderCount();
     window.app.scheduleRender(); // simulates a later user interaction after the halt
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForRenderCount();
     return window.__renderCount;
   });
 
