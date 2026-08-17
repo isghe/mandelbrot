@@ -100,6 +100,10 @@ export default defineConfig({
     // on nothing, so a run never waits on a package fetch, and it sends
     // no-store, which also stops a reload from serving stale modules.
     command: `node scripts/serve.mjs ${TEST_PORT}${IS_NATIVE_WINDOWS ? ' --tls' : ''}`,
+    // Playwright ignores webServer stdout by default; the test scripts grep
+    // its access-log lines (filtering noise but keeping the /index.html
+    // ones), which needs them piped through in the first place.
+    stdout: 'pipe',
     // Not 8000: on the Windows host VirtualBoxVM.exe holds that port, and
     // reuseExistingServer below would then mistake it for our own server.
     // The https port is checked by URL instead, since a port check cannot tell
