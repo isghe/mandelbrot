@@ -10,10 +10,16 @@ export const NOT_RENDERED = 0;
 export const INTERIOR = 0xffffffff;
 
 // Bins are fixed-width in log2(smoothIter), not linear in iteration count, so
-// that H stays comparable across views with different maxIter (ITER.max is
-// 8192, log2(8193) < 13; 24 leaves headroom without the bin count blowing
-// up). One extra bin holds every INTERIOR sample.
-const LOG_MAX = 24;
+// that H stays comparable across views with different maxIter. LOG_MAX bounds
+// how many of those bins any render can ever reach: no escaped pixel's
+// smoothIter can exceed MandelbrotApp.ITER.max + 1 (mandelbrot.js), and
+// log2(8192 + 1) < 13, so bins above that are permanently empty — dead
+// weight in the normalization denominator (BIN_COUNT), lowering every H_N
+// reading's ceiling below 1 for no reason. 14 gives one bin-width of
+// headroom past the theoretical max rather than tracking ITER.max exactly,
+// so a small change there doesn't silently start clipping real data. One
+// extra bin holds every INTERIOR sample.
+const LOG_MAX = 14;
 const BIN_WIDTH = 1 / 8;
 const LOG_BIN_COUNT = LOG_MAX / BIN_WIDTH;
 export const BIN_COUNT = LOG_BIN_COUNT + 1;
