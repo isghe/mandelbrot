@@ -43,12 +43,27 @@ test('a default-sized frame is split into multiple submits, not one', async ({ p
     // The settled frame this test waits for is also exactly what triggers
     // the visual-entropy readout's own readback (updateEntropyReadouts,
     // mandelbrot.js) — a copyTextureToBuffer submit against the same device
-    // queue, outside this test's own accounting. Counting calls rather than
-    // hooking the queue a second time keeps this in step with however many
-    // panels/reads happen to fire in the window.
+    // queue, outside this test's own accounting. Counted by watching
+    // submitCount change synchronously around the call, not by awaiting the
+    // returned promise: readEscapeSamples' own submit (if any) happens
+    // before its first await, so this observes it at the same instant the
+    // queue.submit wrapper above does. Awaiting the promise first would
+    // still be correct eventually, but not in time — the wait loop below
+    // resolves as soon as pendingBands hits 0, which can be well before
+    // readEscapeSamples' mapAsync has resolved, undercounting entropyReads
+    // relative to the submitCount already on record at that point.
+    //
+    // A null result (no submit at all) happens when a target isn't up yet or
+    // a previous read is still in flight (renderer.js) — counting every call
+    // regardless would overstate the expected total on that path.
     let entropyReads = 0;
     const origReadEntropy = panel.renderer.readEscapeSamples;
-    panel.renderer.readEscapeSamples = (...args) => { entropyReads++; return origReadEntropy.apply(panel.renderer, args); };
+    panel.renderer.readEscapeSamples = (...args) => {
+      const before = submitCount;
+      const promise = origReadEntropy.apply(panel.renderer, args);
+      if (submitCount > before) entropyReads++;
+      return promise;
+    };
 
     // Force the redraw through: this state is otherwise identical to the
     // panel's last presented frame, and the per-panel render skip
