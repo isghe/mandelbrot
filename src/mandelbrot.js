@@ -324,7 +324,7 @@ export class MandelbrotApp {
         plus: document.getElementById(`${name}IterPlus`),
       },
       zoom: { slider: document.getElementById(`${name}ZoomSlider`), label: document.getElementById(`${name}ZoomLabel`) },
-      entropy: { label: document.getElementById(`${name}EntropyLabel`), signature: null },
+      entropy: { label: document.getElementById(`${name}EntropyLabel`), signature: null, pending: false },
       palette: { sel: this.populatePaletteMenu(document.getElementById(`${name}PaletteType`)) },
       progressive: { chk: document.getElementById(`${name}ProgressiveMode`) },
       smoothColoring: { chk: document.getElementById(`${name}SmoothColoring`) },
@@ -1029,24 +1029,36 @@ export class MandelbrotApp {
   // never triggers a redundant read of unchanged escape data. Only
   // this.panels (visible panels), not this.models: a hidden panel shares the
   // same GPU queue and has nothing worth reading anyway.
+  //
+  // entropy.signature is set on success, not before the read: readEscapeSamples
+  // returns null on a collision with a read still in flight (renderer.js's own
+  // guard) or a not-yet-created target, and marking the signature "handled"
+  // regardless would leave the label stuck at its previous value until the
+  // next real frame — possibly never, for a panel that settles once and sits
+  // idle. entropy.pending is the in-flight guard instead, cleared whichever
+  // way the read ends, so a null result gets retried the very next tick.
   updateEntropyReadouts() {
     for (const { panel, entropy } of this.panels) {
-      if (!panel.renderer || !entropy.label) continue;
+      if (!panel.renderer || !entropy.label || entropy.pending) continue;
       const settled = panel.renderer.pendingBands === 0
         && (!panel.progressiveMode || panel.progressiveIter >= panel.maxIter);
       if (!settled) continue;
       const signature = panel.lastRenderSignature;
       if (!signature || signature === entropy.signature) continue;
-      entropy.signature = signature;
-      panel.renderer.readEscapeSamples().then((samples) => {
-        // Stale by the time the readback landed (a new frame started): drop
-        // it rather than show a number for a view no longer on screen.
-        if (!samples || entropy.signature !== signature) return;
-        const { entropyNormalized, coverage } = computeEscapeEntropy(samples);
-        entropy.label.textContent = coverage < 1
-          ? `${entropyNormalized.toFixed(2)} (${Math.round(coverage * 100)}% coperto)`
-          : entropyNormalized.toFixed(2);
-      }).catch(() => {});
+      entropy.pending = true;
+      panel.renderer.readEscapeSamples()
+        .then((samples) => {
+          // Stale by the time the readback landed (a new frame started):
+          // drop it rather than show a number for a view no longer on screen.
+          if (!samples || signature !== panel.lastRenderSignature) return;
+          entropy.signature = signature;
+          const { entropyNormalized, coverage } = computeEscapeEntropy(samples);
+          entropy.label.textContent = coverage < 1
+            ? `${entropyNormalized.toFixed(2)} (${Math.round(coverage * 100)}% covered)`
+            : entropyNormalized.toFixed(2);
+        })
+        .catch(() => {})
+        .finally(() => { entropy.pending = false; });
     }
   }
 

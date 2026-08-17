@@ -531,25 +531,33 @@ export async function attachCanvas(device, canvas, palette256) {
       device.queue.submit([encoder.finish()]);
 
       await entropyStaging.buffer.mapAsync(GPUMapMode.READ);
-      const mapped = new Uint32Array(entropyStaging.buffer.getMappedRange());
-      const texelsPerRow = bytesPerRow / 4; // 2 u32 (8 B) per texel
+      // unmap() in its own finally, nested inside the outer one: a throw
+      // while reading the mapped range (e.g. a stale width/height) must
+      // still unmap the buffer, or every later call sees it permanently
+      // stuck mapped and mapAsync rejects forever — worse than the error
+      // that caused it.
+      try {
+        const mapped = new Uint32Array(entropyStaging.buffer.getMappedRange());
+        const texelsPerRow = bytesPerRow / 4; // 2 u32 (8 B) per texel
 
-      const cols = Math.min(ENTROPY_GRID, width);
-      const rows = Math.min(ENTROPY_GRID, height);
-      const samples = new Uint32Array(cols * rows * 2);
-      let k = 0;
-      for (let gy = 0; gy < rows; gy++) {
-        const y = Math.floor(((gy + 0.5) * height) / rows);
-        const rowOffset = y * texelsPerRow;
-        for (let gx = 0; gx < cols; gx++) {
-          const x = Math.floor(((gx + 0.5) * width) / cols);
-          const idx = rowOffset + x * 2;
-          samples[k++] = mapped[idx];
-          samples[k++] = mapped[idx + 1];
+        const cols = Math.min(ENTROPY_GRID, width);
+        const rows = Math.min(ENTROPY_GRID, height);
+        const samples = new Uint32Array(cols * rows * 2);
+        let k = 0;
+        for (let gy = 0; gy < rows; gy++) {
+          const y = Math.floor(((gy + 0.5) * height) / rows);
+          const rowOffset = y * texelsPerRow;
+          for (let gx = 0; gx < cols; gx++) {
+            const x = Math.floor(((gx + 0.5) * width) / cols);
+            const idx = rowOffset + x * 2;
+            samples[k++] = mapped[idx];
+            samples[k++] = mapped[idx + 1];
+          }
         }
+        return samples;
+      } finally {
+        entropyStaging.buffer.unmap();
       }
-      entropyStaging.buffer.unmap();
-      return samples;
     } finally {
       entropyReadInFlight = false;
     }
