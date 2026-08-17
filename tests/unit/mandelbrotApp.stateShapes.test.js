@@ -176,6 +176,13 @@ function makeApp(opts) {
   return new MandelbrotApp();
 }
 
+test('constructor writes src/motto.js\'s MOTTO into the #motto element', async () => {
+  const mocks = installGlobals();
+  new MandelbrotApp();
+  const { MOTTO } = await import('../../src/motto.js');
+  assert.equal(mocks.motto.textContent, MOTTO);
+});
+
 // Every field the two flat schema producers/consumers touch, mutated away
 // from its constructor default — used by the round-trip test below to prove
 // nothing is lost or misrouted going out through shareState() and back in
