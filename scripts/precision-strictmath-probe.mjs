@@ -25,6 +25,7 @@
 import { chromium } from '@playwright/test';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { GPU_ARGS } from '../playwright.config.js';
 
 const file = pathToFileURL(
   path.resolve(import.meta.dirname, 'precision-portability-probe.html')
@@ -37,14 +38,10 @@ const BACKENDS = [
     headless: false, // the default backend needs a real display session on native Windows
   },
   {
+    // Imported so this stays the exact backend playwright.config.js forces on
+    // native Windows, instead of a copy that could silently drift.
     label: 'D3D11+FXC (matches playwright.config.js on native Windows)',
-    args: [
-      '--no-sandbox',
-      '--enable-unsafe-webgpu',
-      '--use-angle=d3d11',
-      '--disable-dawn-features=use_dxc',
-      '--enable-features=WebGPUDeveloperFeatures',
-    ],
+    args: ['--no-sandbox', ...GPU_ARGS, '--enable-features=WebGPUDeveloperFeatures'],
     headless: true,
   },
 ];
