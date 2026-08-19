@@ -3,9 +3,9 @@
 // Launches Chromium against precision-portability-probe.html twice — once
 // plain, once with ?strict=1 (the non-standard GPUShaderModuleDescriptor
 // strictMath option, gated behind chrome://flags/#enable-webgpu-developer-features,
-// see gpuweb#2076) — under two backends: Chrome's own default, and the
-// D3D11+FXC combination playwright.config.js forces on native Windows to get
-// a working headless adapter at all.
+// see gpuweb#2076) — under two backends: Chrome's own default, and whatever
+// backend playwright.config.js forces to get a working headless adapter at
+// all (D3D11+FXC on native Windows, SwiftShader everywhere else).
 //
 // Findings (2026-08-19, Intel gen-9, Windows):
 //   - strictMath:true changed nothing under either backend. Either the
