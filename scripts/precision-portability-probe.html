@@ -114,9 +114,12 @@ fn main() {
     const SIZE = N * 16;
     const storage = device.createBuffer({ size: SIZE, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
     const staging = device.createBuffer({ size: SIZE, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const strictMath = new URLSearchParams(location.search).get('strict') === '1';
+    const moduleDescriptor = { code: SHADER };
+    if (strictMath) moduleDescriptor.strictMath = true;   // non-standard, Chrome-only, requires the WebGPU Developer Features flag
     const pipeline = device.createComputePipeline({
       layout: 'auto',
-      compute: { module: device.createShaderModule({ code: SHADER }), entryPoint: 'main' },
+      compute: { module: device.createShaderModule(moduleDescriptor), entryPoint: 'main' },
     });
 
     const encoder = device.createCommandEncoder();
@@ -158,6 +161,7 @@ fn main() {
       `user agent      : ${navigator.userAgent}`,
       `adapter         : ${[info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(' / ') || '(not reported)'}`,
       `centre split    : hi=${hi}  lo=${lo}`,
+      `strictMath      : ${strictMath} ${strictMath ? '(?strict=1 — needs chrome://flags/#enable-webgpu-developer-features)' : '(default; add ?strict=1 to compare)'}`,
       '',
       `offsetX, plain f32 before ds_add : ${verdict(distinctOffsets)}`,
       `coordinate after ds_add          : ${verdict(distinctCoords)}`,
