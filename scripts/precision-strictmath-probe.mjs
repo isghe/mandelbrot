@@ -1,0 +1,78 @@
+// Copyright (c) 2026 Isidoro Ghezzi
+//
+// Launches Chromium against precision-portability-probe.html twice — once
+// plain, once with ?strict=1 (the non-standard GPUShaderModuleDescriptor
+// strictMath option, gated behind chrome://flags/#enable-webgpu-developer-features,
+// see gpuweb#2076) — under two backends: Chrome's own default, and whatever
+// backend playwright.config.js forces to get a working headless adapter at
+// all (D3D11+FXC on native Windows, SwiftShader everywhere else).
+//
+// Findings (2026-08-19, Intel gen-9, Windows):
+//   - strictMath:true changed nothing under either backend. Either the
+//     command-line feature flag doesn't actually enable the developer option
+//     (the docs only describe chrome://flags), or the non-standard dictionary
+//     member is silently ignored when the flag isn't really active.
+//   - Chrome's default backend preserves precision (32/32) with or without
+//     strictMath.
+//   - The forced D3D11+FXC backend collapses to 4/32 — the same block pattern
+//     previously seen only on Firefox — with or without strictMath. That
+//     backend is exactly what the project's own headless Windows CI run uses,
+//     so the e2e suite is running on a backend with the same fragility, just
+//     not yet caught by any test at a matching zoom depth.
+//
+// Usage: node scripts/precision-strictmath-probe.mjs
+
+import { chromium } from '@playwright/test';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { GPU_ARGS } from '../playwright.config.js';
+
+const file = pathToFileURL(
+  path.resolve(import.meta.dirname, 'precision-portability-probe.html')
+).href;
+
+const IS_NATIVE_WINDOWS = process.platform === 'win32';
+
+// GPU_ARGS already carries its own --enable-features (Vulkan off Windows);
+// Chromium keeps only the last such flag, so merge instead of appending one.
+const secondBackendArgs = GPU_ARGS.map((arg) =>
+  arg.startsWith('--enable-features=') ? `${arg},WebGPUDeveloperFeatures` : arg
+);
+if (!secondBackendArgs.some((arg) => arg.startsWith('--enable-features='))) {
+  secondBackendArgs.push('--enable-features=WebGPUDeveloperFeatures');
+}
+
+const BACKENDS = [
+  {
+    label: 'Chrome default backend',
+    args: ['--no-sandbox', '--enable-unsafe-webgpu', '--enable-features=WebGPUDeveloperFeatures'],
+    headless: false, // the default backend needs a real display session on native Windows
+  },
+  {
+    // Imported so this stays the exact backend playwright.config.js forces,
+    // instead of a copy that could silently drift.
+    label: IS_NATIVE_WINDOWS
+      ? 'D3D11+FXC (matches playwright.config.js on native Windows)'
+      : 'SwiftShader (matches playwright.config.js off Windows)',
+    args: ['--no-sandbox', ...secondBackendArgs],
+    headless: true,
+  },
+];
+
+for (const { label, args, headless } of BACKENDS) {
+  console.log(`\n########## ${label} ##########`);
+  const browser = await chromium.launch({ headless, args, env: { ...process.env, DISPLAY: '' } });
+  for (const [variant, url] of [
+    ['baseline', file],
+    ['strictMath: true', `${file}?strict=1`],
+  ]) {
+    const page = await browser.newPage();
+    await page.goto(url);
+    await page
+      .waitForFunction(() => document.getElementById('result').textContent !== 'running…', { timeout: 15000 })
+      .catch(() => {});
+    console.log(`\n=== ${variant} ===\n${await page.locator('#result').innerText()}`);
+    await page.close();
+  }
+  await browser.close();
+}

@@ -28,6 +28,10 @@ const GPU_ARGS = IS_NATIVE_WINDOWS
   ? ['--enable-unsafe-webgpu', '--use-angle=d3d11', '--disable-dawn-features=use_dxc']
   : SWIFTSHADER_ARGS;
 
+// Exported so scripts/precision-app-render-probe.mjs can launch the exact
+// backend this suite runs on, instead of a copy that could silently drift.
+export { GPU_ARGS, SWIFTSHADER_ARGS };
+
 // Native Windows serves the suite over TLS; every other platform stays on plain
 // HTTP and needs no certificate. The reason is the loopback stall documented at
 // `workers` below: an HTTP content inspector on that machine holds plain-text
