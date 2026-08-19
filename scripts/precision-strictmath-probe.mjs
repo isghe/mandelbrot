@@ -31,6 +31,17 @@ const file = pathToFileURL(
   path.resolve(import.meta.dirname, 'precision-portability-probe.html')
 ).href;
 
+const IS_NATIVE_WINDOWS = process.platform === 'win32';
+
+// GPU_ARGS already carries its own --enable-features (Vulkan off Windows);
+// Chromium keeps only the last such flag, so merge instead of appending one.
+const secondBackendArgs = GPU_ARGS.map((arg) =>
+  arg.startsWith('--enable-features=') ? `${arg},WebGPUDeveloperFeatures` : arg
+);
+if (!secondBackendArgs.some((arg) => arg.startsWith('--enable-features='))) {
+  secondBackendArgs.push('--enable-features=WebGPUDeveloperFeatures');
+}
+
 const BACKENDS = [
   {
     label: 'Chrome default backend',
@@ -38,10 +49,12 @@ const BACKENDS = [
     headless: false, // the default backend needs a real display session on native Windows
   },
   {
-    // Imported so this stays the exact backend playwright.config.js forces on
-    // native Windows, instead of a copy that could silently drift.
-    label: 'D3D11+FXC (matches playwright.config.js on native Windows)',
-    args: ['--no-sandbox', ...GPU_ARGS, '--enable-features=WebGPUDeveloperFeatures'],
+    // Imported so this stays the exact backend playwright.config.js forces,
+    // instead of a copy that could silently drift.
+    label: IS_NATIVE_WINDOWS
+      ? 'D3D11+FXC (matches playwright.config.js on native Windows)'
+      : 'SwiftShader (matches playwright.config.js off Windows)',
+    args: ['--no-sandbox', ...secondBackendArgs],
     headless: true,
   },
 ];
